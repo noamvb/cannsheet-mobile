@@ -8,7 +8,9 @@ import retrofit2.http.Url
 
 @JsonClass(generateAdapter = true)
 data class GasProductResponse(
-    val products: List<GasProduct>
+    val products: List<GasProduct>,
+    val apiVersion: Int? = null,
+    val environment: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -19,17 +21,24 @@ data class GasProduct(
     val status: Int,
     val cost: Double? = 0.0,
     val thc: Double? = 0.0,
-    val grams: Double? = 0.0
+    val grams: Double? = 0.0,
+    val productUuid: String? = null,
+    val lastLoggedAtEpochMillis: Long? = null,
+    val lastQuantity: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class SyncPayload(
+    val apiVersion: Int = 2,
+    val requestId: String,
+    val environment: String,
     val purchases: List<SyncPurchase>,
-    val consumptions: List<SyncConsumption>
+    val consumptions: List<SyncConsumption>,
 )
 
 @JsonClass(generateAdapter = true)
 data class SyncPurchase(
+    val actionId: String,
     val tempId: String,
     val date: String,
     val type: String,
@@ -38,23 +47,68 @@ data class SyncPurchase(
     val thc: Double,
     val grams: Double,
     val borrowed: Int,
-    val postTax: Boolean
+    val postTax: Boolean,
+    val productUuid: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class SyncConsumption(
+    val eventId: String,
     val date: String,
     val time: String,
     val productId: String,
     val uses: Double,
-    val isFinished: Boolean
+    val isFinished: Boolean,
+    val productUuid: String? = null,
+    val weightCode: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class AcknowledgedPurchase(
+    val actionId: String,
+    val tempId: String? = null,
+    val productUuid: String? = null,
+    val legacyProductId: String? = null,
+    val status: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class RejectedPurchase(
+    val actionId: String? = null,
+    val errorCode: String,
+    val message: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class AcknowledgedConsumption(
+    val eventId: String,
+    val status: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class RejectedConsumption(
+    val eventId: String? = null,
+    val errorCode: String,
+    val message: String,
 )
 
 @JsonClass(generateAdapter = true)
 data class SyncResponse(
     val success: Boolean,
-    val message: String?
+    val message: String? = null,
+    val productIdMap: Map<String, String> = emptyMap(),
+    val apiVersion: Int? = null,
+    val requestId: String? = null,
+    val allAccepted: Boolean? = null,
+    val errorCode: String? = null,
+    val environment: String? = null,
+    val acknowledgedPurchases: List<AcknowledgedPurchase> = emptyList(),
+    val rejectedPurchases: List<RejectedPurchase> = emptyList(),
+    val acknowledgedConsumptions: List<AcknowledgedConsumption> = emptyList(),
+    val rejectedConsumptions: List<RejectedConsumption> = emptyList(),
 )
+
+internal fun environmentMatches(expected: String, actual: String?): Boolean = actual == expected
 
 interface GasApiService {
     @GET

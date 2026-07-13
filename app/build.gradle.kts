@@ -4,6 +4,18 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
 }
 
+import java.util.Properties
+import com.android.build.api.variant.HasUnitTestBuilder
+
+val productionGasUrl = "https://script.google.com/macros/s/AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ/exec"
+val sandboxPropertiesFile = rootProject.file("sandbox.properties")
+val sandboxProperties = Properties().apply {
+  if (sandboxPropertiesFile.isFile) sandboxPropertiesFile.inputStream().use(::load)
+}
+val sandboxGasUrl = sandboxProperties.getProperty("CANNSHEET_SANDBOX_GAS_URL")?.trim().orEmpty()
+val sandboxGasUrlSentinel = "https://script.google.com/macros/s/REPLACE_ME/exec"
+fun buildConfigString(value: String) = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
+
 val releaseKeystorePath = System.getenv("KEYSTORE_PATH")
 val releaseStorePassword = System.getenv("STORE_PASSWORD")
 val releaseKeyAlias = System.getenv("KEY_ALIAS")
@@ -23,8 +35,11 @@ android {
     applicationId = "com.noamv.cannsheet.mobile"
     minSdk = 24
     targetSdk = 36
-    versionCode = 5
-    versionName = "1.2.2"
+    versionCode = 6
+    versionName = "1.2.3"
+
+    buildConfigField("String", "GAS_URL", buildConfigString(productionGasUrl))
+    buildConfigField("String", "APP_ENVIRONMENT", buildConfigString("PRODUCTION"))
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -49,6 +64,15 @@ android {
         signingConfig = signingConfigs.getByName("release")
       }
     }
+    create("sandbox") {
+      initWith(getByName("debug"))
+      applicationIdSuffix = ".sandbox"
+      versionNameSuffix = "-sandbox"
+      matchingFallbacks += listOf("debug")
+      signingConfig = signingConfigs.getByName("debug")
+      buildConfigField("String", "GAS_URL", buildConfigString(sandboxGasUrl.ifBlank { sandboxGasUrlSentinel }))
+      buildConfigField("String", "APP_ENVIRONMENT", buildConfigString("SANDBOX"))
+    }
   }
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
@@ -58,6 +82,30 @@ android {
     compose = true
     buildConfig = true
   }
+}
+
+androidComponents {
+  beforeVariants(selector().withBuildType("sandbox")) { variantBuilder ->
+    (variantBuilder as HasUnitTestBuilder).enableUnitTest = true
+  }
+}
+
+val validateSandboxConfig by tasks.registering {
+  group = "verification"
+  description = "Validates the untracked sandbox Apps Script endpoint."
+  doLast {
+    val pattern = Regex("^https://script\\.google\\.com/macros/s/[^/]+/exec$")
+    check(sandboxPropertiesFile.isFile) {
+      "Missing sandbox.properties. Copy sandbox.properties.example and set CANNSHEET_SANDBOX_GAS_URL."
+    }
+    check(pattern.matches(sandboxGasUrl) && sandboxGasUrl != sandboxGasUrlSentinel) {
+      "CANNSHEET_SANDBOX_GAS_URL must be an HTTPS script.google.com/macros/s/.../exec URL."
+    }
+  }
+}
+
+tasks.matching { it.name == "preSandboxBuild" }.configureEach {
+  dependsOn(validateSandboxConfig)
 }
 
 dependencies {
@@ -91,6 +139,8 @@ dependencies {
   androidTestImplementation("androidx.test:core-ktx:1.6.1")
   debugImplementation("androidx.compose.ui:ui-test-manifest")
   debugImplementation(libs.androidx.compose.ui.tooling)
+  "sandboxImplementation"("androidx.compose.ui:ui-test-manifest")
+  "sandboxImplementation"(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 }

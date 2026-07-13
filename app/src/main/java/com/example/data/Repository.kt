@@ -1,42 +1,96 @@
 package com.example.data
 
+import androidx.room.withTransaction
+import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
-class CannsheetRepository(private val dao: CannsheetDao) {
+class CannsheetRepository(private val database: AppDatabase) {
+    private val dao = database.cannsheetDao()
+
     val allProducts: Flow<List<Product>> = dao.getAllProducts()
+    val productInteractions: Flow<List<ProductInteraction>> = dao.getAllProductInteractions()
 
     val pendingActionCount: Flow<Int> = combine(
         dao.getPendingPurchasesCount(),
-        dao.getPendingConsumptionsCount()
+        dao.getPendingConsumptionsCount(),
     ) { purchases, consumptions ->
         purchases + consumptions
     }
 
-    suspend fun refreshProducts(products: List<Product>) {
-        dao.deleteAllProducts()
-        dao.insertProducts(products)
+    suspend fun refreshProducts(
+        products: List<Product>,
+        remoteInteractions: List<ProductInteraction> = emptyList(),
+    ) {
+        dao.replaceProductsAndMergeInteractions(products, remoteInteractions)
     }
 
     suspend fun addPurchase(action: PurchaseAction) {
-        dao.insertPurchase(action)
-        // Also add it as a temporary product in the cache so it's immediately available
-        val tempProduct = Product(
-            id = action.tempId,
-            name = action.name,
-            type = action.type,
-            status = 2
+        database.withTransaction {
+            dao.insertPurchase(action)
+            dao.insertProducts(
+                listOf(
+                    Product(
+                        id = action.tempId,
+                        name = action.name,
+                        type = action.type,
+                        status = ProductStatus.UNOPENED.code,
+                        productUuid = action.productUuid,
+                    ),
+                ),
+            )
+        }
+    }
+
+    suspend fun addConsumption(
+        action: ConsumptionAction,
+        loggedAtEpochMillis: Long = System.currentTimeMillis(),
+    ) {
+        dao.recordConsumption(
+            action = action,
+            interaction = ProductInteraction(
+                productId = action.productId,
+                lastLoggedAtEpochMillis = loggedAtEpochMillis,
+                lastQuantity = action.uses,
+            ),
         )
-        dao.insertProducts(listOf(tempProduct))
     }
 
-    suspend fun addConsumption(action: ConsumptionAction) {
-        dao.insertConsumption(action)
+    suspend fun getPendingPurchases(): List<PurchaseAction> = dao.getPendingPurchases()
+
+    suspend fun getPendingConsumptions(): List<ConsumptionAction> = dao.getPendingConsumptions()
+
+    suspend fun getOrCreateSyncRequestId(): String = database.withTransaction {
+        dao.getSyncRequestState()?.requestId ?: UUID.randomUUID().toString().also { requestId ->
+            dao.upsertSyncRequestState(
+                SyncRequestState(
+                    requestId = requestId,
+                    createdAtEpochMillis = System.currentTimeMillis(),
+                ),
+            )
+        }
     }
 
-    suspend fun getPendingPurchases() = dao.getPendingPurchases()
-    suspend fun clearPendingPurchases() = dao.clearPendingPurchases()
-
-    suspend fun getPendingConsumptions() = dao.getPendingConsumptions()
-    suspend fun clearPendingConsumptions() = dao.clearPendingConsumptions()
+    suspend fun applyAcknowledgements(plan: SyncAcknowledgementPlan) {
+        database.withTransaction {
+            plan.purchaseRemaps.forEach { remap ->
+                dao.remapPendingConsumptions(
+                    oldProductId = remap.tempId,
+                    newProductId = remap.legacyProductId,
+                    productUuid = remap.productUuid,
+                )
+                dao.remapProductInteraction(remap.tempId, remap.legacyProductId)
+                dao.deleteProduct(remap.tempId)
+            }
+            if (plan.acknowledgedPurchaseActionIds.isNotEmpty()) {
+                dao.deletePurchasesByActionIds(plan.acknowledgedPurchaseActionIds.toList())
+            }
+            if (plan.acknowledgedConsumptionEventIds.isNotEmpty()) {
+                dao.deleteConsumptionsByEventIds(plan.acknowledgedConsumptionEventIds.toList())
+            }
+            if (dao.getPendingPurchasesCountNow() == 0 && dao.getPendingConsumptionsCountNow() == 0) {
+                dao.clearSyncRequestState()
+            }
+        }
+    }
 }

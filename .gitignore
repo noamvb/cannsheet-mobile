@@ -1,10 +1,13 @@
 # Android Studio and Gradle
 .gradle/
+.gradle-user*/
+.android-user*/
 .kotlin/
 .idea/
 *.iml
 **/build/
 local.properties
+sandbox.properties
 
 # Signing and local configuration
 .env
