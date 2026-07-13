@@ -38,6 +38,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 import java.math.BigDecimal
+import java.net.SocketTimeoutException
+import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 data class ConsumptionFormState(
@@ -65,6 +67,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private val consumptionPreferences = ConsumptionPreferencesRepository(application)
 
     private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
 
@@ -441,7 +446,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     if (plan.hasAcknowledgements) fetchProducts()
                 } catch (error: Exception) {
                     // No queue rows are removed on network, parsing, or request failure.
-                    _syncStatus.value = "Sync error: ${error.message}"
+                    _syncStatus.value = syncFailureStatus(error)
                 }
             }
         }
@@ -463,6 +468,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         const val RECENT_PRODUCT_LIMIT = 6
     }
 }
+
+internal fun syncFailureStatus(error: Exception): String =
+    if (error is SocketTimeoutException) {
+        "Server confirmation is taking longer than expected. Your entry is still pending and will retry safely."
+    } else {
+        "Sync error: ${error.message ?: "Unknown error"}"
+    }
 
 internal fun buildRecentProducts(
     products: List<Product>,
