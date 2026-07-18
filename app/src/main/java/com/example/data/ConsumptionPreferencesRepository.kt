@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -23,19 +24,10 @@ class ConsumptionPreferencesRepository(context: Context) {
 
     val preferences: Flow<ConsumptionPreferences> = dataStore.data
         .map { storedPreferences ->
-            val storedPresets = listOf(
-                storedPreferences[QUANTITY_PRESET_1],
-                storedPreferences[QUANTITY_PRESET_2],
-                storedPreferences[QUANTITY_PRESET_3]
+            val presets = resolveQuantityPresets(
+                storedCount = storedPreferences[QUANTITY_PRESET_COUNT],
+                valueAt = { index -> storedPreferences[quantityPresetKey(index)] },
             )
-            val presets = if (
-                storedPresets.all { it != null } &&
-                isValidQuantityPresets(storedPresets.filterNotNull())
-            ) {
-                storedPresets.filterNotNull()
-            } else {
-                DEFAULT_QUANTITY_PRESETS
-            }
 
             ConsumptionPreferences(
                 quantityPresets = presets,
@@ -54,13 +46,17 @@ class ConsumptionPreferencesRepository(context: Context) {
 
     suspend fun setQuantityPresets(presets: List<Double>) {
         require(isValidQuantityPresets(presets)) {
-            "Quantity presets must contain exactly three positive, finite, distinct values."
+            "Quantity presets must contain 1 to 10 positive, finite, distinct values."
         }
 
         dataStore.edit { storedPreferences ->
-            storedPreferences[QUANTITY_PRESET_1] = presets[0]
-            storedPreferences[QUANTITY_PRESET_2] = presets[1]
-            storedPreferences[QUANTITY_PRESET_3] = presets[2]
+            storedPreferences[QUANTITY_PRESET_COUNT] = presets.size
+            presets.forEachIndexed { index, preset ->
+                storedPreferences[quantityPresetKey(index + 1)] = preset
+            }
+            ((presets.size + 1)..MAX_QUANTITY_PRESETS).forEach { index ->
+                storedPreferences.remove(quantityPresetKey(index))
+            }
         }
     }
 
@@ -71,16 +67,37 @@ class ConsumptionPreferencesRepository(context: Context) {
     }
 
     companion object {
+        const val MIN_QUANTITY_PRESETS = 1
+        const val MAX_QUANTITY_PRESETS = 10
+        private const val LEGACY_QUANTITY_PRESET_COUNT = 3
+
         val DEFAULT_QUANTITY_PRESETS: List<Double> = listOf(0.5, 1.0, 2.0)
 
         fun isValidQuantityPresets(presets: List<Double>): Boolean =
-            presets.size == 3 &&
+            presets.size in MIN_QUANTITY_PRESETS..MAX_QUANTITY_PRESETS &&
                 presets.all { it.isFinite() && it > 0.0 } &&
                 presets.distinct().size == presets.size
 
-        private val QUANTITY_PRESET_1 = doublePreferencesKey("quantity_preset_1")
-        private val QUANTITY_PRESET_2 = doublePreferencesKey("quantity_preset_2")
-        private val QUANTITY_PRESET_3 = doublePreferencesKey("quantity_preset_3")
+        internal fun resolveQuantityPresets(
+            storedCount: Int?,
+            valueAt: (Int) -> Double?,
+        ): List<Double> {
+            val count = when {
+                storedCount == null -> LEGACY_QUANTITY_PRESET_COUNT
+                storedCount in MIN_QUANTITY_PRESETS..MAX_QUANTITY_PRESETS -> storedCount
+                else -> return DEFAULT_QUANTITY_PRESETS
+            }
+            val storedPresets = (1..count).map(valueAt)
+            if (storedPresets.any { it == null }) return DEFAULT_QUANTITY_PRESETS
+
+            val presets = storedPresets.filterNotNull()
+            return presets.takeIf(::isValidQuantityPresets) ?: DEFAULT_QUANTITY_PRESETS
+        }
+
+        private fun quantityPresetKey(index: Int) =
+            doublePreferencesKey("quantity_preset_$index")
+
+        private val QUANTITY_PRESET_COUNT = intPreferencesKey("quantity_preset_count")
         private val INCLUDE_UNOPENED = booleanPreferencesKey("include_unopened")
     }
 }

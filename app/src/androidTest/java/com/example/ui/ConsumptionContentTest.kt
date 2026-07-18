@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.example.data.Product
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -53,6 +54,36 @@ class ConsumptionContentTest {
         composeRule.runOnIdle {
             assertEquals("p1", loggedProductId)
             assertEquals(0.75, loggedQuantity ?: 0.0, 0.0)
+        }
+    }
+
+    @Test
+    fun laterQuantityPresetCanBeSelected() {
+        val product = Product("p1", "Blue Dream", "F", 0)
+        var formState by mutableStateOf(ConsumptionFormState(selectedProductId = "p1"))
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0, 2.0, 3.0, 4.0),
+                    includeUnopened = false,
+                    formState = formState,
+                    onSelectProduct = {},
+                    onQuantityChange = {
+                        formState = formState.copy(quantityText = it)
+                    },
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("4") and hasClickAction()).performScrollTo().performClick()
+
+        composeRule.runOnIdle {
+            assertEquals("4", formState.quantityText)
         }
     }
 }
