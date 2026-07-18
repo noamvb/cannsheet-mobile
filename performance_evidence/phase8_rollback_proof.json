@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-18T01:18:48.0468819Z",
+  "environment": "SANDBOX",
+  "spreadsheetId": "1WiGGjwOdr5-cPrGWxHAVxMO9mArOz8fArigl64FyKeU",
+  "scriptId": "14GdK-_WOr3lFwU9Xmx3OuvhzWKljPYKFH5L7MRCaC0dXsOOHG9LJQ-_o",
+  "deploymentId": "AKfycbxHPo_Zet7ctELj-rDl4iZSbDwAOxOWOHHsmVUVyteKzZbrjNDVI3GOKhJN_IX69AinuA",
+  "endpointUnchanged": true,
+  "optimizedVersion": 9,
+  "rollbackVersion": 5,
+  "sourceSha256": "4E74C83D69FE7EBA89B39F343750BAD5610022F10B46DB43C4688F0C93361C01",
+  "steps": [
+    {
+      "name": "disable_recoverable_path",
+      "passed": true,
+      "recoverableSyncApplyVersion": 0,
+      "pendingApplyKey": ""
+    },
+    {
+      "name": "deploy_prior_version_in_place",
+      "passed": true,
+      "deployedVersion": 5,
+      "deploymentIdUnchanged": true,
+      "endpointUnchanged": true
+    },
+    {
+      "name": "rollback_read_only_get",
+      "passed": true,
+      "httpStatus": 200,
+      "environment": "SANDBOX",
+      "apiVersion": 2,
+      "productCount": 410,
+      "serverDurationMs": 1578,
+      "wallTimeMs": 3289.302
+    },
+    {
+      "name": "rollback_zero_mutation_audit",
+      "passed": true,
+      "before": {
+        "purchases": 410,
+        "formResponses": 3639,
+        "canonicalEvents": 3639,
+        "ledgerRows": 49,
+        "journalRows": 44,
+        "interactionSummaryVersion": 1,
+        "recoverableSyncApplyVersion": 0,
+        "pendingApplyKey": ""
+      },
+      "after": {
+        "purchases": 410,
+        "formResponses": 3639,
+        "canonicalEvents": 3639,
+        "ledgerRows": 49,
+        "journalRows": 44,
+        "interactionSummaryVersion": 1,
+        "recoverableSyncApplyVersion": 0,
+        "pendingApplyKey": ""
+      }
+    },
+    {
+      "name": "restore_optimized_version_in_place",
+      "passed": true,
+      "deployedVersion": 9,
+      "deploymentIdUnchanged": true,
+      "endpointUnchanged": true
+    },
+    {
+      "name": "reenable_and_reconcile_scale_fixture",
+      "passed": true,
+      "recoverableSyncApplyVersion": 1,
+      "pendingApplyKey": "",
+      "canonicalRows": 3639,
+      "journalRows": 44,
+      "incompleteJournalRows": 0,
+      "differences": [],
+      "blockingDifferences": []
+    },
+    {
+      "name": "restore_normal_deterministic_baseline",
+      "passed": true,
+      "purchases": 6,
+      "active": 3,
+      "finished": 2,
+      "unopened": 1,
+      "formResponses": 5,
+      "canonicalEvents": 5,
+      "uniqueEventUuids": 5,
+      "totalUses": 5.25,
+      "ledgerRows": 0,
+      "journalRows": 0,
+      "migrationRows": 0,
+      "interactionSummaryVersion": 1,
+      "recoverableSyncApplyVersion": 1,
+      "pendingApplyKey": ""
+    },
+    {
+      "name": "normal_baseline_reconciliation",
+      "passed": true,
+      "canonicalRows": 5,
+      "journalRows": 0,
+      "incompleteJournalRows": 0,
+      "interactionSummaryDifferences": 0,
+      "differences": [],
+      "blockingDifferences": []
+    },
+    {
+      "name": "form_restored",
+      "passed": true,
+      "published": false,
+      "responseCount": 0
+    }
+  ],
+  "passed": true
+}

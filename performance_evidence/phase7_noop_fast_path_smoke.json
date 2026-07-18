@@ -1,0 +1,2382 @@
+{
+  "schemaVersion": 1,
+  "harnessVersion": "1.0",
+  "suite": "optimized",
+  "generatedAtUtc": "2026-07-18T00:47:15+00:00",
+  "endpoint": "https://script.google.com/macros/s/AKfycbxHPo_Zet7ctELj-rDl4iZSbDwAOxOWOHHsmVUVyteKzZbrjNDVI3GOKhJN_IX69AinuA/exec",
+  "preflight": {
+    "environment": "SANDBOX",
+    "apiVersion": 2,
+    "productCount": 400,
+    "httpStatus": 200,
+    "wallTimeMs": 5803.869,
+    "selectedProduct": {
+      "productId": "*P1B",
+      "productUuid": "51000000-0000-4000-8000-000000000001",
+      "status": 0
+    },
+    "checks": [
+      {
+        "name": "http_status_200",
+        "passed": true,
+        "actual": 200,
+        "expected": 200
+      },
+      {
+        "name": "json_object",
+        "passed": true,
+        "actual": "dict",
+        "expected": "object"
+      },
+      {
+        "name": "environment_is_sandbox",
+        "passed": true,
+        "actual": "SANDBOX",
+        "expected": "SANDBOX"
+      },
+      {
+        "name": "products_is_array",
+        "passed": true,
+        "actual": "list",
+        "expected": "list"
+      }
+    ]
+  },
+  "configuration": {
+    "namespace": "8752a4e2-e54a-5f9d-9230-3354a437f52c",
+    "suiteExcludedFromUuidGeneration": true,
+    "timestampBase": "2031-01-15T12:00:00",
+    "timeoutSeconds": 120.0,
+    "maxResponseBytes": 5000000,
+    "coldIntervalSeconds": 0.0,
+    "counts": {
+      "coldGet": 0,
+      "warmGet": 0,
+      "empty": 5,
+      "warmConsumption": 1,
+      "coldConsumption": 0,
+      "duplicateRetry": 5,
+      "newPurchase": 0,
+      "mixed": 0,
+      "partialRejection": 0,
+      "concurrentPairs": 1
+    }
+  },
+  "correctness": {
+    "passed": true,
+    "totalRecords": 14,
+    "passedRecords": 14,
+    "failedRecords": 0
+  },
+  "summaries": [
+    {
+      "scenario": "concurrent_identical",
+      "temperature": "warm",
+      "operation": "POST+GET",
+      "sampleCount": 2,
+      "correctnessPassedCount": 2,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 2,
+          "min": 5384.0,
+          "median": 6062.0,
+          "max": 6740.0
+        },
+        "postWallTimeMs": {
+          "count": 2,
+          "min": 7606.935,
+          "median": 8108.434,
+          "max": 8609.932
+        },
+        "followUpGetTimeMs": {
+          "count": 2,
+          "min": 2847.067,
+          "median": 3035.156,
+          "max": 3223.245
+        },
+        "combinedTimeMs": {
+          "count": 2,
+          "min": 10454.003,
+          "median": 11143.59,
+          "max": 11833.177
+        }
+      }
+    },
+    {
+      "scenario": "duplicate_retry",
+      "temperature": "warm",
+      "operation": "POST+GET",
+      "sampleCount": 5,
+      "correctnessPassedCount": 5,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 5,
+          "min": 3101.0,
+          "median": 3306.0,
+          "max": 5517.0
+        },
+        "postWallTimeMs": {
+          "count": 5,
+          "min": 4514.386,
+          "median": 5274.069,
+          "max": 8565.857
+        },
+        "followUpGetTimeMs": {
+          "count": 5,
+          "min": 2168.126,
+          "median": 2931.692,
+          "max": 3001.893
+        },
+        "combinedTimeMs": {
+          "count": 5,
+          "min": 6682.512,
+          "median": 7785.64,
+          "max": 11567.75
+        }
+      }
+    },
+    {
+      "scenario": "duplicate_seed",
+      "temperature": "warm",
+      "operation": "POST+GET",
+      "sampleCount": 1,
+      "correctnessPassedCount": 1,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 1,
+          "min": 4400.0,
+          "median": 4400.0,
+          "max": 4400.0
+        },
+        "postWallTimeMs": {
+          "count": 1,
+          "min": 6048.145,
+          "median": 6048.145,
+          "max": 6048.145
+        },
+        "followUpGetTimeMs": {
+          "count": 1,
+          "min": 2623.155,
+          "median": 2623.155,
+          "max": 2623.155
+        },
+        "combinedTimeMs": {
+          "count": 1,
+          "min": 8671.3,
+          "median": 8671.3,
+          "max": 8671.3
+        }
+      }
+    },
+    {
+      "scenario": "empty_v2",
+      "temperature": "warm",
+      "operation": "POST+GET",
+      "sampleCount": 5,
+      "correctnessPassedCount": 5,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 5,
+          "min": 2112.0,
+          "median": 2534.0,
+          "max": 4017.0
+        },
+        "postWallTimeMs": {
+          "count": 5,
+          "min": 3968.907,
+          "median": 4253.178,
+          "max": 5658.638
+        },
+        "followUpGetTimeMs": {
+          "count": 5,
+          "min": 2587.518,
+          "median": 3340.994,
+          "max": 3921.114
+        },
+        "combinedTimeMs": {
+          "count": 5,
+          "min": 6671.102,
+          "median": 8110.46,
+          "max": 8999.632
+        }
+      }
+    },
+    {
+      "scenario": "one_consumption",
+      "temperature": "warm",
+      "operation": "POST+GET",
+      "sampleCount": 1,
+      "correctnessPassedCount": 1,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 1,
+          "min": 5737.0,
+          "median": 5737.0,
+          "max": 5737.0
+        },
+        "postWallTimeMs": {
+          "count": 1,
+          "min": 7617.804,
+          "median": 7617.804,
+          "max": 7617.804
+        },
+        "followUpGetTimeMs": {
+          "count": 1,
+          "min": 3754.767,
+          "median": 3754.767,
+          "max": 3754.767
+        },
+        "combinedTimeMs": {
+          "count": 1,
+          "min": 11372.571,
+          "median": 11372.571,
+          "max": 11372.571
+        }
+      }
+    }
+  ],
+  "concurrencyPairs": [
+    {
+      "pairIndex": 0,
+      "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+      "eventId": "7621e293-cfd9-5308-8220-5c78ba5002b4",
+      "statuses": [
+        "committed",
+        "duplicate"
+      ],
+      "passed": true
+    }
+  ],
+  "records": [
+    {
+      "sequence": 1,
+      "scenario": "empty_v2",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "d6ba0a83-d8fe-534f-b7c7-6552d795f6f3",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "d6ba0a83-d8fe-534f-b7c7-6552d795f6f3",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": []
+      },
+      "serverDurationMs": 2112.0,
+      "postWallTimeMs": 3968.907,
+      "followUpGetTimeMs": 2702.194,
+      "combinedTimeMs": 6671.102,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "d6ba0a83-d8fe-534f-b7c7-6552d795f6f3",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 2112,
+        "serverTimings": {
+          "requestParse": 1,
+          "stagingValidation": 1,
+          "environmentConfig": 442,
+          "runtimeSchemaAssertion": 906,
+          "lockWait": 50,
+          "recoveryRepair": 144,
+          "purchaseContext": 0,
+          "eventDuplicateLookup": 1,
+          "responseConstruction": 0,
+          "ledgerUpdate": 216
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2702.194,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "d6ba0a83-d8fe-534f-b7c7-6552d795f6f3",
+          "expected": "d6ba0a83-d8fe-534f-b7c7-6552d795f6f3"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 2,
+      "scenario": "empty_v2",
+      "sampleIndex": 1,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "d6d03ac2-a282-520f-ac2a-bc4a23586023",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "d6d03ac2-a282-520f-ac2a-bc4a23586023",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": []
+      },
+      "serverDurationMs": 2308.0,
+      "postWallTimeMs": 4253.178,
+      "followUpGetTimeMs": 2587.518,
+      "combinedTimeMs": 6840.697,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "d6d03ac2-a282-520f-ac2a-bc4a23586023",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 2308,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 1,
+          "environmentConfig": 502,
+          "runtimeSchemaAssertion": 972,
+          "lockWait": 47,
+          "recoveryRepair": 158,
+          "purchaseContext": 0,
+          "eventDuplicateLookup": 0,
+          "responseConstruction": 0,
+          "ledgerUpdate": 222
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2587.518,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "d6d03ac2-a282-520f-ac2a-bc4a23586023",
+          "expected": "d6d03ac2-a282-520f-ac2a-bc4a23586023"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 3,
+      "scenario": "empty_v2",
+      "sampleIndex": 2,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "f6d9fcab-25a5-5b57-8cc5-6683492329ff",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "f6d9fcab-25a5-5b57-8cc5-6683492329ff",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": []
+      },
+      "serverDurationMs": 2904.0,
+      "postWallTimeMs": 4679.939,
+      "followUpGetTimeMs": 3733.474,
+      "combinedTimeMs": 8413.413,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "f6d9fcab-25a5-5b57-8cc5-6683492329ff",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 2904,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 1,
+          "environmentConfig": 796,
+          "runtimeSchemaAssertion": 1154,
+          "lockWait": 72,
+          "recoveryRepair": 191,
+          "purchaseContext": 0,
+          "eventDuplicateLookup": 0,
+          "responseConstruction": 0,
+          "ledgerUpdate": 247
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3733.474,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "f6d9fcab-25a5-5b57-8cc5-6683492329ff",
+          "expected": "f6d9fcab-25a5-5b57-8cc5-6683492329ff"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 4,
+      "scenario": "empty_v2",
+      "sampleIndex": 3,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "35d8b551-4ef2-5529-85b8-7147071fed34",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "35d8b551-4ef2-5529-85b8-7147071fed34",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": []
+      },
+      "serverDurationMs": 2534.0,
+      "postWallTimeMs": 4189.346,
+      "followUpGetTimeMs": 3921.114,
+      "combinedTimeMs": 8110.46,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "35d8b551-4ef2-5529-85b8-7147071fed34",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 2534,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 1,
+          "environmentConfig": 506,
+          "runtimeSchemaAssertion": 1217,
+          "lockWait": 88,
+          "recoveryRepair": 156,
+          "purchaseContext": 0,
+          "eventDuplicateLookup": 0,
+          "responseConstruction": 0,
+          "ledgerUpdate": 205
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3921.114,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "35d8b551-4ef2-5529-85b8-7147071fed34",
+          "expected": "35d8b551-4ef2-5529-85b8-7147071fed34"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 5,
+      "scenario": "empty_v2",
+      "sampleIndex": 4,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "c3ed9944-8dfd-5077-8912-f72cd948859b",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "c3ed9944-8dfd-5077-8912-f72cd948859b",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": []
+      },
+      "serverDurationMs": 4017.0,
+      "postWallTimeMs": 5658.638,
+      "followUpGetTimeMs": 3340.994,
+      "combinedTimeMs": 8999.632,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "c3ed9944-8dfd-5077-8912-f72cd948859b",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 4017,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 0,
+          "environmentConfig": 1069,
+          "runtimeSchemaAssertion": 1777,
+          "lockWait": 56,
+          "recoveryRepair": 214,
+          "purchaseContext": 0,
+          "eventDuplicateLookup": 0,
+          "responseConstruction": 0,
+          "ledgerUpdate": 245
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3340.994,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "c3ed9944-8dfd-5077-8912-f72cd948859b",
+          "expected": "c3ed9944-8dfd-5077-8912-f72cd948859b"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 6,
+      "scenario": "one_consumption",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "1a19ed4d-5b7c-5f14-a4e5-01bc90b37374",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "cf243dbe-18fe-5620-9143-add2a6c8a481"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "1a19ed4d-5b7c-5f14-a4e5-01bc90b37374",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "cf243dbe-18fe-5620-9143-add2a6c8a481",
+            "date": "2031-01-15",
+            "time": "12:00:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 5737.0,
+      "postWallTimeMs": 7617.804,
+      "followUpGetTimeMs": 3754.767,
+      "combinedTimeMs": 11372.571,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "1a19ed4d-5b7c-5f14-a4e5-01bc90b37374",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "cf243dbe-18fe-5620-9143-add2a6c8a481",
+            "status": "committed"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 5737,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 0,
+          "environmentConfig": 764,
+          "runtimeSchemaAssertion": 1145,
+          "lockWait": 71,
+          "recoveryRepair": 178,
+          "purchaseContext": 336,
+          "eventDuplicateLookup": 185,
+          "responseConstruction": 0,
+          "recoverableCoreBatch": 392,
+          "recoverableFinalBatch": 906
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3754.767,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "1a19ed4d-5b7c-5f14-a4e5-01bc90b37374",
+          "expected": "1a19ed4d-5b7c-5f14-a4e5-01bc90b37374"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "committed",
+          "expected": [
+            "committed"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 7,
+      "scenario": "duplicate_seed",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": "setup",
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 4400.0,
+      "postWallTimeMs": 6048.145,
+      "followUpGetTimeMs": 2623.155,
+      "combinedTimeMs": 8671.3,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "committed"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 4400,
+        "serverTimings": {
+          "requestParse": 1,
+          "stagingValidation": 2,
+          "environmentConfig": 484,
+          "runtimeSchemaAssertion": 934,
+          "lockWait": 40,
+          "recoveryRepair": 176,
+          "purchaseContext": 310,
+          "eventDuplicateLookup": 157,
+          "responseConstruction": 0,
+          "recoverableCoreBatch": 154,
+          "recoverableFinalBatch": 774
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2623.155,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "committed",
+          "expected": [
+            "committed"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 8,
+      "scenario": "duplicate_retry",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 3203.0,
+      "postWallTimeMs": 4683.717,
+      "followUpGetTimeMs": 2931.692,
+      "combinedTimeMs": 7615.41,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 3203,
+        "serverTimings": {
+          "requestParse": 1,
+          "stagingValidation": 1,
+          "environmentConfig": 711,
+          "runtimeSchemaAssertion": 957,
+          "lockWait": 48,
+          "recoveryRepair": 147,
+          "purchaseContext": 341,
+          "eventDuplicateLookup": 373,
+          "responseConstruction": 0,
+          "ledgerUpdate": 235
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2931.692,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 9,
+      "scenario": "duplicate_retry",
+      "sampleIndex": 1,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 3679.0,
+      "postWallTimeMs": 5402.398,
+      "followUpGetTimeMs": 2383.242,
+      "combinedTimeMs": 7785.64,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 3679,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 1,
+          "environmentConfig": 1211,
+          "runtimeSchemaAssertion": 1217,
+          "lockWait": 39,
+          "recoveryRepair": 166,
+          "purchaseContext": 293,
+          "eventDuplicateLookup": 168,
+          "responseConstruction": 0,
+          "ledgerUpdate": 221
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2383.242,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 10,
+      "scenario": "duplicate_retry",
+      "sampleIndex": 2,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 5517.0,
+      "postWallTimeMs": 8565.857,
+      "followUpGetTimeMs": 3001.893,
+      "combinedTimeMs": 11567.75,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 5517,
+        "serverTimings": {
+          "requestParse": 1,
+          "stagingValidation": 2,
+          "environmentConfig": 1561,
+          "runtimeSchemaAssertion": 1599,
+          "lockWait": 141,
+          "recoveryRepair": 274,
+          "purchaseContext": 455,
+          "eventDuplicateLookup": 309,
+          "responseConstruction": 0,
+          "ledgerUpdate": 508
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3001.893,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 11,
+      "scenario": "duplicate_retry",
+      "sampleIndex": 3,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 3306.0,
+      "postWallTimeMs": 5274.069,
+      "followUpGetTimeMs": 2935.204,
+      "combinedTimeMs": 8209.273,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 3306,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 2,
+          "environmentConfig": 508,
+          "runtimeSchemaAssertion": 1114,
+          "lockWait": 42,
+          "recoveryRepair": 567,
+          "purchaseContext": 290,
+          "eventDuplicateLookup": 179,
+          "responseConstruction": 0,
+          "ledgerUpdate": 229
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2935.204,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 12,
+      "scenario": "duplicate_retry",
+      "sampleIndex": 4,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": null,
+      "concurrentPairIndex": null,
+      "concurrentMemberIndex": null,
+      "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "d4e29496-8023-5029-8cd6-0f866d745497"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "date": "2031-01-29",
+            "time": "09:20:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 3101.0,
+      "postWallTimeMs": 4514.386,
+      "followUpGetTimeMs": 2168.126,
+      "combinedTimeMs": 6682.512,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "d4e29496-8023-5029-8cd6-0f866d745497",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 3101,
+        "serverTimings": {
+          "requestParse": 1,
+          "stagingValidation": 2,
+          "environmentConfig": 526,
+          "runtimeSchemaAssertion": 1125,
+          "lockWait": 59,
+          "recoveryRepair": 186,
+          "purchaseContext": 314,
+          "eventDuplicateLookup": 172,
+          "responseConstruction": 0,
+          "ledgerUpdate": 240
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2168.126,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "80673eaf-cc75-5c3a-b061-b89ec1eda814",
+          "expected": "80673eaf-cc75-5c3a-b061-b89ec1eda814"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 13,
+      "scenario": "concurrent_identical",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": "concurrent_member",
+      "concurrentPairIndex": 0,
+      "concurrentMemberIndex": 0,
+      "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "7621e293-cfd9-5308-8220-5c78ba5002b4"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "7621e293-cfd9-5308-8220-5c78ba5002b4",
+            "date": "2031-02-05",
+            "time": "08:00:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 5384.0,
+      "postWallTimeMs": 7606.935,
+      "followUpGetTimeMs": 2847.067,
+      "combinedTimeMs": 10454.003,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "7621e293-cfd9-5308-8220-5c78ba5002b4",
+            "status": "committed"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 5384,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 3,
+          "environmentConfig": 444,
+          "runtimeSchemaAssertion": 1224,
+          "lockWait": 63,
+          "recoveryRepair": 446,
+          "purchaseContext": 306,
+          "eventDuplicateLookup": 175,
+          "responseConstruction": 0,
+          "recoverableCoreBatch": 243,
+          "recoverableFinalBatch": 782
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 2847.067,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+          "expected": "95329d52-5dc8-55b6-bfa0-f1fff64c124b"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "committed",
+          "expected": [
+            "committed",
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        },
+        {
+          "name": "concurrent_pair_exactly_one_commit",
+          "passed": true,
+          "actual": [
+            "committed",
+            "duplicate"
+          ],
+          "expected": [
+            "committed",
+            "duplicate"
+          ]
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 14,
+      "scenario": "concurrent_identical",
+      "sampleIndex": 0,
+      "operation": "POST+GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "role": "concurrent_member",
+      "concurrentPairIndex": 0,
+      "concurrentMemberIndex": 1,
+      "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+      "itemIds": {
+        "actionIds": [],
+        "eventIds": [
+          "7621e293-cfd9-5308-8220-5c78ba5002b4"
+        ],
+        "tempIds": []
+      },
+      "payload": {
+        "apiVersion": 2,
+        "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+        "environment": "SANDBOX",
+        "purchases": [],
+        "consumptions": [
+          {
+            "eventId": "7621e293-cfd9-5308-8220-5c78ba5002b4",
+            "date": "2031-02-05",
+            "time": "08:00:00",
+            "uses": 1.0,
+            "isFinished": false,
+            "weightCode": "benchmark",
+            "productId": "*P1B",
+            "productUuid": "51000000-0000-4000-8000-000000000001"
+          }
+        ]
+      },
+      "serverDurationMs": 6740.0,
+      "postWallTimeMs": 8609.932,
+      "followUpGetTimeMs": 3223.245,
+      "combinedTimeMs": 11833.177,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "requestId": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+        "success": true,
+        "allAccepted": true,
+        "message": "Sync complete",
+        "productIdMap": {},
+        "acknowledgedPurchases": [],
+        "rejectedPurchases": [],
+        "acknowledgedConsumptions": [
+          {
+            "eventId": "7621e293-cfd9-5308-8220-5c78ba5002b4",
+            "status": "duplicate"
+          }
+        ],
+        "rejectedConsumptions": [],
+        "environment": "SANDBOX",
+        "serverDurationMs": 6740,
+        "serverTimings": {
+          "requestParse": 2,
+          "stagingValidation": 1,
+          "environmentConfig": 1652,
+          "runtimeSchemaAssertion": 1276,
+          "lockWait": 2536,
+          "recoveryRepair": 166,
+          "purchaseContext": 305,
+          "eventDuplicateLookup": 177,
+          "responseConstruction": 0,
+          "ledgerUpdate": 234
+        }
+      },
+      "transportError": null,
+      "jsonError": null,
+      "followUpGet": {
+        "method": "GET",
+        "httpStatus": 200,
+        "wallTimeMs": 3223.245,
+        "effectiveUrl": "https://script.googleusercontent.com/macros/echo",
+        "error": null,
+        "jsonError": null,
+        "response": {
+          "apiVersion": 2,
+          "environment": "SANDBOX",
+          "productCount": 400
+        }
+      },
+      "checks": [
+        {
+          "name": "post_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "post_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "success",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "request_id_echo",
+          "passed": true,
+          "actual": "95329d52-5dc8-55b6-bfa0-f1fff64c124b",
+          "expected": "95329d52-5dc8-55b6-bfa0-f1fff64c124b"
+        },
+        {
+          "name": "all_accepted",
+          "passed": true,
+          "actual": true,
+          "expected": true
+        },
+        {
+          "name": "event_ack_status",
+          "passed": true,
+          "actual": "duplicate",
+          "expected": [
+            "committed",
+            "duplicate"
+          ]
+        },
+        {
+          "name": "follow_up_http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "follow_up_json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "follow_up_environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "follow_up_products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        },
+        {
+          "name": "concurrent_pair_exactly_one_commit",
+          "passed": true,
+          "actual": [
+            "committed",
+            "duplicate"
+          ],
+          "expected": [
+            "committed",
+            "duplicate"
+          ]
+        }
+      ],
+      "correctnessPassed": true
+    }
+  ]
+}

@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-18T01:41:19.8915261Z",
+  "environment": "PRODUCTION",
+  "productionUntouchedAtSnapshot": true,
+  "spreadsheet": {
+    "id": "1CCHCdliNsHx3LSPvHrXqGR2SWGhqwruHdAXaEuzmPKQ",
+    "title": "CannsheetG",
+    "timeZone": "America/New_York",
+    "backupId": "1WdcBkNDqshwz5_Pi6HMMVxc3DfAZNDTnpQ-J2YTpTqw",
+    "backupTitle": "CannsheetG Production Backup 2026-07-17 21-28-09 EDT - before backend sync performance promotion",
+    "localSnapshotSha256": "C8A22D592F8F37B764ACC9C53F18CE7390C9F0946E6F4AA8DE0A5EB442344ABA"
+  },
+  "script": {
+    "id": "1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2",
+    "headSourceSha256": "6779BDF52E8801417A0496E87C7BE9A2C57A7FAADE459FFC6E0A9703478B1D2C",
+    "headMatchedIntake": true,
+    "liveManifestSha256": "51657E9371B14D64C72D5925A5F96ACEA07BEBBE2E3E87F294020C6AC1D6E896",
+    "manifestWebApp": {
+      "executeAs": "USER_DEPLOYING",
+      "access": "ANYONE_ANONYMOUS"
+    },
+    "properties": {
+      "ENVIRONMENT": "PRODUCTION",
+      "FORM_ID": "1LsF3Wa6bddfaDtXwBq7-zd0ccb3w5FGerJ0UiOsq8VI",
+      "SPREADSHEET_ID": "1CCHCdliNsHx3LSPvHrXqGR2SWGhqwruHdAXaEuzmPKQ"
+    },
+    "triggers": [
+      {
+        "function": "onInventoryEdit",
+        "source": "spreadsheet",
+        "event": "edit",
+        "deployment": "HEAD"
+      },
+      {
+        "function": "onFormSubmit",
+        "source": "spreadsheet",
+        "event": "form submit",
+        "deployment": "HEAD"
+      }
+    ]
+  },
+  "deployment": {
+    "version": 7,
+    "description": "Environment handshake and sandbox isolation",
+    "id": "AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ",
+    "endpoint": "https://script.google.com/macros/s/AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ/exec",
+    "executeAs": "Me (noamvb1@gmail.com)",
+    "access": "Anyone"
+  },
+  "get": {
+    "httpStatus": 200,
+    "apiVersion": 2,
+    "environment": "PRODUCTION",
+    "productCount": 329,
+    "clientWallMs": 4689.65,
+    "productsSha256": "792381F75770984FD9F935FF9AE70C4892ED9E3B94BF506440A82A05D9138122"
+  },
+  "form": {
+    "id": "1LsF3Wa6bddfaDtXwBq7-zd0ccb3w5FGerJ0UiOsq8VI",
+    "title": "Consumption Entry",
+    "published": true,
+    "nativeResponseCount": 3458,
+    "productChoices": [
+      "*J59",
+      "*S33",
+      "*J8B",
+      "*J83",
+      "*S67",
+      "*S68",
+      "*J128"
+    ],
+    "productDescription": ""
+  },
+  "sheetMetrics": {
+    "purchases": 329,
+    "active": 9,
+    "finished": 320,
+    "unopened": 0,
+    "compatibilityRows": 3572,
+    "canonicalEvents": 3571,
+    "uniqueEventUuids": 3571,
+    "duplicateEventUuids": 0,
+    "totalUses": 5396.51,
+    "ledgerRows": 38,
+    "uniqueLedgerRequestUuids": 38,
+    "duplicateLedgerRequestUuids": 0,
+    "migrationReportRows": 0,
+    "migrationReportUnresolvedRows": 0,
+    "configDuplicateKeys": 0
+  },
+  "schemaAvailability": {
+    "purchasesRtoZValuesOrFormulas": 0,
+    "purchasesRtoZDataValidations": 0,
+    "purchasesSheetProtected": false,
+    "formOwnedColumns": "A:I",
+    "compatibilityIdentityColumnsAvailable": "J:K",
+    "migrationResolutionColumnsAvailable": "G:H"
+  },
+  "knownDrift": {
+    "response3524": {
+      "productId": "*J127",
+      "uses": 1,
+      "identityBlank": true,
+      "canonicalMatchCount": 0
+    },
+    "productJ127": {
+      "purchaseRow": 325,
+      "uses": 3,
+      "status": 1
+    },
+    "response3534": {
+      "productId": "*P93",
+      "uses": 1,
+      "identityBlank": true
+    },
+    "response3535": {
+      "productId": "*P93",
+      "uses": 2,
+      "identityBlank": true
+    },
+    "canonical3531LegacySourceRow": 3535,
+    "canonical3532LegacySourceRow": 3535,
+    "deterministicRepairEventUuid": "dfabd249-0d95-52a1-8b2b-70a5b60d93e4"
+  }
+}

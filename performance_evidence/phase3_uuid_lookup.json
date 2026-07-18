@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "benchmarkVersion": "phase-3-v1",
+  "environment": "SANDBOX",
+  "source": "Apps Script execution log",
+  "readOnly": true,
+  "eventRows": 3601,
+  "runsPerBatch": 6,
+  "timingNote": "Each case has one first-measured run after a scheduled 35-second idle and five repeated warm runs. The idle period does not prove a Google cold start.",
+  "eventUuidChecksumBefore": "dd087577",
+  "eventUuidChecksumAfter": "dd087577",
+  "cases": [
+    {
+      "batchSize": 1,
+      "firstMeasuredMs": {
+        "columnReadSet": 562,
+        "exactTextFinder": 103
+      },
+      "warmColumnReadSetMs": {
+        "rawMs": [510, 502, 483, 437, 491],
+        "minimumMs": 437,
+        "medianMs": 491,
+        "maximumMs": 510
+      },
+      "warmExactTextFinderMs": {
+        "rawMs": [215, 142, 120, 98, 143],
+        "minimumMs": 98,
+        "medianMs": 142,
+        "maximumMs": 215
+      }
+    },
+    {
+      "batchSize": 5,
+      "firstMeasuredMs": {
+        "columnReadSet": 432,
+        "exactTextFinder": 585
+      },
+      "warmColumnReadSetMs": {
+        "rawMs": [575, 700, 516, 439, 784],
+        "minimumMs": 439,
+        "medianMs": 575,
+        "maximumMs": 784
+      },
+      "warmExactTextFinderMs": {
+        "rawMs": [549, 506, 548, 753, 531],
+        "minimumMs": 506,
+        "medianMs": 548,
+        "maximumMs": 753
+      }
+    },
+    {
+      "batchSize": 10,
+      "firstMeasuredMs": {
+        "columnReadSet": 459,
+        "exactTextFinder": 1046
+      },
+      "warmColumnReadSetMs": {
+        "rawMs": [418, 460, 463, 567, 454],
+        "minimumMs": 418,
+        "medianMs": 460,
+        "maximumMs": 567
+      },
+      "warmExactTextFinderMs": {
+        "rawMs": [979, 1093, 2057, 1111, 1870],
+        "minimumMs": 979,
+        "medianMs": 1111,
+        "maximumMs": 2057
+      }
+    },
+    {
+      "batchSize": 20,
+      "firstMeasuredMs": {
+        "columnReadSet": 502,
+        "exactTextFinder": 3209
+      },
+      "warmColumnReadSetMs": {
+        "rawMs": [482, 461, 424, 443, 975],
+        "minimumMs": 424,
+        "medianMs": 461,
+        "maximumMs": 975
+      },
+      "warmExactTextFinderMs": {
+        "rawMs": [2777, 2715, 2468, 2931, 3228],
+        "minimumMs": 2468,
+        "medianMs": 2777,
+        "maximumMs": 3228
+      }
+    }
+  ],
+  "checks": {
+    "allStrategiesEqual": true,
+    "allResultsMatchExpected": true,
+    "eventUuidColumnUnchanged": true,
+    "eventRowCountUnchanged": true,
+    "passed": true
+  },
+  "decision": {
+    "eventTextFinderMaxBatch": 5,
+    "smallBatchStrategy": "exact whole-cell TextFinder restricted to the Event UUID column",
+    "largerBatchStrategy": "one-column Event UUID read into a Set"
+  }
+}

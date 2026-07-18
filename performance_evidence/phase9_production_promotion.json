@@ -1,0 +1,295 @@
+{
+  "schemaVersion": 1,
+  "generatedAtUtc": "2026-07-18T02:30:06.000Z",
+  "status": "complete_first_real_sync_verified",
+  "source": {
+    "baseCommit": "488add9228cdd627957035e94417dd6d2ee8889c",
+    "backendSha256": "909F9E4385100037DB3ACCFFBD8B545DC154FC0EBC712C8947B557A85D9E3EAF",
+    "manifestSha256": "F3A1DF8363103618B9FA77E6039818F2B6219D2037686FE7C61F152A83E6F975",
+    "liveEditorSourceNormalizedMatch": true,
+    "liveEditorManifestNormalizedMatch": true
+  },
+  "freshBackup": {
+    "driveTitle": "CannsheetG Production Backup 2026-07-17 21-56-01 EDT - before backend sync performance promotion",
+    "driveId": "15OT5fu0qzVuA11srEJ7o-Siqq2xLwTrTXLTtmZMf45M",
+    "localDirectory": "C:\\Users\\noamv\\Downloads\\cannsheet-mobile-main\\backups\\2026-07-17\\backend-sync-performance\\production-before-promotion-21-56-01-EDT",
+    "localSpreadsheetSha256": "84ECAF9E8EE24410176AC440AA40073B1144078882AB9C9787DC42743FA96DD7",
+    "backedUpCodeSha256": "6779BDF52E8801417A0496E87C7BE9A2C57A7FAADE459FFC6E0A9703478B1D2C",
+    "backedUpManifestSha256": "34A83AAE72323956C2EB9E69514297084EF2A5791BED7649C0D127226D5FCCCE"
+  },
+  "deployment": {
+    "projectId": "1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2",
+    "deploymentId": "AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ",
+    "endpoint": "https://script.google.com/macros/s/AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ/exec",
+    "beforeVersion": 7,
+    "afterVersion": 8,
+    "description": "Backend sync performance and recoverable atomic apply",
+    "executeAs": "Me (noamvb1@gmail.com)",
+    "access": "Anyone",
+    "deploymentIdUnchanged": true,
+    "endpointUnchanged": true
+  },
+  "before": {
+    "purchases": 329,
+    "active": 9,
+    "finished": 320,
+    "unopened": 0,
+    "compatibilityRows": 3573,
+    "canonicalEvents": 3572,
+    "uniqueEventUuids": 3572,
+    "duplicateEventUuids": 0,
+    "totalUses": 5398.51,
+    "ledgerRows": 38,
+    "uniqueLedgerRequestUuids": 38,
+    "migrationReportRows": 0,
+    "journalRows": 0
+  },
+  "migration": {
+    "interactionSummary": {
+      "preparedSummaryVersion": 1,
+      "configSummaryVersion": 0,
+      "canonicalEventRows": 3572,
+      "validCanonicalEvents": 3572,
+      "invalidCanonicalEvents": 0,
+      "purchaseRows": 329,
+      "legacyComparisonDifferences": 0,
+      "reconciliationDifferences": 0,
+      "readyToEnable": true
+    },
+    "initialRecoverablePreparation": {
+      "safeIdentityRowsBackfilled": 3570,
+      "expectedBlankRows": [
+        3524,
+        3534,
+        3535
+      ],
+      "validationErrors": [
+        {
+          "type": "SOURCE_ROW_CONTENT_MISMATCH",
+          "eventId": "c8a21a2b-40f8-4133-ac09-d4f7aac71e93",
+          "sourceRow": 3535
+        },
+        {
+          "type": "DUPLICATE_SOURCE_ROW",
+          "sourceRow": 3535,
+          "firstEventId": "c8a21a2b-40f8-4133-ac09-d4f7aac71e93",
+          "eventId": "8066dea6-7dcf-4598-a377-0912643729ad"
+        }
+      ]
+    },
+    "preparedCompatibilityRepair": {
+      "relinkedRows": 2,
+      "canonicalizedRows": 1,
+      "rebuiltProducts": 2,
+      "unresolvedRows": 0,
+      "sameExecutionProductProjectionDifferences": 1,
+      "sameExecutionDifferenceWasSpreadsheetAppCacheStaleness": true,
+      "freshAllProductCheck": {
+        "checkedProducts": 329,
+        "differences": []
+      }
+    },
+    "finalPreparation": {
+      "identityRowsBackfilled": 0,
+      "blockingDifferences": 0
+    },
+    "enabled": {
+      "interactionSummaryVersion": 1,
+      "recoverableSyncApplyVersion": 1,
+      "pendingApplyId": null
+    }
+  },
+  "afterMigration": {
+    "purchases": 329,
+    "active": 9,
+    "finished": 320,
+    "unopened": 0,
+    "compatibilityRows": 3573,
+    "blankCompatibilityIdentityRows": 0,
+    "canonicalEvents": 3573,
+    "uniqueEventUuids": 3573,
+    "duplicateEventUuids": 0,
+    "totalUses": 5399.51,
+    "ledgerRows": 38,
+    "uniqueLedgerRequestUuids": 38,
+    "migrationReportRows": 0,
+    "journalRows": 1,
+    "completeJournalRows": 1,
+    "incompleteJournalRows": 0,
+    "productJ127Uses": 4,
+    "productJ127LastQuantity": 1,
+    "repairEventUuid": "dfabd249-0d95-52a1-8b2b-70a5b60d93e4",
+    "postPromotionSnapshot": "C:\\Users\\noamv\\Downloads\\cannsheet-mobile-main\\backups\\2026-07-17\\backend-sync-performance\\production-after-promotion-version-8\\CannsheetG-after-promotion-before-real-sync.xlsx",
+    "postPromotionSnapshotSha256": "385F2A47D1A87F697339C4C0012AC109FBA58224AE0B40DC2144D714294703A4"
+  },
+  "finalReconciliation": {
+    "interactionSummary": {
+      "canonicalEventRows": 3573,
+      "invalidCanonicalEvents": 0,
+      "purchaseRows": 329,
+      "differences": []
+    },
+    "productProjections": {
+      "checkedProducts": 329,
+      "differences": []
+    },
+    "recoverableSyncApply": {
+      "pendingApplyId": null,
+      "journalRows": 1,
+      "incompleteJournalRows": 0,
+      "canonicalRows": 3573,
+      "interactionSummaryDifferences": 0,
+      "differences": [],
+      "blockingDifferences": []
+    }
+  },
+  "zeroMutationHttpChecks": {
+    "cases": [
+      {
+        "case": "GET",
+        "httpStatus": 200,
+        "clientMs": 5367.015,
+        "serverDurationMs": 1730,
+        "apiVersion": 2,
+        "environment": "PRODUCTION",
+        "productCount": 329
+      },
+      {
+        "case": "malformed",
+        "httpStatus": 200,
+        "clientMs": 1213.847,
+        "serverDurationMs": 3,
+        "errorCode": "INVALID_JSON"
+      },
+      {
+        "case": "unsupported",
+        "httpStatus": 200,
+        "clientMs": 1188.605,
+        "serverDurationMs": 2,
+        "errorCode": "UNSUPPORTED_API_VERSION"
+      },
+      {
+        "case": "environment_mismatch",
+        "httpStatus": 200,
+        "clientMs": 2371.841,
+        "serverDurationMs": 596,
+        "environment": "PRODUCTION",
+        "errorCode": "ENVIRONMENT_MISMATCH"
+      }
+    ],
+    "sheetNamesEqual": true,
+    "allTenSheetContentHashesEqual": true,
+    "acceptedEmptyRequestSent": false
+  },
+  "finalGet": {
+    "httpStatus": 200,
+    "clientMs": 5449.599,
+    "serverDurationMs": 2358,
+    "apiVersion": 2,
+    "environment": "PRODUCTION",
+    "productCount": 329,
+    "productsSha256": "6D20A429A9DED648ED33039C096174BECCD93C043640690B68DF9DDA58D113F4"
+  },
+  "environmentAndIntegrations": {
+    "scriptPropertiesUnchanged": true,
+    "triggersUnchanged": true,
+    "triggersRecheckedAfterFirstRealSync": true,
+    "triggers": [
+      "onInventoryEdit: HEAD: From spreadsheet - On edit",
+      "onFormSubmit: HEAD: From spreadsheet - On form submit"
+    ],
+    "formPublished": true,
+    "formNativeResponseCount": 3458,
+    "formChoicesBefore": [
+      "*J59",
+      "*S33",
+      "*J8B",
+      "*J83",
+      "*S67",
+      "*S68",
+      "*J128"
+    ],
+    "formChoicesAfter": [
+      "*J59",
+      "*S33",
+      "*J8B",
+      "*J83",
+      "*S67",
+      "*S68",
+      "*J128",
+      "*S69",
+      "*P94"
+    ],
+    "formChoiceChange": "The repair refreshed the Form to the exact nine active products; the two added choices were already-active products missing from the pre-promotion Form."
+  },
+  "firstRealSync": {
+    "status": "verified",
+    "requestUuid": "8ca578a3-e553-4a6e-9161-93cf07946fff",
+    "eventUuid": "c9fd36d1-93b2-4594-bea4-a4f6673284f3",
+    "applyUuid": "eac357b0-4d66-4ce5-8404-eb34d4121210",
+    "productUuid": "*P94",
+    "uses": 2,
+    "date": "2026-07-17",
+    "time": "22:19",
+    "acknowledgement": {
+      "success": true,
+      "allAccepted": true,
+      "message": "Sync complete",
+      "purchases": [],
+      "rejections": [],
+      "acknowledgedConsumptions": [
+        {
+          "eventId": "c9fd36d1-93b2-4594-bea4-a4f6673284f3",
+          "status": "committed"
+        }
+      ]
+    },
+    "changedSheets": [
+      "Purchases",
+      "Form Responses 1",
+      "ConsumptionEvents",
+      "SyncLedger",
+      "SyncApplyJournal"
+    ],
+    "unrelatedSheetChanges": 0,
+    "productUsesBefore": 53,
+    "productUsesAfter": 55,
+    "ledgerDurationMs": 6355,
+    "historicalOneConsumptionLedgerMedianMs": 6542,
+    "appsScriptExecution": {
+      "function": "doPost",
+      "version": 8,
+      "durationSeconds": 8.676,
+      "status": "Completed"
+    },
+    "followUpExecution": {
+      "function": "doGet",
+      "version": 8,
+      "durationSeconds": 2.351,
+      "status": "Completed"
+    },
+    "postSyncSnapshot": "C:\\Users\\noamv\\Downloads\\cannsheet-mobile-main\\backups\\2026-07-17\\backend-sync-performance\\production-after-promotion-version-8\\CannsheetG-after-first-real-sync.xlsx",
+    "postSyncSnapshotSha256": "82189CCB0607E1E04498A758F9FD99766A96AC3BEB2E4B9A71B517A438B5215E"
+  },
+  "postRealSyncState": {
+    "purchases": 329,
+    "active": 9,
+    "finished": 320,
+    "unopened": 0,
+    "compatibilityRows": 3574,
+    "canonicalEvents": 3574,
+    "uniqueEventUuids": 3574,
+    "duplicateEventUuids": 0,
+    "totalUses": 5401.51,
+    "ledgerRows": 39,
+    "uniqueLedgerRequestUuids": 39,
+    "journalRows": 2,
+    "completeJournalRows": 2,
+    "incompleteJournalRows": 0,
+    "pendingApplyId": null,
+    "interactionSummaryDifferences": [],
+    "productProjectionDifferences": [],
+    "recoverableApplyDifferences": [],
+    "recoverableApplyBlockers": []
+  }
+}

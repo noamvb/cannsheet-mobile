@@ -12,16 +12,36 @@
 
 const CANN = Object.freeze({
   API_VERSION: 2,
+  // The additive Purchases projection has its own readiness version so the
+  // existing v2 deployment remains usable while the migration runs.
   SCHEMA_VERSION: 2,
+  INTERACTION_SUMMARY_VERSION: 1,
+  RECOVERABLE_SYNC_APPLY_VERSION: 1,
+  RECOVERABLE_SYNC_APPLY_CONFIG_KEY: 'RECOVERABLE_SYNC_APPLY_VERSION',
+  PENDING_APPLY_KEY: 'PENDING_APPLY_KEY',
+  COMPATIBILITY_EVENT_HEADER: 'Cannsheet Event UUID',
+  COMPATIBILITY_REQUEST_HEADER: 'Cannsheet Request UUID',
+  SANDBOX_FAULT_PROPERTY: 'SANDBOX_SYNC_APPLY_FAULT',
+  SYNC_APPLY_FAULTS: Object.freeze({
+    COMPATIBILITY: 'AFTER_COMPATIBILITY',
+    CANONICAL: 'AFTER_CANONICAL',
+    PRODUCT_EFFECTS: 'AFTER_PRODUCT_EFFECTS',
+    INTERACTION_SUMMARY: 'AFTER_INTERACTION_SUMMARY',
+    CORE_COMMITTED: 'AFTER_CORE_COMMIT',
+    LEDGER: 'BEFORE_FINAL_LEDGER',
+    POST_COMPLETE: 'AFTER_COMPLETE'
+  }),
   TIME_ZONE: 'America/New_York',
   LOCK_TIMEOUT_MS: 30000,
   MAX_BATCH_SIZE: 100,
+  EVENT_TEXT_FINDER_MAX_BATCH: 5,
   FORM_PRODUCT_QUESTION: 'Product',
   SHEETS: Object.freeze({
     PURCHASES: 'Purchases',
     RESPONSES: 'Form Responses 1',
     EVENTS: 'ConsumptionEvents',
     LEDGER: 'SyncLedger',
+    APPLY_JOURNAL: 'SyncApplyJournal',
     CONFIG: 'Config',
     MIGRATION_REPORT: 'MigrationReport'
   }),
@@ -29,7 +49,7 @@ const CANN = Object.freeze({
     'Date', 'Type', 'Product name', 'Pre-tax cost', 'THC%', 'Grams',
     'Borrowed', 'Finished', 'Product ID', 'Uses', 'Post-tax', 'Final cost',
     'Most recent use', 'Product UUID', 'Client Action UUID', 'Created At',
-    'Finished At'
+    'Finished At', 'Last quantity'
   ]),
   EVENT_HEADERS: Object.freeze([
     'Event UUID', 'Timestamp', 'Local Date', 'Local Time', 'Product UUID',
@@ -43,6 +63,13 @@ const CANN = Object.freeze({
   REPORT_HEADERS: Object.freeze([
     'Type', 'Source Sheet', 'Source Row', 'Product ID', 'Detail', 'Recorded At'
   ]),
+  MIGRATION_RESOLUTION_HEADERS: Object.freeze([
+    'Resolved At', 'Resolution'
+  ]),
+  APPLY_JOURNAL_HEADERS: Object.freeze([
+    'Apply UUID', 'Kind', 'API Version', 'Request UUID', 'State',
+    'Core Committed At', 'Completed At', 'Finalization JSON', 'Response JSON'
+  ]),
   STATUS: Object.freeze({ ACTIVE: 0, FINISHED: 1, UNOPENED: 2 })
 });
 
@@ -51,22 +78,62 @@ const CANN = Object.freeze({
 // -----------------------------------------------------------------------------
 
 function doGet() {
+  const timing = newBackendTiming_('GET');
   let environment = '';
   try {
+    const environmentConfigStarted = Date.now();
     environment = environment_();
     const ss = spreadsheet_();
-    assertConfigEnvironment_(ss);
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment);
+    assertSupportedSchemaVersion_(runtimeConfig.values);
+    const summaryReady = interactionSummaryReady_(runtimeConfig.values);
+    recordBackendPhase_(timing, 'environmentConfig', environmentConfigStarted);
+
+    const purchaseContextStarted = Date.now();
     const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
     const headers = headerMap_(purchases);
-    requireHeaders_(headers, ['Type', 'Product name', 'Pre-tax cost', 'THC%', 'Grams', 'Finished', 'Product ID']);
+    requireExactHeaders_(
+      headers,
+      summaryReady ? CANN.PURCHASE_HEADERS : CANN.PURCHASE_HEADERS.slice(0, -1),
+      CANN.SHEETS.PURCHASES
+    );
     const rows = readDataRows_(purchases);
-    const interactions = latestInteractions_(ss);
+    recordBackendPhase_(timing, 'purchaseContext', purchaseContextStarted);
 
+    const interactionLookupStarted = Date.now();
+    // The history scan is a migration/rollback fallback only. Once the explicit
+    // migration marks version 1 ready, normal GET never opens event history.
+    const legacyInteractions = summaryReady ? null : latestInteractions_(ss);
+    recordBackendPhase_(timing, 'interactionLookup', interactionLookupStarted);
+
+    const responseConstructionStarted = Date.now();
     const products = rows
       .filter(row => text_(value_(row, headers, 'Product ID')) && text_(value_(row, headers, 'Product name')))
       .map(row => {
         const legacyId = text_(value_(row, headers, 'Product ID'));
-        const recent = interactions[legacyId];
+        const fallback = legacyInteractions && legacyInteractions[legacyId];
+        const rawRecent = summaryReady
+          ? value_(row, headers, 'Most recent use')
+          : '';
+        const rawLastQuantity = summaryReady
+          ? value_(row, headers, 'Last quantity')
+          : '';
+        const recentMillis = summaryReady
+          ? timestampMillisOrNull_(rawRecent)
+          : (fallback ? fallback.lastLoggedAtEpochMillis : null);
+        const lastQuantity = summaryReady
+          ? optionalFiniteNumber_(rawLastQuantity)
+          : (fallback ? optionalFiniteNumber_(fallback.lastQuantity) : null);
+        if (summaryReady && (
+          (rawRecent !== '' && rawRecent != null && recentMillis == null) ||
+          (rawLastQuantity !== '' && rawLastQuantity != null && lastQuantity == null) ||
+          ((recentMillis == null) !== (lastQuantity == null))
+        )) {
+          throw new Error(
+            'INTERACTION_SUMMARY_INVALID: timestamp and quantity must be a valid pair for ' +
+            legacyId
+          );
+        }
         const product = {
           id: legacyId,
           name: text_(value_(row, headers, 'Product name')),
@@ -80,80 +147,194 @@ function doGet() {
           const productUuid = text_(value_(row, headers, 'Product UUID'));
           if (productUuid) product.productUuid = productUuid;
         }
-        if (recent) {
-          product.lastLoggedAtEpochMillis = recent.lastLoggedAtEpochMillis;
-          product.lastQuantity = recent.lastQuantity;
+        if (recentMillis != null && lastQuantity != null) {
+          product.lastLoggedAtEpochMillis = recentMillis;
+          product.lastQuantity = lastQuantity;
         }
         return product;
       });
 
-    return jsonOutput_({ products: products, apiVersion: CANN.API_VERSION, environment: environment });
+    const response = { products: products, apiVersion: CANN.API_VERSION, environment: environment };
+    recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
+    addServerTimingFields_(response, timing, environment);
+    const responseRoutingStarted = Date.now();
+    const output = jsonOutput_(response);
+    recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+    logBackendTiming_(timing, 'success', {
+      environment: environment,
+      productCount: products.length,
+      interactionProjection: summaryReady ? 'PURCHASES' : 'LEGACY_HISTORY'
+    });
+    return output;
   } catch (error) {
     console.error('GET failed: ' + conciseError_(error));
-    return jsonOutput_({ error: conciseError_(error), errorCode: 'INTERNAL_ERROR', environment: environment || undefined });
+    const responseConstructionStarted = Date.now();
+    const response = { error: conciseError_(error), errorCode: 'INTERNAL_ERROR', environment: environment || undefined };
+    recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
+    addServerTimingFields_(response, timing, environment);
+    const responseRoutingStarted = Date.now();
+    const output = jsonOutput_(response);
+    recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+    logBackendTiming_(timing, 'error', {
+      environment: environment || undefined,
+      errorCode: 'INTERNAL_ERROR'
+    });
+    return output;
   }
 }
 
 function doPost(e) {
   const started = Date.now();
+  const timing = newBackendTiming_('POST', started);
   let payload;
   try {
     if (!e || !e.postData || typeof e.postData.contents !== 'string') {
-      return requestFailure_('INVALID_JSON', 'Missing JSON request body');
+      recordBackendPhase_(timing, 'requestParse', started);
+      return timedRequestFailure_(timing, 'INVALID_JSON', 'Missing JSON request body');
     }
     payload = JSON.parse(e.postData.contents);
   } catch (error) {
-    return requestFailure_('INVALID_JSON', 'Malformed JSON request body');
+    recordBackendPhase_(timing, 'requestParse', started);
+    return timedRequestFailure_(timing, 'INVALID_JSON', 'Malformed JSON request body');
+  }
+  recordBackendPhase_(timing, 'requestParse', started);
+  if (!isRequestPayloadObject_(payload)) {
+    return timedRequestFailure_(timing, 'INVALID_JSON', 'JSON request body must be an object');
   }
 
   const apiVersion = payload.apiVersion == null ? 1 : Number(payload.apiVersion);
   if (apiVersion !== 1 && apiVersion !== CANN.API_VERSION) {
-    return requestFailure_('UNSUPPORTED_API_VERSION', 'Unsupported apiVersion');
+    return timedRequestFailure_(timing, 'UNSUPPORTED_API_VERSION', 'Unsupported apiVersion', undefined, {
+      apiVersion: apiVersion
+    });
   }
 
+  // Pure request checks happen before the lock and before any history is read.
+  // We still validate the target environment before returning the failure so a
+  // request can never bypass the production/sandbox isolation guard.
+  const preflightStarted = Date.now();
+  const preflight = preflightSyncRequest_(payload, apiVersion);
+  recordBackendPhase_(timing, 'stagingValidation', preflightStarted);
+
   let environment;
+  let requestContext;
+  const environmentConfigStarted = Date.now();
   try {
     environment = environment_();
     const ss = spreadsheet_();
-    assertConfigEnvironment_(ss);
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment);
     const mismatch = validateRequestEnvironment_(environment, payload.environment);
-    if (mismatch) return requestFailure_('ENVIRONMENT_MISMATCH', mismatch, environment);
+    recordBackendPhase_(timing, 'environmentConfig', environmentConfigStarted);
+    if (mismatch) {
+      return timedRequestFailure_(timing, 'ENVIRONMENT_MISMATCH', mismatch, environment, {
+        apiVersion: apiVersion,
+        requestId: text_(payload.requestId) || undefined
+      });
+    }
+    if (preflight.failure) {
+      return preflightFailureOutput_(payload, apiVersion, preflight.failure, environment, timing);
+    }
+
+    const runtimeSchemaStarted = Date.now();
+    const runtime = assertRuntimeSchema_(ss, environment, runtimeConfig);
+    recordBackendPhase_(timing, 'runtimeSchemaAssertion', runtimeSchemaStarted);
+    requestContext = {
+      apiVersion: apiVersion,
+      payload: payload,
+      purchases: preflight.purchases,
+      consumptions: preflight.consumptions,
+      environment: environment,
+      ss: ss,
+      sheets: runtime.sheets,
+      headers: runtime.headers,
+      config: runtime.config
+    };
   } catch (error) {
-    return requestFailure_('CONFIGURATION_ERROR', conciseError_(error), environment);
+    recordBackendPhase_(timing, 'environmentConfig', environmentConfigStarted);
+    return timedRequestFailure_(timing, 'CONFIGURATION_ERROR', conciseError_(error), environment, {
+      apiVersion: apiVersion,
+      requestId: text_(payload.requestId) || undefined
+    });
   }
 
   const lock = LockService.getScriptLock();
-  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) {
-    return requestFailure_('LOCK_TIMEOUT', 'The backend is busy; retry this request');
+  const lockWaitStarted = Date.now();
+  const lockAcquired = lock.tryLock(CANN.LOCK_TIMEOUT_MS);
+  recordBackendPhase_(timing, 'lockWait', lockWaitStarted);
+  if (!lockAcquired) {
+    return timedRequestFailure_(timing, 'LOCK_TIMEOUT', 'The backend is busy; retry this request', environment, {
+      apiVersion: apiVersion,
+      requestId: text_(payload.requestId) || undefined
+    });
   }
 
+  let output;
+  let outcome = 'success';
+  let timingDetails;
   try {
     const response = apiVersion === 1
-      ? handleLegacySyncLocked_(payload)
-      : handleV2SyncLocked_(payload, started);
+      ? handleLegacySyncLocked_(requestContext, timing)
+      : handleV2SyncLocked_(requestContext, started, timing);
     response.environment = environment;
-    return jsonOutput_(response);
+    if (apiVersion === CANN.API_VERSION) addServerTimingFields_(response, timing, environment);
+    const responseRoutingStarted = Date.now();
+    output = jsonOutput_(response);
+    recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+    outcome = response.success === false ? 'rejected' : 'success';
+    timingDetails = {
+      apiVersion: apiVersion,
+      environment: environment,
+      requestId: text_(payload.requestId) || undefined,
+      purchaseCount: Array.isArray(payload.purchases) ? payload.purchases.length : undefined,
+      consumptionCount: Array.isArray(payload.consumptions) ? payload.consumptions.length : undefined,
+      allAccepted: response.allAccepted
+    };
   } catch (error) {
     console.error('POST failed: ' + conciseError_(error));
-    return requestFailure_('INTERNAL_ERROR', conciseError_(error), environment);
+    output = requestFailure_('INTERNAL_ERROR', conciseError_(error), environment, timing);
+    outcome = 'error';
+    timingDetails = {
+      apiVersion: apiVersion,
+      environment: environment,
+      requestId: text_(payload.requestId) || undefined,
+      errorCode: 'INTERNAL_ERROR'
+    };
   } finally {
+    const lockReleaseStarted = Date.now();
     lock.releaseLock();
+    recordBackendPhase_(timing, 'lockRelease', lockReleaseStarted);
   }
+  logBackendTiming_(timing, outcome, timingDetails);
+  return output;
 }
 
 function handleSync(payload) {
   // Retained for compatibility with manual callers and old trigger references.
   const environment = environment_();
   const ss = spreadsheet_();
-  assertConfigEnvironment_(ss);
+  const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment);
   const mismatch = validateRequestEnvironment_(environment, (payload || {}).environment);
   if (mismatch) return requestFailure_('ENVIRONMENT_MISMATCH', mismatch, environment);
+  const preflight = preflightSyncRequest_(payload || {}, 1);
+  if (preflight.failure) return jsonOutput_(legacyFailure_(preflight.failure.message));
+  const runtime = assertRuntimeSchema_(ss, environment, runtimeConfig);
+  const requestContext = {
+    apiVersion: 1,
+    payload: payload || {},
+    purchases: preflight.purchases,
+    consumptions: preflight.consumptions,
+    environment: environment,
+    ss: ss,
+    sheets: runtime.sheets,
+    headers: runtime.headers,
+    config: runtime.config
+  };
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) {
     return requestFailure_('LOCK_TIMEOUT', 'The backend is busy; retry this request');
   }
   try {
-    const response = handleLegacySyncLocked_(payload || {});
+    const response = handleLegacySyncLocked_(requestContext);
     response.environment = environment;
     return jsonOutput_(response);
   } finally {
@@ -165,18 +346,33 @@ function handleSync(payload) {
 // Version 1 sync (all-or-nothing response semantics)
 // -----------------------------------------------------------------------------
 
-function handleLegacySyncLocked_(payload) {
-  const purchases = arrayOrEmpty_(payload.purchases);
-  const consumptions = arrayOrEmpty_(payload.consumptions);
-  const sizeError = validateBatchSize_(purchases, consumptions);
-  if (sizeError) return legacyFailure_(sizeError);
+function handleLegacySyncLocked_(requestContext, timing) {
+  let phaseStarted = Date.now();
+  const payload = requestContext.payload;
+  const purchases = requestContext.purchases;
+  const consumptions = requestContext.consumptions;
+  const ss = requestContext.ss;
 
-  const ss = spreadsheet_();
-  assertConfigEnvironment_(ss);
-  ensureCoreSchema_(ss);
-  const context = productContext_(ss);
+  refreshRecoverableSyncApplyStateLocked_(requestContext);
+  if (recoverableSyncApplyReady_(requestContext.config)) {
+    const repairStarted = Date.now();
+    repairPendingSyncApplyLocked_(requestContext);
+    recordBackendPhase_(timing, 'recoveryRepair', repairStarted);
+  }
+
+  phaseStarted = Date.now();
+  const context = productContext_(ss, {
+    includeActionIds: false,
+    runtimeContext: requestContext
+  });
+  recordBackendPhase_(timing, 'purchaseContext', phaseStarted);
+
+  phaseStarted = Date.now();
   const purchaseErrors = purchases.map((item, index) => validateLegacyPurchase_(item, index)).filter(Boolean);
-  if (purchaseErrors.length) return legacyFailure_(purchaseErrors[0].message);
+  if (purchaseErrors.length) {
+    recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
+    return legacyFailure_(purchaseErrors[0].message);
+  }
 
   const staged = stagePurchases_(purchases.map((item, index) => ({
     item: item,
@@ -185,24 +381,58 @@ function handleLegacySyncLocked_(payload) {
     sourceIndex: index,
     legacy: true
   })), context);
-  if (staged.rejected.length) return legacyFailure_(staged.rejected[0].message);
+  if (staged.rejected.length) {
+    recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
+    return legacyFailure_(staged.rejected[0].message);
+  }
 
   const resolver = Object.assign({}, context.byLegacyId, staged.byTempId);
   const consumptionErrors = consumptions
     .map((item, index) => validateLegacyConsumption_(item, index, resolver))
     .filter(Boolean);
-  if (consumptionErrors.length) return legacyFailure_(consumptionErrors[0].message);
+  if (consumptionErrors.length) {
+    recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
+    return legacyFailure_(consumptionErrors[0].message);
+  }
 
   const now = new Date();
-  appendPurchaseRows_(context.purchasesSheet, staged.accepted, now);
+  phaseStarted = Date.now();
   const stagedConsumptions = consumptions.map(item => stageLegacyConsumption_(item, resolver, now));
-  appendConsumptionRows_(ss, stagedConsumptions);
-  applyProductEffects_(context.purchasesSheet, stagedConsumptions);
-  updateFormAndDescriptionLocked_(ss);
-
+  recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
   const productIdMap = {};
   staged.accepted.forEach(item => { productIdMap[item.tempId] = item.legacyProductId; });
-  return { success: true, message: 'Sync complete', productIdMap: productIdMap };
+  const response = { success: true, message: 'Sync complete', productIdMap: productIdMap };
+
+  if (recoverableSyncApplyReady_(requestContext.config)) {
+    applyRecoverableSyncLocked_({
+      runtimeContext: requestContext,
+      productContext: context,
+      stagedPurchases: staged.accepted,
+      stagedConsumptions: stagedConsumptions,
+      kind: 'ANDROID_V1',
+      apiVersion: 1,
+      requestId: '',
+      response: response,
+      formRefreshRequired: true,
+      ledger: null,
+      timing: timing
+    });
+  } else {
+    phaseStarted = Date.now();
+    appendPurchaseRows_(context, staged.accepted, now, requestContext.config.TAX_RATE);
+    recordBackendPhase_(timing, 'purchaseAppend', phaseStarted);
+    appendConsumptionRows_(ss, stagedConsumptions, false, timing, requestContext);
+    phaseStarted = Date.now();
+    applyProductEffects_(context, stagedConsumptions);
+    recordBackendPhase_(timing, 'productEffects', phaseStarted);
+    phaseStarted = Date.now();
+    updateFormAndDescriptionLocked_(ss, requestContext);
+    recordBackendPhase_(timing, 'formRefresh', phaseStarted);
+  }
+
+  phaseStarted = Date.now();
+  recordBackendPhase_(timing, 'responseConstruction', phaseStarted);
+  return response;
 }
 
 function legacyFailure_(message) {
@@ -213,30 +443,43 @@ function legacyFailure_(message) {
 // Version 2 sync (record-level idempotency and acknowledgements)
 // -----------------------------------------------------------------------------
 
-function handleV2SyncLocked_(payload, started) {
+function handleV2SyncLocked_(requestContext, started, timing) {
+  let phaseStarted = Date.now();
+  const payload = requestContext.payload;
   const requestId = text_(payload.requestId);
-  const purchases = arrayOrEmpty_(payload.purchases);
-  const consumptions = arrayOrEmpty_(payload.consumptions);
-  if (!isUuid_(requestId)) {
-    return v2RequestFailure_(requestId, 'INVALID_ITEM', 'requestId must be a UUID');
-  }
-  const sizeError = validateBatchSize_(purchases, consumptions);
-  if (sizeError) return v2RequestFailure_(requestId, 'INVALID_ITEM', sizeError);
+  const purchases = requestContext.purchases;
+  const consumptions = requestContext.consumptions;
+  const ss = requestContext.ss;
 
-  const duplicateActionId = firstDuplicate_(purchases.map(item => text_(item.actionId)).filter(Boolean));
-  const duplicateEventId = firstDuplicate_(consumptions.map(item => text_(item.eventId)).filter(Boolean));
-  if (duplicateActionId || duplicateEventId) {
-    return v2RequestFailure_(requestId, 'INVALID_ITEM', 'Duplicate UUID inside request');
+  refreshRecoverableSyncApplyStateLocked_(requestContext);
+  if (recoverableSyncApplyReady_(requestContext.config)) {
+    const repairStarted = Date.now();
+    repairPendingSyncApplyLocked_(requestContext);
+    recordBackendPhase_(timing, 'recoveryRepair', repairStarted);
   }
 
-  const ss = spreadsheet_();
-  assertConfigEnvironment_(ss);
-  ensureCoreSchema_(ss);
-  const context = productContext_(ss);
-  const existingEvents = eventContext_(ss);
+  phaseStarted = Date.now();
+  const context = purchases.length || consumptions.length
+    ? productContext_(ss, {
+      includeActionIds: purchases.length > 0,
+      runtimeContext: requestContext
+    })
+    : emptyProductContext_(requestContext);
+  recordBackendPhase_(timing, 'purchaseContext', phaseStarted);
+
+  phaseStarted = Date.now();
+  const existingEvents = consumptions.length
+    ? eventContext_(ss, requestContext, consumptions
+      .map(item => text_(item && item.eventId))
+      .filter(eventId => isUuid_(eventId)))
+    : { sheet: requestContext.sheets.events, eventIds: new Set() };
+  recordBackendPhase_(timing, 'eventDuplicateLookup', phaseStarted);
+
+  phaseStarted = Date.now();
   const acceptedPurchases = [];
   const rejectedPurchases = [];
   const newPurchases = [];
+  const duplicatePurchasesByTempId = {};
 
   purchases.forEach((item, index) => {
     const error = validateV2Purchase_(item, index);
@@ -248,6 +491,8 @@ function handleV2SyncLocked_(payload, started) {
     const existing = context.byActionId[actionId];
     if (existing) {
       acceptedPurchases.push(purchaseAck_(item, existing, 'duplicate'));
+      const duplicateTempId = text_(item.tempId);
+      if (duplicateTempId) duplicatePurchasesByTempId[duplicateTempId] = existing;
       return;
     }
     newPurchases.push({ item: item, actionId: actionId, tempId: text_(item.tempId), sourceIndex: index, legacy: false });
@@ -257,7 +502,12 @@ function handleV2SyncLocked_(payload, started) {
   staged.rejected.forEach(item => rejectedPurchases.push(rejectedPurchase_(item.item, item.code, item.message)));
   staged.accepted.forEach(item => acceptedPurchases.push(purchaseAck_(item.item, item, 'committed')));
 
-  const resolver = Object.assign({}, context.byLegacyId, staged.byTempId);
+  const resolver = Object.assign(
+    {},
+    context.byLegacyId,
+    duplicatePurchasesByTempId,
+    staged.byTempId
+  );
   const acceptedConsumptions = [];
   const rejectedConsumptions = [];
   const stagedConsumptions = [];
@@ -269,7 +519,7 @@ function handleV2SyncLocked_(payload, started) {
       return;
     }
     const eventId = text_(item.eventId);
-    if (existingEvents.byEventId[eventId]) {
+    if (existingEvents.eventIds.has(eventId)) {
       acceptedConsumptions.push({ eventId: eventId, status: 'duplicate' });
       return;
     }
@@ -282,13 +532,9 @@ function handleV2SyncLocked_(payload, started) {
     stagedConsumptions.push(stagedItem);
     acceptedConsumptions.push({ eventId: eventId, status: 'committed' });
   });
+  recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
 
-  const now = new Date();
-  appendPurchaseRows_(context.purchasesSheet, staged.accepted, now);
-  appendConsumptionRows_(ss, stagedConsumptions);
-  applyProductEffects_(context.purchasesSheet, stagedConsumptions);
-  if (staged.accepted.length) updateFormAndDescriptionLocked_(ss);
-
+  phaseStarted = Date.now();
   const allAccepted = rejectedPurchases.length === 0 && rejectedConsumptions.length === 0;
   const productIdMap = {};
   acceptedPurchases.forEach(item => {
@@ -306,7 +552,58 @@ function handleV2SyncLocked_(payload, started) {
     acknowledgedConsumptions: acceptedConsumptions,
     rejectedConsumptions: rejectedConsumptions
   };
-  upsertLedger_(ss, requestId, purchases.length, consumptions.length, allAccepted ? 'ACCEPTED' : 'PARTIAL', Date.now() - started, '');
+  recordBackendPhase_(timing, 'responseConstruction', phaseStarted);
+
+  const now = new Date();
+  const recoverableReady = recoverableSyncApplyReady_(requestContext.config);
+  const hasCoreMutation =
+    staged.accepted.length > 0 || stagedConsumptions.length > 0;
+  if (recoverableReady && hasCoreMutation) {
+    applyRecoverableSyncLocked_({
+      runtimeContext: requestContext,
+      productContext: context,
+      stagedPurchases: staged.accepted,
+      stagedConsumptions: stagedConsumptions,
+      kind: 'ANDROID_V2',
+      apiVersion: CANN.API_VERSION,
+      requestId: requestId,
+      response: response,
+      formRefreshRequired: staged.accepted.length > 0,
+      ledger: {
+        startedAtEpochMillis: started,
+        purchaseCount: purchases.length,
+        consumptionCount: consumptions.length,
+        result: allAccepted ? 'ACCEPTED' : 'PARTIAL',
+        durationMs: Date.now() - started,
+        errorCode: ''
+      },
+      timing: timing
+    });
+  } else {
+    if (!recoverableReady) {
+      phaseStarted = Date.now();
+      appendPurchaseRows_(context, staged.accepted, now, requestContext.config.TAX_RATE);
+      recordBackendPhase_(timing, 'purchaseAppend', phaseStarted);
+      appendConsumptionRows_(ss, stagedConsumptions, false, timing, requestContext);
+      phaseStarted = Date.now();
+      applyProductEffects_(context, stagedConsumptions);
+      recordBackendPhase_(timing, 'productEffects', phaseStarted);
+      if (staged.accepted.length) {
+        phaseStarted = Date.now();
+        updateFormAndDescriptionLocked_(ss, requestContext);
+        recordBackendPhase_(timing, 'formRefresh', phaseStarted);
+      }
+    }
+
+    // Empty, rejected-only, and exact-duplicate requests have no multi-sheet
+    // core mutation to protect. Their only durable change is the idempotent
+    // ledger upsert, so a journal and two Advanced Sheets batches would add
+    // latency without improving recovery. A retry overwrites the same ledger
+    // row, while pending work from a predecessor was already repaired above.
+    const ledgerStarted = Date.now();
+    upsertLedger_(ss, requestId, purchases.length, consumptions.length, allAccepted ? 'ACCEPTED' : 'PARTIAL', ledgerStarted - started, '', requestContext);
+    recordBackendPhase_(timing, 'ledgerUpdate', ledgerStarted);
+  }
   return response;
 }
 
@@ -326,6 +623,26 @@ function v2RequestFailure_(requestId, code, message) {
   };
 }
 
+function preflightFailureOutput_(payload, apiVersion, failure, environment, timing) {
+  const responseConstructionStarted = Date.now();
+  const response = apiVersion === 1
+    ? legacyFailure_(failure.message)
+    : v2RequestFailure_(text_(payload.requestId), failure.code, failure.message);
+  response.environment = environment;
+  recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
+  if (apiVersion === CANN.API_VERSION) addServerTimingFields_(response, timing, environment);
+  const responseRoutingStarted = Date.now();
+  const output = jsonOutput_(response);
+  recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+  logBackendTiming_(timing, 'rejected', {
+    apiVersion: apiVersion,
+    environment: environment,
+    requestId: text_(payload.requestId) || undefined,
+    errorCode: failure.code
+  });
+  return output;
+}
+
 // -----------------------------------------------------------------------------
 // Google Form integration
 // -----------------------------------------------------------------------------
@@ -340,9 +657,9 @@ function updateFormAndDescription() {
   }
 }
 
-function updateFormAndDescriptionLocked_(ss) {
-  const sheet = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
-  const headers = headerMap_(sheet);
+function updateFormAndDescriptionLocked_(ss, runtimeContext) {
+  const sheet = runtimeContext ? runtimeContext.sheets.purchases : requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const headers = runtimeContext ? runtimeContext.headers.purchases : headerMap_(sheet);
   requireHeaders_(headers, ['Product name', 'Finished', 'Product ID', 'Uses', 'Most recent use']);
   const available = readDataRows_(sheet).filter(row =>
     allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE) === CANN.STATUS.ACTIVE &&
@@ -356,7 +673,7 @@ function updateFormAndDescriptionLocked_(ss) {
     const recent = value_(row, headers, 'Most recent use');
     return id + ' - ' + name + ' (Uses: ' + uses + ')' + (recent ? ' Last: ' + recent : '');
   }).join('\n');
-  assertConfigEnvironment_(ss);
+  if (!runtimeContext) assertConfigEnvironment_(ss);
   const form = FormApp.openById(requiredScriptProperty_('FORM_ID'));
   const item = form.getItems().find(formItem => formItem.getTitle() === CANN.FORM_PRODUCT_QUESTION);
   if (!item) throw new Error('Form question not found: ' + CANN.FORM_PRODUCT_QUESTION);
@@ -379,23 +696,78 @@ function onFormSubmit(e) {
     if (!e || !e.range) throw new Error('Missing form-submit event range');
     const ss = e.range.getSheet().getParent();
     assertConfiguredSpreadsheet_(ss);
-    assertConfigEnvironment_(ss);
+    const environment = environment_();
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment);
+    const runtime = assertRuntimeSchema_(ss, environment, runtimeConfig);
+    const runtimeContext = {
+      environment: environment,
+      ss: ss,
+      sheets: runtime.sheets,
+      headers: runtime.headers,
+      config: runtime.config
+    };
+    refreshRecoverableSyncApplyStateLocked_(runtimeContext);
+    if (recoverableSyncApplyReady_(runtimeContext.config)) {
+      repairPendingSyncApplyLocked_(runtimeContext);
+    }
     const responseSheet = e.range.getSheet();
     if (responseSheet.getName() !== CANN.SHEETS.RESPONSES) return;
-    ensureCoreSchema_(ss);
     const rowNumber = e.range.getRow();
-    const headers = headerMap_(responseSheet);
+    const headers = runtimeContext.headers.responses;
     const values = responseSheet.getRange(rowNumber, 1, 1, responseSheet.getLastColumn()).getValues()[0];
     const legacyId = text_(value_(values, headers, 'Product'));
-    const context = productContext_(ss);
+    const context = productContext_(ss, { runtimeContext: runtimeContext });
     const product = context.byLegacyId[legacyId];
     if (!product) {
       recordMigrationIssue_(ss, 'UNKNOWN_PRODUCT', responseSheet.getName(), rowNumber, legacyId, 'Form submission was preserved but could not be canonicalized');
       return;
     }
     const timestamp = dateOrNow_(value_(values, headers, 'Timestamp'));
-    const eventId = deterministicLegacyEventUuid_(ss.getId(), responseSheet.getName(), rowNumber);
-    if (eventContext_(ss).byEventId[eventId]) return;
+    const expectedEventId = deterministicLegacyEventUuid_(
+      ss.getId(),
+      responseSheet.getName(),
+      rowNumber
+    );
+    let eventId = expectedEventId;
+    const recoveryReady =
+      recoverableSyncApplyReady_(runtimeContext.config);
+    if (recoveryReady) {
+      const storedEventId = text_(value_(
+        values,
+        headers,
+        CANN.COMPATIBILITY_EVENT_HEADER
+      ));
+      const storedRequestId = text_(value_(
+        values,
+        headers,
+        CANN.COMPATIBILITY_REQUEST_HEADER
+      ));
+      if (storedRequestId) {
+        throw new Error(
+          'FORM_COMPATIBILITY_IDENTITY_CONFLICT: Request UUID must be blank'
+        );
+      }
+      if (storedEventId) {
+        if (!isUuid_(storedEventId) || storedEventId !== expectedEventId) {
+          throw new Error(
+            'FORM_COMPATIBILITY_IDENTITY_CONFLICT: unexpected Event UUID'
+          );
+        }
+        eventId = storedEventId;
+      }
+    }
+    if (eventContext_(ss, runtimeContext, [eventId]).eventIds.has(eventId)) {
+      if (recoveryReady) {
+        assertExistingFormCanonical_(
+          runtimeContext,
+          eventId,
+          responseSheet,
+          rowNumber,
+          values
+        );
+      }
+      return;
+    }
     const event = {
       eventId: eventId,
       timestamp: timestamp,
@@ -412,11 +784,73 @@ function onFormSubmit(e) {
       legacySourceRow: rowNumber,
       compatibilityRow: null
     };
-    appendConsumptionRows_(ss, [event], true);
-    applyProductEffects_(context.purchasesSheet, [event]);
-    updateFormAndDescriptionLocked_(ss);
+    if (recoveryReady) {
+      applyRecoverableSyncLocked_({
+        runtimeContext: runtimeContext,
+        productContext: context,
+        stagedPurchases: [],
+        stagedConsumptions: [event],
+        kind: 'FORM',
+        apiVersion: 0,
+        requestId: '',
+        response: null,
+        formRefreshRequired: true,
+        compatibilityExistingRow: rowNumber,
+        ledger: null,
+        timing: null
+      });
+    } else {
+      appendConsumptionRows_(ss, [event], true, null, runtimeContext);
+      applyProductEffects_(context, [event]);
+      updateFormAndDescriptionLocked_(ss, runtimeContext);
+      SpreadsheetApp.flush();
+    }
   } finally {
     lock.releaseLock();
+  }
+}
+
+function assertExistingFormCanonical_(
+  runtimeContext,
+  eventId,
+  responseSheet,
+  responseRowNumber,
+  responseValues
+) {
+  const eventSheet = runtimeContext.sheets.events;
+  const eventHeaders = runtimeContext.headers.events;
+  const eventRowNumber = findUniqueExactCellRow_(
+    eventSheet,
+    eventHeaders['Event UUID'] + 1,
+    eventId
+  );
+  const eventRow = eventSheet.getRange(
+    eventRowNumber,
+    1,
+    1,
+    eventSheet.getLastColumn()
+  ).getValues()[0];
+  const responseHeaders = runtimeContext.headers.responses;
+  const matches =
+    text_(value_(eventRow, eventHeaders, 'Legacy Source Sheet')) ===
+      responseSheet.getName() &&
+    Number(value_(eventRow, eventHeaders, 'Legacy Source Row')) ===
+      responseRowNumber &&
+    !text_(value_(eventRow, eventHeaders, 'Request UUID')) &&
+    timestampMillisOrNull_(value_(eventRow, eventHeaders, 'Timestamp')) ===
+      timestampMillisOrNull_(
+        value_(responseValues, responseHeaders, 'Timestamp')
+      ) &&
+    text_(value_(eventRow, eventHeaders, 'Legacy Product ID')) ===
+      text_(value_(responseValues, responseHeaders, 'Product')) &&
+    Math.abs(
+      finiteNumberOr_(value_(eventRow, eventHeaders, 'Uses'), NaN) -
+      finiteNumberOr_(value_(responseValues, responseHeaders, 'Uses'), NaN)
+    ) <= 1e-9;
+  if (!matches) {
+    throw new Error(
+      'FORM_COMPATIBILITY_IDENTITY_CONFLICT: canonical lineage/data mismatch'
+    );
   }
 }
 
@@ -449,12 +883,14 @@ function runReliabilityMigration() {
     ensureCoreSchema_(ss);
     const purchaseResult = backfillPurchases_(ss);
     const eventResult = backfillConsumptionEvents_(ss);
+    const interactionSummary = rebuildInteractionSummaryLocked_(ss, false);
     applySheetSafety_(ss);
     updateFormAndDescriptionLocked_(ss);
     const reconciliation = reconcileReliabilityMigration_(ss);
     const result = {
       purchaseBackfill: purchaseResult,
       eventBackfill: eventResult,
+      interactionSummary: interactionSummary,
       reconciliation: reconciliation
     };
     console.log(JSON.stringify(result));
@@ -462,6 +898,433 @@ function runReliabilityMigration() {
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * Explicit additive migration for the fast GET interaction projection.
+ *
+ * Run this editor function while the prior deployment remains active. It leaves
+ * the Config marker at 0, so both the prior deployment and this source keep using
+ * the legacy GET calculation. After this returns with zero differences, deploy
+ * the Phase 4 source, then run enableInteractionSummaryFastPath().
+ */
+function runInteractionSummaryMigration() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const result = rebuildInteractionSummaryLocked_(ss, false);
+    console.log(JSON.stringify({
+      type: 'interaction_summary_prepared',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Explicit maintenance entrypoint. Rebuilds only from canonical history and
+ * deliberately leaves the fast path disabled until the separate enable step.
+ */
+function rebuildInteractionSummary() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const result = rebuildInteractionSummaryLocked_(ss, false);
+    console.log(JSON.stringify({
+      type: 'interaction_summary_rebuilt',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Final rollout step. Run only after this Phase 4 source is active on the web
+ * deployment. It rebuilds once more under the lock, covering any requests that
+ * arrived between preparation and deployment, then enables the fast GET path.
+ */
+function enableInteractionSummaryFastPath() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const result = rebuildInteractionSummaryLocked_(ss, true);
+    console.log(JSON.stringify({
+      type: 'interaction_summary_fast_path_enabled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Immediate rollback switch. Leaves the additive column and data in place. */
+function disableInteractionSummaryFastPath() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    setConfigValue_(
+      ss,
+      'INTERACTION_SUMMARY_VERSION',
+      0,
+      'Purchases interaction-summary version'
+    );
+    SpreadsheetApp.flush();
+    const result = {
+      summaryVersion: 0,
+      fastPathEnabled: false,
+      fallback: 'LEGACY_HISTORY'
+    };
+    console.log(JSON.stringify({
+      type: 'interaction_summary_fast_path_disabled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Read-only maintenance entrypoint. It does not repair or mark readiness. */
+function reconcileInteractionSummary() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const result = reconcileInteractionSummary_(ss);
+    console.log(JSON.stringify({
+      type: 'interaction_summary_reconciled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function rebuildInteractionSummaryLocked_(ss, enableFastPath) {
+  // Fail over to the legacy read path before any projection cells move. This
+  // marker is ignored by the previous deployment and understood by this one.
+  setConfigValue_(
+    ss,
+    'INTERACTION_SUMMARY_VERSION',
+    0,
+    'Purchases interaction-summary version'
+  );
+  SpreadsheetApp.flush();
+
+  const purchases = ensureInteractionSummarySchema_(ss);
+  const headers = headerMap_(purchases);
+  requireExactHeaders_(headers, CANN.PURCHASE_HEADERS, CANN.SHEETS.PURCHASES);
+
+  // This is the exact legacy GET calculation retained only for migration and
+  // explicit reconciliation. It is never called by the normal GET path.
+  const legacy = latestInteractions_(ss);
+  const canonicalResult = canonicalInteractionSummary_(ss);
+  if (canonicalResult.invalidEvents) {
+    throw new Error(
+      'INTERACTION_SUMMARY_MIGRATION_BLOCKED: canonical history contains ' +
+      canonicalResult.invalidEvents + ' invalid event row(s)'
+    );
+  }
+  const legacyComparison = compareInteractionSummaryMaps_(
+    legacy,
+    canonicalResult.interactions
+  );
+  if (legacyComparison.length) {
+    throw new Error(
+      'INTERACTION_SUMMARY_MIGRATION_BLOCKED: canonical state differs from legacy GET: ' +
+      JSON.stringify(legacyComparison.slice(0, 10))
+    );
+  }
+
+  const writeResult = writeInteractionSummary_(
+    purchases,
+    headers,
+    canonicalResult.interactions
+  );
+  SpreadsheetApp.flush();
+
+  const reconciliation = reconcileInteractionSummary_(ss);
+  if (reconciliation.differences.length) {
+    throw new Error(
+      'INTERACTION_SUMMARY_MIGRATION_BLOCKED: rebuilt summary did not reconcile: ' +
+      JSON.stringify(reconciliation.differences.slice(0, 10))
+    );
+  }
+
+  const fastPathEnabled = enableFastPath === true;
+  if (fastPathEnabled) {
+    setConfigValue_(
+      ss,
+      'INTERACTION_SUMMARY_VERSION',
+      CANN.INTERACTION_SUMMARY_VERSION,
+      'Purchases interaction-summary version'
+    );
+    SpreadsheetApp.flush();
+  }
+
+  return {
+    preparedSummaryVersion: CANN.INTERACTION_SUMMARY_VERSION,
+    configSummaryVersion: fastPathEnabled
+      ? CANN.INTERACTION_SUMMARY_VERSION
+      : 0,
+    canonicalEventRows: canonicalResult.eventRows,
+    validCanonicalEvents: canonicalResult.validEvents,
+    invalidCanonicalEvents: canonicalResult.invalidEvents,
+    summarizedProducts: Object.keys(canonicalResult.interactions).length,
+    purchaseRows: writeResult.purchaseRows,
+    populatedSummaries: writeResult.populatedSummaries,
+    legacyComparisonDifferences: legacyComparison.length,
+    reconciliationDifferences: reconciliation.differences.length,
+    readyToEnable: true,
+    fastPathEnabled: fastPathEnabled
+  };
+}
+
+function ensureInteractionSummarySchema_(ss) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const summaryColumn = CANN.PURCHASE_HEADERS.length;
+  const expectedPrefix = CANN.PURCHASE_HEADERS.slice(0, summaryColumn - 1);
+  const currentHeaders = headerMap_(sheet);
+  requireExactHeaders_(currentHeaders, expectedPrefix, CANN.SHEETS.PURCHASES);
+  if (sheet.getMaxColumns() < summaryColumn) {
+    sheet.insertColumnsAfter(
+      sheet.getMaxColumns(),
+      summaryColumn - sheet.getMaxColumns()
+    );
+  }
+  const range = sheet.getRange(1, summaryColumn);
+  const existing = text_(range.getValue());
+  const expected = CANN.PURCHASE_HEADERS[summaryColumn - 1];
+  if (existing && existing !== expected) {
+    throw new Error(
+      'SCHEMA_MISMATCH: ' + CANN.SHEETS.PURCHASES + ' column ' +
+      summaryColumn + ' expected ' + expected + ' but found ' + existing
+    );
+  }
+  if (!existing) range.setValue(expected);
+  return sheet;
+}
+
+function canonicalInteractionSummary_(ss) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const headers = headerMap_(sheet);
+  requireExactHeaders_(headers, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2
+    ? []
+    : sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const interactions = {};
+  let validEvents = 0;
+  let invalidEvents = 0;
+
+  rows.forEach((row, index) => {
+    if (!row.some(cell => cell !== '' && cell != null)) return;
+    const legacyProductId = text_(value_(row, headers, 'Legacy Product ID'));
+    const timestamp = value_(row, headers, 'Timestamp');
+    const timestampMillis = timestampMillisOrNull_(timestamp);
+    const lastQuantity = optionalFiniteNumber_(value_(row, headers, 'Uses'));
+    if (!legacyProductId || timestampMillis == null || lastQuantity == null) {
+      invalidEvents++;
+      return;
+    }
+    validEvents++;
+    const existing = interactions[legacyProductId];
+    // Strictly greater preserves the deployed rule: for equal timestamps, the
+    // earlier physical canonical row keeps its quantity.
+    if (!existing || timestampMillis > existing.lastLoggedAtEpochMillis) {
+      interactions[legacyProductId] = {
+        lastLoggedAtEpochMillis: timestampMillis,
+        lastQuantity: lastQuantity,
+        timestamp: new Date(timestampMillis),
+        canonicalRow: index + 2
+      };
+    }
+  });
+
+  return {
+    interactions: interactions,
+    eventRows: rows.length,
+    validEvents: validEvents,
+    invalidEvents: invalidEvents
+  };
+}
+
+function writeInteractionSummary_(sheet, headers, interactions) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { purchaseRows: 0, populatedSummaries: 0 };
+  const rows = sheet.getRange(
+    2,
+    1,
+    lastRow - 1,
+    sheet.getLastColumn()
+  ).getValues();
+  const latestValues = [];
+  const quantityValues = [];
+  let purchaseRows = 0;
+  let populatedSummaries = 0;
+
+  rows.forEach(row => {
+    const legacyProductId = text_(value_(row, headers, 'Product ID'));
+    const interaction = legacyProductId ? interactions[legacyProductId] : null;
+    if (legacyProductId) purchaseRows++;
+    if (interaction) populatedSummaries++;
+    latestValues.push([interaction ? interaction.timestamp : '']);
+    quantityValues.push([
+      interaction ? interaction.lastQuantity : ''
+    ]);
+  });
+
+  sheet.getRange(
+    2,
+    headers['Most recent use'] + 1,
+    latestValues.length,
+    1
+  ).setValues(latestValues);
+  sheet.getRange(
+    2,
+    headers['Last quantity'] + 1,
+    quantityValues.length,
+    1
+  ).setValues(quantityValues);
+  return {
+    purchaseRows: purchaseRows,
+    populatedSummaries: populatedSummaries
+  };
+}
+
+function reconcileInteractionSummary_(ss) {
+  const canonicalResult = canonicalInteractionSummary_(ss);
+  const expected = canonicalResult.interactions;
+  const sheet = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const headers = headerMap_(sheet);
+  requireExactHeaders_(headers, CANN.PURCHASE_HEADERS, CANN.SHEETS.PURCHASES);
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2
+    ? []
+    : sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const differences = [];
+  const seen = {};
+  let purchaseRows = 0;
+
+  rows.forEach((row, index) => {
+    const legacyProductId = text_(value_(row, headers, 'Product ID'));
+    if (!legacyProductId) return;
+    purchaseRows++;
+    if (seen[legacyProductId]) {
+      differences.push({
+        type: 'DUPLICATE_PRODUCT_ID',
+        legacyProductId: legacyProductId,
+        rowNumber: index + 2,
+        firstRowNumber: seen[legacyProductId]
+      });
+      return;
+    }
+    seen[legacyProductId] = index + 2;
+    const actualMillis = timestampMillisOrNull_(
+      value_(row, headers, 'Most recent use')
+    );
+    const actualQuantity = optionalFiniteNumber_(
+      value_(row, headers, 'Last quantity')
+    );
+    const expectedState = expected[legacyProductId] || null;
+    if (!interactionStateMatches_(
+      actualMillis,
+      actualQuantity,
+      expectedState
+    )) {
+      differences.push({
+        type: 'STATE_MISMATCH',
+        legacyProductId: legacyProductId,
+        rowNumber: index + 2,
+        expected: interactionStateForReport_(expectedState),
+        actual: {
+          lastLoggedAtEpochMillis: actualMillis,
+          lastQuantity: actualQuantity
+        }
+      });
+    }
+  });
+
+  Object.keys(expected).forEach(legacyProductId => {
+    if (!seen[legacyProductId]) {
+      differences.push({
+        type: 'MISSING_PRODUCT',
+        legacyProductId: legacyProductId,
+        canonicalRow: expected[legacyProductId].canonicalRow
+      });
+    }
+  });
+
+  return {
+    canonicalEventRows: canonicalResult.eventRows,
+    validCanonicalEvents: canonicalResult.validEvents,
+    invalidCanonicalEvents: canonicalResult.invalidEvents,
+    purchaseRows: purchaseRows,
+    summarizedProducts: Object.keys(expected).length,
+    differences: differences
+  };
+}
+
+function compareInteractionSummaryMaps_(left, right) {
+  const differences = [];
+  const keys = {};
+  Object.keys(left || {}).forEach(key => { keys[key] = true; });
+  Object.keys(right || {}).forEach(key => { keys[key] = true; });
+  Object.keys(keys).sort().forEach(legacyProductId => {
+    const leftState = (left || {})[legacyProductId] || null;
+    const rightState = (right || {})[legacyProductId] || null;
+    const leftMillis = leftState
+      ? timestampMillisOrNull_(leftState.lastLoggedAtEpochMillis)
+      : null;
+    const leftQuantity = leftState
+      ? optionalFiniteNumber_(leftState.lastQuantity)
+      : null;
+    if (!interactionStateMatches_(leftMillis, leftQuantity, rightState)) {
+      differences.push({
+        legacyProductId: legacyProductId,
+        legacy: interactionStateForReport_(leftState),
+        canonical: interactionStateForReport_(rightState)
+      });
+    }
+  });
+  return differences;
+}
+
+function interactionStateMatches_(actualMillis, actualQuantity, expectedState) {
+  if (!expectedState) return actualMillis == null && actualQuantity == null;
+  const expectedMillis = timestampMillisOrNull_(
+    expectedState.lastLoggedAtEpochMillis
+  );
+  const expectedQuantity = optionalFiniteNumber_(expectedState.lastQuantity);
+  return actualMillis === expectedMillis &&
+    actualQuantity != null &&
+    expectedQuantity != null &&
+    Math.abs(actualQuantity - expectedQuantity) <= 1e-9;
+}
+
+function interactionStateForReport_(state) {
+  if (!state) return null;
+  return {
+    lastLoggedAtEpochMillis: timestampMillisOrNull_(
+      state.lastLoggedAtEpochMillis
+    ),
+    lastQuantity: optionalFiniteNumber_(state.lastQuantity)
+  };
 }
 
 function backfillPurchases_(ss) {
@@ -546,7 +1409,7 @@ function backfillConsumptionEvents_(ss) {
   const rows = cutoffRow < 2 ? [] : responses.getRange(2, 1, cutoffRow - 1, responses.getLastColumn()).getValues();
   const products = productContext_(ss);
   const eventSheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
-  const existing = eventContext_(ss).byEventId;
+  const existing = eventContext_(ss).eventIds;
   const append = [];
   let unresolved = 0;
 
@@ -554,7 +1417,7 @@ function backfillConsumptionEvents_(ss) {
     const rowNumber = index + 2;
     if (!row.some(cell => cell !== '' && cell != null)) return;
     const eventId = deterministicLegacyEventUuid_(ss.getId(), responses.getName(), rowNumber);
-    if (existing[eventId]) return;
+    if (existing.has(eventId)) return;
     const legacyId = text_(value_(row, headers, 'Product'));
     const product = products.byLegacyId[legacyId];
     if (!product) {
@@ -603,7 +1466,11 @@ function reconcileReliabilityMigration_(ss) {
     }
   });
   const reportSheet = requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT);
-  const unresolvedRows = Math.max(0, reportSheet.getLastRow() - 1);
+  const reportHeaders = headerMap_(reportSheet);
+  const unresolvedRows = readDataRows_(reportSheet).filter(row =>
+    reportHeaders['Resolved At'] === undefined ||
+    !value_(row, reportHeaders, 'Resolved At')
+  ).length;
   return {
     purchaseCount: Object.keys(purchases.byLegacyId).length,
     responseEventCount: Object.keys(responses).reduce((sum, key) => sum + responses[key].count, 0),
@@ -622,18 +1489,204 @@ function ensureCoreSchema_(ss) {
   ensureHeaders_(purchases, CANN.PURCHASE_HEADERS);
   ensureSheet_(ss, CANN.SHEETS.EVENTS, CANN.EVENT_HEADERS);
   ensureSheet_(ss, CANN.SHEETS.LEDGER, CANN.LEDGER_HEADERS);
+  ensureSheet_(ss, CANN.SHEETS.APPLY_JOURNAL, CANN.APPLY_JOURNAL_HEADERS);
   ensureSheet_(ss, CANN.SHEETS.MIGRATION_REPORT, CANN.REPORT_HEADERS);
   const config = ensureSheet_(ss, CANN.SHEETS.CONFIG, ['Key', 'Value', 'Description']);
   if (config.getLastRow() < 2) {
-    config.getRange(2, 1, 6, 3).setValues([
+    config.getRange(2, 1, 9, 3).setValues([
       ['ENVIRONMENT', environment_(), 'Runtime environment marker'],
       ['TAX_RATE', 0.13, 'Tax rate used for final-cost values'],
       ['TIME_ZONE', CANN.TIME_ZONE, 'Canonical local timezone'],
       ['SCHEMA_VERSION', CANN.SCHEMA_VERSION, 'Spreadsheet schema version'],
+      ['INTERACTION_SUMMARY_VERSION', 0, 'Purchases interaction-summary version'],
+      [CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY, 0, 'Recoverable multi-sheet apply version'],
+      [CANN.PENDING_APPLY_KEY, '', 'Apply UUID awaiting finalization'],
       ['MAX_BATCH_SIZE', CANN.MAX_BATCH_SIZE, 'Maximum v2 items per request'],
       ['LOCK_TIMEOUT_MS', CANN.LOCK_TIMEOUT_MS, 'Shared mutation lock timeout']
     ]);
+  } else {
+    ensureConfigKey_(ss, CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY, 0, 'Recoverable multi-sheet apply version');
+    ensureConfigKey_(ss, CANN.PENDING_APPLY_KEY, '', 'Apply UUID awaiting finalization');
   }
+}
+
+function ensureMigrationResolutionSchema_(ss) {
+  const expected = CANN.REPORT_HEADERS.concat(
+    CANN.MIGRATION_RESOLUTION_HEADERS
+  );
+  const sheet = requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT);
+  ensureHeaders_(sheet, expected);
+  return sheet;
+}
+
+function assertSpreadsheetTimeZone_(ss, config) {
+  const spreadsheetTimeZone = text_(ss.getSpreadsheetTimeZone());
+  const configTimeZone = text_(
+    config && config.TIME_ZONE !== undefined
+      ? config.TIME_ZONE
+      : configValue_(ss, 'TIME_ZONE', '')
+  );
+  if (spreadsheetTimeZone !== CANN.TIME_ZONE ||
+      configTimeZone !== CANN.TIME_ZONE) {
+    throw new Error(
+      'CONFIGURATION_ERROR: spreadsheet and Config TIME_ZONE must both be ' +
+      CANN.TIME_ZONE + ' (spreadsheet=' + spreadsheetTimeZone +
+      ', config=' + configTimeZone + ')'
+    );
+  }
+}
+
+function provisionRecoverableDateFormats_(ss) {
+  const specifications = [
+    [CANN.SHEETS.PURCHASES, ['Most recent use', 'Created At', 'Finished At']],
+    [CANN.SHEETS.RESPONSES, ['Timestamp']],
+    [CANN.SHEETS.EVENTS, ['Timestamp']],
+    [CANN.SHEETS.LEDGER, ['Received At']],
+    [CANN.SHEETS.APPLY_JOURNAL, ['Core Committed At', 'Completed At']]
+  ];
+  specifications.forEach(specification => {
+    const sheet = requiredSheet_(ss, specification[0]);
+    const headers = headerMap_(sheet);
+    specification[1].forEach(header => {
+      if (headers[header] === undefined) {
+        throw new Error(
+          'SCHEMA_MISMATCH: missing date header ' + header +
+          ' in ' + sheet.getName()
+        );
+      }
+      sheet.getRange(
+        2,
+        headers[header] + 1,
+        Math.max(1, sheet.getMaxRows() - 1),
+        1
+      ).setNumberFormat('yyyy-mm-dd hh:mm:ss');
+    });
+  });
+}
+
+/**
+ * Read-only schema assertion for HTTP execution. Provisioning and migrations
+ * remain responsible for creating sheets, adding columns, and formatting.
+ */
+function readAndAssertRuntimeConfig_(ss, expectedEnvironment) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+  const headers = headerMap_(sheet);
+  requireExactHeaders_(headers, ['Key', 'Value', 'Description'], CANN.SHEETS.CONFIG);
+  const values = configValuesFromSheet_(sheet, headers);
+  if (text_(values.ENVIRONMENT) !== expectedEnvironment) {
+    throw new Error('CONFIGURATION_ERROR: Config ENVIRONMENT mismatch');
+  }
+  return { sheet: sheet, headers: headers, values: values };
+}
+
+function assertRuntimeSchema_(ss, expectedEnvironment, validatedConfig) {
+  const runtimeConfig = validatedConfig || readAndAssertRuntimeConfig_(ss, expectedEnvironment);
+  const sheets = {
+    purchases: requiredSheet_(ss, CANN.SHEETS.PURCHASES),
+    responses: requiredSheet_(ss, CANN.SHEETS.RESPONSES),
+    events: requiredSheet_(ss, CANN.SHEETS.EVENTS),
+    ledger: requiredSheet_(ss, CANN.SHEETS.LEDGER),
+    config: runtimeConfig.sheet,
+    migrationReport: requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT)
+  };
+  const headers = {
+    purchases: headerMap_(sheets.purchases),
+    responses: headerMap_(sheets.responses),
+    events: headerMap_(sheets.events),
+    ledger: headerMap_(sheets.ledger),
+    config: runtimeConfig.headers,
+    migrationReport: headerMap_(sheets.migrationReport)
+  };
+
+  const config = runtimeConfig.values;
+  assertSupportedSchemaVersion_(config);
+  const summaryReady = interactionSummaryReady_(config);
+  const recoverableApplyReady = recoverableSyncApplyReady_(config);
+  if (recoverableApplyReady) assertSpreadsheetTimeZone_(ss, config);
+  requireExactHeaders_(
+    headers.purchases,
+    summaryReady ? CANN.PURCHASE_HEADERS : CANN.PURCHASE_HEADERS.slice(0, -1),
+    CANN.SHEETS.PURCHASES
+  );
+  requireHeaders_(headers.responses, ['Timestamp', 'Product', 'Uses']);
+  if (recoverableApplyReady) {
+    requireCompatibilityIdentityHeaders_(headers.responses);
+    sheets.applyJournal = requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+    headers.applyJournal = headerMap_(sheets.applyJournal);
+    requireExactHeaders_(headers.applyJournal, CANN.APPLY_JOURNAL_HEADERS, CANN.SHEETS.APPLY_JOURNAL);
+  }
+  requireExactHeaders_(headers.events, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
+  requireExactHeaders_(headers.ledger, CANN.LEDGER_HEADERS, CANN.SHEETS.LEDGER);
+  requireExactHeaders_(headers.config, ['Key', 'Value', 'Description'], CANN.SHEETS.CONFIG);
+  requireExactHeaders_(headers.migrationReport, CANN.REPORT_HEADERS, CANN.SHEETS.MIGRATION_REPORT);
+
+  const configuredEnvironment = text_(config.ENVIRONMENT);
+  if (expectedEnvironment && configuredEnvironment !== expectedEnvironment) {
+    throw new Error('CONFIGURATION_ERROR: Config ENVIRONMENT mismatch');
+  }
+  config.INTERACTION_SUMMARY_READY = summaryReady;
+  config.RECOVERABLE_SYNC_APPLY_READY = recoverableApplyReady;
+  config.TAX_RATE = finiteNumberOr_(config.TAX_RATE, 0.13);
+  return { sheets: sheets, headers: headers, config: config };
+}
+
+function assertSupportedSchemaVersion_(config) {
+  if (Number((config || {}).SCHEMA_VERSION) !== CANN.SCHEMA_VERSION) {
+    throw new Error('SCHEMA_MISMATCH: Config SCHEMA_VERSION must be ' + CANN.SCHEMA_VERSION);
+  }
+}
+
+function interactionSummaryReady_(config) {
+  const raw = (config || {}).INTERACTION_SUMMARY_VERSION;
+  if (raw == null || raw === '' || Number(raw) === 0) return false;
+  if (Number(raw) !== CANN.INTERACTION_SUMMARY_VERSION) {
+    throw new Error(
+      'SCHEMA_MISMATCH: unsupported Config INTERACTION_SUMMARY_VERSION ' + raw
+    );
+  }
+  return true;
+}
+
+function recoverableSyncApplyReady_(config) {
+  const raw = (config || {})[CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY];
+  if (raw == null || raw === '' || Number(raw) === 0) return false;
+  if (Number(raw) !== CANN.RECOVERABLE_SYNC_APPLY_VERSION) {
+    throw new Error(
+      'SCHEMA_MISMATCH: unsupported Config ' +
+      CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY + ' ' + raw
+    );
+  }
+  return true;
+}
+
+function requireCompatibilityIdentityHeaders_(headers) {
+  requireHeaders_(headers, [
+    CANN.COMPATIBILITY_EVENT_HEADER,
+    CANN.COMPATIBILITY_REQUEST_HEADER
+  ]);
+  if (headers[CANN.COMPATIBILITY_REQUEST_HEADER] !==
+      headers[CANN.COMPATIBILITY_EVENT_HEADER] + 1) {
+    throw new Error('SCHEMA_MISMATCH: compatibility identity columns must be adjacent');
+  }
+}
+
+function requireExactHeaders_(headers, expected, sheetName) {
+  expected.forEach((name, index) => {
+    if (headers[name] !== index) {
+      throw new Error('SCHEMA_MISMATCH: ' + sheetName + ' column ' + (index + 1) + ' must be ' + name);
+    }
+  });
+}
+
+function configValuesFromSheet_(sheet, headers) {
+  const result = {};
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return result;
+  sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues().forEach(row => {
+    const key = text_(value_(row, headers, 'Key'));
+    if (key) result[key] = value_(row, headers, 'Value');
+  });
+  return result;
 }
 
 function ensureSheet_(ss, name, headers) {
@@ -696,30 +1749,51 @@ function addWarningProtection_(range, description) {
 // Batch write helpers
 // -----------------------------------------------------------------------------
 
-function appendPurchaseRows_(sheet, staged, now) {
+function appendPurchaseRows_(context, staged, now, configuredTaxRate) {
   if (!staged.length) return;
-  const ss = sheet.getParent();
-  const taxRate = taxRate_(ss);
+  const sheet = context.purchasesSheet;
+  const taxRate = finiteNumberOr_(configuredTaxRate, 0.13);
   const rows = staged.map(item => {
     const p = item.item;
     const cost = finiteNumberOr_(p.cost, 0);
     const postTax = truthy_(p.postTax);
-    return [
+    const row = [
       text_(p.date), text_(p.type), text_(p.name), cost,
       finiteNumberOr_(p.thc, 0), finiteNumberOr_(p.grams, 0),
       truthy_(p.borrowed) ? 1 : 0, CANN.STATUS.UNOPENED,
       item.legacyProductId, 0, postTax, postTax ? cost : cost * (1 + taxRate),
       '', item.productUuid, item.actionId, now, ''
     ];
+    if (context.headers && context.headers['Last quantity'] !== undefined) row.push('');
+    return row;
   });
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CANN.PURCHASE_HEADERS.length).setValues(rows);
+  const firstRow = sheet.getLastRow() + 1;
+  sheet.getRange(firstRow, 1, rows.length, rows[0].length).setValues(rows);
+  staged.forEach((item, index) => {
+    item.rowNumber = firstRow + index;
+    item.row = rows[index];
+    item.status = CANN.STATUS.UNOPENED;
+    item.uses = 0;
+    item.mostRecentUse = null;
+    item.finishedAt = null;
+    item.lastQuantity = null;
+    context.byLegacyId[item.legacyProductId] = item;
+    if (item.productUuid) context.byProductUuid[item.productUuid] = item;
+    if (item.actionId && context.byActionId) context.byActionId[item.actionId] = item;
+  });
 }
 
-function appendConsumptionRows_(ss, staged, skipCompatibility) {
-  if (!staged.length) return;
+function appendConsumptionRows_(ss, staged, skipCompatibility, timing, runtimeContext) {
+  let phaseStarted = Date.now();
+  if (!staged.length) {
+    recordBackendPhase_(timing, 'compatibilityAppend', phaseStarted);
+    phaseStarted = Date.now();
+    recordBackendPhase_(timing, 'canonicalAppend', phaseStarted);
+    return;
+  }
   if (!skipCompatibility) {
-    const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
-    const responseHeaders = headerMap_(responses);
+    const responses = runtimeContext ? runtimeContext.sheets.responses : requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+    const responseHeaders = runtimeContext ? runtimeContext.headers.responses : headerMap_(responses);
     requireHeaders_(responseHeaders, ['Timestamp', 'Product', 'Uses']);
     const compatibilityRows = staged.map(item => {
       const row = Array(responses.getLastColumn()).fill('');
@@ -739,7 +1813,11 @@ function appendConsumptionRows_(ss, staged, skipCompatibility) {
       item.legacySourceRow = firstRow + index;
     });
   }
-  appendEventRows_(requiredSheet_(ss, CANN.SHEETS.EVENTS), staged);
+  recordBackendPhase_(timing, 'compatibilityAppend', phaseStarted);
+
+  phaseStarted = Date.now();
+  appendEventRows_(runtimeContext ? runtimeContext.sheets.events : requiredSheet_(ss, CANN.SHEETS.EVENTS), staged);
+  recordBackendPhase_(timing, 'canonicalAppend', phaseStarted);
 }
 
 function appendEventRows_(sheet, staged) {
@@ -753,61 +1831,2469 @@ function appendEventRows_(sheet, staged) {
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, CANN.EVENT_HEADERS.length).setValues(rows);
 }
 
-function applyProductEffects_(sheet, consumptions) {
-  if (!consumptions.length || sheet.getLastRow() < 2) return;
-  const headers = headerMap_(sheet);
-  const rows = readDataRows_(sheet);
-  const byId = {};
-  rows.forEach((row, index) => {
-    const id = text_(value_(row, headers, 'Product ID'));
-    if (id) byId[id] = { index: index, row: row };
-  });
-  consumptions.forEach(item => {
-    const target = byId[item.legacyProductId];
-    if (!target) return;
-    const row = target.row;
-    const statusIndex = headers['Finished'];
-    const usesIndex = headers['Uses'];
-    const latestIndex = headers['Most recent use'];
-    const finishedAtIndex = headers['Finished At'];
-    const currentStatus = allowedStatusOr_(row[statusIndex], CANN.STATUS.ACTIVE);
-    row[usesIndex] = finiteNumberOr_(row[usesIndex], 0) + item.uses;
-    row[latestIndex] = item.timestamp;
-    if (item.isFinished) {
-      row[statusIndex] = CANN.STATUS.FINISHED;
-      row[finishedAtIndex] = item.timestamp;
-    } else if (currentStatus === CANN.STATUS.UNOPENED) {
-      row[statusIndex] = CANN.STATUS.ACTIVE;
+function applyProductEffects_(context, consumptions) {
+  if (!consumptions.length) return;
+  const effects = calculateProductEffects_(context, consumptions);
+  const sheet = context.purchasesSheet;
+  const headers = context.headers;
+  effects.forEach(effect => {
+    // These are intentionally up to five exact cells on affected rows only. This
+    // avoids rewriting formulas, typed cells, blank physical rows, or products
+    // unrelated to the accepted events.
+    sheet.getRange(effect.rowNumber, headers['Finished'] + 1).setValue(effect.status);
+    sheet.getRange(effect.rowNumber, headers['Uses'] + 1).setValue(effect.uses);
+    sheet.getRange(effect.rowNumber, headers['Most recent use'] + 1).setValue(effect.mostRecentUse || '');
+    sheet.getRange(effect.rowNumber, headers['Finished At'] + 1).setValue(effect.finishedAt || '');
+    if (headers['Last quantity'] !== undefined) {
+      sheet.getRange(effect.rowNumber, headers['Last quantity'] + 1).setValue(
+        effect.lastQuantity == null ? '' : effect.lastQuantity
+      );
     }
+
+    const product = context.byLegacyId[effect.legacyProductId];
+    product.status = effect.status;
+    product.uses = effect.uses;
+    product.mostRecentUse = effect.mostRecentUse;
+    product.finishedAt = effect.finishedAt;
+    product.lastQuantity = effect.lastQuantity;
   });
-  sheet.getRange(2, headers['Finished'] + 1, rows.length, 1).setValues(rows.map(row => [row[headers['Finished']]]));
-  sheet.getRange(2, headers['Uses'] + 1, rows.length, 1).setValues(rows.map(row => [row[headers['Uses']]]));
-  sheet.getRange(2, headers['Most recent use'] + 1, rows.length, 1).setValues(rows.map(row => [row[headers['Most recent use']]]));
-  sheet.getRange(2, headers['Finished At'] + 1, rows.length, 1).setValues(rows.map(row => [row[headers['Finished At']]]));
 }
 
-function upsertLedger_(ss, requestId, purchaseCount, consumptionCount, result, durationMs, errorCode) {
-  const sheet = requiredSheet_(ss, CANN.SHEETS.LEDGER);
-  const rows = readDataRows_(sheet);
-  let rowNumber = 0;
-  rows.some((row, index) => {
-    if (text_(row[0]) === requestId) { rowNumber = index + 2; return true; }
-    return false;
+function calculateProductEffects_(context, consumptions) {
+  const grouped = {};
+  consumptions.forEach(item => {
+    const id = item.legacyProductId;
+    if (!grouped[id]) grouped[id] = [];
+    grouped[id].push(item);
   });
+
+  return Object.keys(grouped).map(legacyProductId => {
+    const product = context.byLegacyId[legacyProductId];
+    if (!product || (!product.rowNumber && !product.pendingAppend)) return null;
+    let status = allowedStatusOr_(product.status, CANN.STATUS.ACTIVE);
+    let uses = finiteNumberOr_(product.uses, 0);
+    let mostRecentUse = product.mostRecentUse || null;
+    let latestMillis = timestampMillisOrNull_(mostRecentUse);
+    let lastQuantity = optionalFiniteNumber_(product.lastQuantity);
+    let finishedAt = product.finishedAt || null;
+
+    grouped[legacyProductId].forEach(item => {
+      uses += finiteNumberOr_(item.uses, 0);
+      const eventMillis = timestampMillisOrNull_(item.timestamp);
+      if (eventMillis != null && (latestMillis == null || eventMillis > latestMillis)) {
+        mostRecentUse = item.timestamp;
+        latestMillis = eventMillis;
+        lastQuantity = finiteNumberOr_(item.uses, 0);
+      }
+      if (item.isFinished) {
+        status = CANN.STATUS.FINISHED;
+        // Preserve the deployed append-order rule: the last accepted finishing
+        // event in this request wins, even when its client timestamp is older.
+        finishedAt = item.timestamp;
+      } else if (status === CANN.STATUS.UNOPENED) {
+        status = CANN.STATUS.ACTIVE;
+      }
+    });
+
+    return {
+      legacyProductId: legacyProductId,
+      rowNumber: product.rowNumber,
+      pendingAppend: product.pendingAppend === true,
+      status: status,
+      uses: uses,
+      mostRecentUse: mostRecentUse,
+      finishedAt: finishedAt,
+      lastQuantity: lastQuantity
+    };
+  }).filter(Boolean);
+}
+
+function upsertLedger_(ss, requestId, purchaseCount, consumptionCount, result, durationMs, errorCode, runtimeContext) {
+  const sheet = runtimeContext ? runtimeContext.sheets.ledger : requiredSheet_(ss, CANN.SHEETS.LEDGER);
+  const headers = runtimeContext ? runtimeContext.headers.ledger : headerMap_(sheet);
+  requireHeaders_(headers, ['Request UUID']);
+  // The sheet object is intentionally created before the lock so the request can
+  // reuse one spreadsheet context. Do not use its cached getLastRow() value for
+  // the final ledger decision: a prior execution may have appended while this
+  // request waited for the lock. Search the durable Request UUID column across
+  // the current grid and use appendRow() for the no-match case.
+  const requestIdRange = sheet.getRange(
+    2,
+    headers['Request UUID'] + 1,
+    Math.max(1, sheet.getMaxRows() - 1),
+    1
+  );
+  const match = requestIdRange.createTextFinder(requestId)
+    .matchEntireCell(true)
+    .matchCase(true)
+    .useRegularExpression(false)
+    .findNext();
   const values = [[requestId, CANN.API_VERSION, new Date(), purchaseCount, consumptionCount, result, durationMs, errorCode || '']];
-  if (rowNumber) sheet.getRange(rowNumber, 1, 1, values[0].length).setValues(values);
-  else sheet.getRange(sheet.getLastRow() + 1, 1, 1, values[0].length).setValues(values);
+  if (match) sheet.getRange(match.getRow(), 1, 1, values[0].length).setValues(values);
+  else sheet.appendRow(values[0]);
+
+  // The lock must not be released while the final ledger write is still queued.
+  // Otherwise a waiting execution can miss it and append a duplicate row.
+  SpreadsheetApp.flush();
 }
 
 // -----------------------------------------------------------------------------
 // Context, staging, validation, and response helpers
 // -----------------------------------------------------------------------------
 
-function productContext_(ss) {
-  const sheet = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+function emptyProductContext_(runtimeContext) {
+  return {
+    purchasesSheet: runtimeContext.sheets.purchases,
+    headers: runtimeContext.headers.purchases,
+    rows: [],
+    byLegacyId: {},
+    byProductUuid: {},
+    byActionId: {}
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Recoverable multi-sheet apply: explicit rollout and reconciliation
+// -----------------------------------------------------------------------------
+
+/**
+ * Additive, idempotent preparation. Marker 0 deliberately keeps the deployed
+ * SpreadsheetApp write path active until enableRecoverableSyncApply() is run.
+ */
+function prepareRecoverableSyncApply() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    ensureCoreSchema_(ss);
+    ensureMigrationResolutionSchema_(ss);
+    assertSpreadsheetTimeZone_(ss);
+    provisionRecoverableDateFormats_(ss);
+    repairRecoverableStateLocked_({
+      ss: ss,
+      config: {},
+      sheets: {},
+      headers: {}
+    });
+    setConfigValue_(
+      ss,
+      CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY,
+      0,
+      'Recoverable multi-sheet apply version'
+    );
+    setConfigValue_(
+      ss,
+      CANN.PENDING_APPLY_KEY,
+      '',
+      'Apply UUID awaiting finalization'
+    );
+    const compatibility = ensureCompatibilityIdentitySchema_(ss);
+    const backfill = backfillCompatibilityIdentities_(ss);
+    SpreadsheetApp.flush();
+    const reconciliation = reconcileRecoverableSyncApply_(ss);
+    const result = {
+      preparedVersion: CANN.RECOVERABLE_SYNC_APPLY_VERSION,
+      configVersion: 0,
+      fastPathEnabled: false,
+      compatibilityIdentityColumns: compatibility,
+      identityRowsBackfilled: backfill.rowsBackfilled,
+      blockingDifferences: reconciliation.blockingDifferences.length
+    };
+    console.log(JSON.stringify({
+      type: 'recoverable_sync_apply_prepared',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Marker-0 maintenance repair for rows that preparation cannot safely map.
+ *
+ * First, a blank compatibility identity is relinked only when timestamp,
+ * product, quantity, weight, and finished flag select exactly one canonical
+ * event and that Event UUID is not already owned by another response row.
+ * If no canonical event exists, canonicalization is allowed only when the
+ * Purchases Uses value still equals the canonical sum, which proves this
+ * response quantity has not already been applied. Anything else is reported
+ * and left untouched for human review.
+ */
+function repairPreparedCompatibilityRows() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    assertSpreadsheetTimeZone_(ss);
+    assertAdvancedSheetsService_();
+    ensureCompatibilityIdentitySchema_(ss);
+    const configSheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+    const config = configValuesFromSheet_(
+      configSheet,
+      headerMap_(configSheet)
+    );
+    if (recoverableSyncApplyReady_(config)) {
+      throw new Error(
+        'PREPARED_COMPATIBILITY_REPAIR_BLOCKED: disable marker 1 first'
+      );
+    }
+    if (!interactionSummaryReady_(config)) {
+      throw new Error(
+        'PREPARED_COMPATIBILITY_REPAIR_BLOCKED: interaction summary must be ready'
+      );
+    }
+    repairRecoverableStateLocked_({
+      ss: ss,
+      config: config,
+      sheets: {},
+      headers: {}
+    });
+
+    const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+    const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+    const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+    const ledger = requiredSheet_(ss, CANN.SHEETS.LEDGER);
+    const migrationReport =
+      requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT);
+    const applyJournal =
+      requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+    const runtimeContext = {
+      ss: ss,
+      environment: environment_(),
+      config: config,
+      sheets: {
+        purchases: purchases,
+        responses: responses,
+        events: events,
+        ledger: ledger,
+        config: configSheet,
+        migrationReport: migrationReport,
+        applyJournal: applyJournal
+      },
+      headers: {
+        purchases: headerMap_(purchases),
+        responses: headerMap_(responses),
+        events: headerMap_(events),
+        ledger: headerMap_(ledger),
+        config: headerMap_(configSheet),
+        migrationReport: headerMap_(migrationReport),
+        applyJournal: headerMap_(applyJournal)
+      }
+    };
+    const responseHeaders = runtimeContext.headers.responses;
+    const eventHeaders = runtimeContext.headers.events;
+    const responseRows = responses.getLastRow() < 2
+      ? []
+      : responses.getRange(
+        2,
+        1,
+        responses.getLastRow() - 1,
+        responses.getLastColumn()
+      ).getValues();
+    const canonicalRows = events.getLastRow() < 2
+      ? []
+      : events.getRange(
+        2,
+        1,
+        events.getLastRow() - 1,
+        events.getLastColumn()
+      ).getValues();
+    const identifiedByEventId = {};
+    responseRows.forEach((row, index) => {
+      const eventId = text_(value_(
+        row,
+        responseHeaders,
+        CANN.COMPATIBILITY_EVENT_HEADER
+      ));
+      if (eventId) identifiedByEventId[eventId] = index + 2;
+    });
+    const canonicalUsesByProduct = {};
+    const canonicalByFingerprint = {};
+    canonicalRows.forEach((row, canonicalIndex) => {
+      const legacyId = text_(value_(
+        row,
+        eventHeaders,
+        'Legacy Product ID'
+      ));
+      if (!legacyId) return;
+      canonicalUsesByProduct[legacyId] =
+        finiteNumberOr_(canonicalUsesByProduct[legacyId], 0) +
+        finiteNumberOr_(value_(row, eventHeaders, 'Uses'), 0);
+      const fingerprint = canonicalCompatibilityFingerprint_(
+        value_(row, eventHeaders, 'Timestamp'),
+        legacyId,
+        value_(row, eventHeaders, 'Uses'),
+        value_(row, eventHeaders, 'Weight Code'),
+        value_(row, eventHeaders, 'Finished')
+      );
+      if (!canonicalByFingerprint[fingerprint]) {
+        canonicalByFingerprint[fingerprint] = [];
+      }
+      canonicalByFingerprint[fingerprint].push({
+        row: row,
+        rowNumber: canonicalIndex + 2
+      });
+    });
+
+    let relinkedRows = 0;
+    let canonicalizedRows = 0;
+    const unresolved = [];
+    const relinkRequests = [];
+    const repairedSourceRows = [];
+    const affectedProductIds = {};
+    const maintenanceProductContext = productContext_(ss, {
+      runtimeContext: runtimeContext
+    });
+    responseRows.forEach((row, index) => {
+      const sourceRow = index + 2;
+      if (text_(value_(
+        row,
+        responseHeaders,
+        CANN.COMPATIBILITY_EVENT_HEADER
+      ))) return;
+      const timestamp = dateOrNull_(
+        value_(row, responseHeaders, 'Timestamp')
+      );
+      const legacyId = text_(value_(row, responseHeaders, 'Product'));
+      const uses = finiteNumber_(value_(row, responseHeaders, 'Uses'));
+      if (!timestamp || !legacyId || uses == null) return;
+      const weightCode = text_(
+        value_(row, responseHeaders, 'Weight code')
+      );
+      const finished = truthy_(
+        value_(row, responseHeaders, 'Mark as Finished?')
+      );
+      const fingerprint = canonicalCompatibilityFingerprint_(
+        timestamp,
+        legacyId,
+        uses,
+        weightCode,
+        finished
+      );
+      const allCandidates = canonicalByFingerprint[fingerprint] || [];
+      const candidates = allCandidates.filter(candidate => {
+        const candidateEventId = text_(value_(
+          candidate.row,
+          eventHeaders,
+          'Event UUID'
+        ));
+        return candidateEventId && !identifiedByEventId[candidateEventId];
+      });
+
+      if (candidates.length === 1) {
+        const candidate = candidates[0];
+        const eventId = text_(value_(
+          candidate.row,
+          eventHeaders,
+          'Event UUID'
+        ));
+        const requestId = text_(value_(
+          candidate.row,
+          eventHeaders,
+          'Request UUID'
+        ));
+        relinkRequests.push(updateCellsRequest_(
+          responses,
+          sourceRow,
+          responseHeaders[CANN.COMPATIBILITY_EVENT_HEADER] + 1,
+          [[eventId, requestId]]
+        ));
+        relinkRequests.push(updateCellsRequest_(
+          events,
+          candidate.rowNumber,
+          eventHeaders['Legacy Source Sheet'] + 1,
+          [[responses.getName(), sourceRow]]
+        ));
+        identifiedByEventId[eventId] = sourceRow;
+        repairedSourceRows.push(sourceRow);
+        affectedProductIds[legacyId] = true;
+        relinkedRows++;
+        return;
+      }
+      if (candidates.length > 1) {
+        unresolved.push({
+          type: 'AMBIGUOUS_CANONICAL_MATCH',
+          sourceRow: sourceRow,
+          candidateRows: candidates.map(candidate => candidate.rowNumber)
+        });
+        return;
+      }
+      if (allCandidates.length) {
+        unresolved.push({
+          type: 'CANONICAL_MATCH_ALREADY_IDENTIFIED',
+          sourceRow: sourceRow,
+          candidateRows: allCandidates.map(candidate => candidate.rowNumber)
+        });
+        return;
+      }
+
+      const context = maintenanceProductContext;
+      const product = context.byLegacyId[legacyId];
+      const canonicalUses =
+        finiteNumberOr_(canonicalUsesByProduct[legacyId], 0);
+      if (!product ||
+          Math.abs(finiteNumberOr_(product.uses, 0) - canonicalUses) >
+            1e-9) {
+        unresolved.push({
+          type: 'UNMATCHED_COMPATIBILITY_ROW',
+          sourceRow: sourceRow,
+          productId: legacyId,
+          currentProductUses: product
+            ? finiteNumberOr_(product.uses, 0)
+            : null,
+          canonicalUses: canonicalUses
+        });
+        return;
+      }
+      const eventId = deterministicLegacyEventUuid_(
+        ss.getId(),
+        responses.getName(),
+        sourceRow
+      );
+      if (eventContext_(
+        ss,
+        runtimeContext,
+        [eventId]
+      ).eventIds.has(eventId)) {
+        unresolved.push({
+          type: 'DETERMINISTIC_EVENT_ID_CONFLICT',
+          sourceRow: sourceRow,
+          eventId: eventId
+        });
+        return;
+      }
+      const event = {
+        eventId: eventId,
+        timestamp: timestamp,
+        localDate: formatDate_(timestamp),
+        localTime: formatTime_(timestamp),
+        productUuid: product.productUuid,
+        legacyProductId: legacyId,
+        uses: uses,
+        weightCode: weightCode,
+        isFinished: finished,
+        source: 'PREPARED_COMPATIBILITY_REPAIR',
+        requestId: '',
+        legacySourceSheet: responses.getName(),
+        legacySourceRow: sourceRow,
+        compatibilityRow: null
+      };
+      applyRecoverableSyncLocked_({
+        runtimeContext: runtimeContext,
+        productContext: context,
+        stagedPurchases: [],
+        stagedConsumptions: [event],
+        kind: 'PREPARED_COMPATIBILITY_REPAIR',
+        apiVersion: 0,
+        requestId: '',
+        response: null,
+        formRefreshRequired: true,
+        compatibilityExistingRow: sourceRow,
+        ledger: null,
+        timing: null
+      });
+      canonicalUsesByProduct[legacyId] = canonicalUses + uses;
+      const appendedCanonical = buildRecoverableEventRows_([event])[0];
+      canonicalRows.push(appendedCanonical);
+      const appendedFingerprint = canonicalCompatibilityFingerprint_(
+        event.timestamp,
+        event.legacyProductId,
+        event.uses,
+        event.weightCode,
+        event.isFinished
+      );
+      if (!canonicalByFingerprint[appendedFingerprint]) {
+        canonicalByFingerprint[appendedFingerprint] = [];
+      }
+      canonicalByFingerprint[appendedFingerprint].push({
+        row: appendedCanonical,
+        rowNumber: events.getLastRow()
+      });
+      identifiedByEventId[eventId] = sourceRow;
+      repairedSourceRows.push(sourceRow);
+      affectedProductIds[legacyId] = true;
+      canonicalizedRows++;
+    });
+
+    sheetsBatchUpdateInChunks_(ss, relinkRequests, 400);
+    const affectedProducts = Object.keys(affectedProductIds);
+    if (affectedProducts.length) {
+      rebuildProductProjectionsFromCanonical_(ss, affectedProducts);
+    }
+    const productReconciliation =
+      reconcileProductProjections_(ss, affectedProducts);
+    const summaryReconciliation = reconcileInteractionSummary_(ss);
+    const compatibilityReconciliation =
+      reconcileReliabilityMigration_(ss);
+    const projectionsClean =
+      productReconciliation.differences.length === 0 &&
+      summaryReconciliation.differences.length === 0 &&
+      compatibilityReconciliation.differences.length === 0 &&
+      compatibilityReconciliation.responseEventCount ===
+        compatibilityReconciliation.canonicalEventCount;
+    let resolvedMigrationRows = 0;
+    if (!unresolved.length && projectionsClean) {
+      resolvedMigrationRows = resolveMigrationIssuesForSourceRows_(
+        ss,
+        responses.getName(),
+        repairedSourceRows,
+        'Resolved by recoverable compatibility repair'
+      );
+    }
+
+    const result = {
+      relinkedRows: relinkedRows,
+      canonicalizedRows: canonicalizedRows,
+      rebuiltProducts: affectedProducts.length,
+      productProjectionDifferences:
+        productReconciliation.differences.length,
+      resolvedMigrationRows: resolvedMigrationRows,
+      unresolvedRows: unresolved.length,
+      unresolved: unresolved
+    };
+    console.log(JSON.stringify({
+      type: 'prepared_compatibility_rows_repaired',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function canonicalCompatibilityFingerprint_(
+  timestamp,
+  legacyProductId,
+  uses,
+  weightCode,
+  finished
+) {
+  return JSON.stringify([
+    timestampMillisOrNull_(timestamp),
+    text_(legacyProductId),
+    finiteNumber_(uses),
+    text_(weightCode),
+    truthy_(finished)
+  ]);
+}
+
+function canonicalProductProjections_(ss) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
   const headers = headerMap_(sheet);
+  const projections = {};
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2
+    ? []
+    : sheet.getRange(
+      2,
+      1,
+      lastRow - 1,
+      sheet.getLastColumn()
+    ).getValues();
+  rows.forEach((row, index) => {
+    const legacyProductId = text_(value_(
+      row,
+      headers,
+      'Legacy Product ID'
+    ));
+    if (!legacyProductId) return;
+    const projection = projections[legacyProductId] ||
+      (projections[legacyProductId] = {
+        eventCount: 0,
+        uses: 0,
+        mostRecentUse: null,
+        mostRecentMillis: null,
+        lastQuantity: null,
+        hasFinishedEvent: false,
+        finishedAt: null,
+        lastCanonicalRow: null
+      });
+    projection.eventCount++;
+    projection.uses += finiteNumberOr_(
+      value_(row, headers, 'Uses'),
+      0
+    );
+    const timestamp = value_(row, headers, 'Timestamp');
+    const timestampMillis = timestampMillisOrNull_(timestamp);
+    if (timestampMillis != null &&
+        (projection.mostRecentMillis == null ||
+         timestampMillis > projection.mostRecentMillis)) {
+      projection.mostRecentUse = timestamp;
+      projection.mostRecentMillis = timestampMillis;
+      projection.lastQuantity = finiteNumberOr_(
+        value_(row, headers, 'Uses'),
+        0
+      );
+    }
+    if (truthy_(value_(row, headers, 'Finished'))) {
+      projection.hasFinishedEvent = true;
+      projection.finishedAt = timestamp;
+    }
+    projection.lastCanonicalRow = index + 2;
+  });
+  return projections;
+}
+
+function expectedProjectionForProduct_(product, canonicalProjection) {
+  const canonical = canonicalProjection || {
+    eventCount: 0,
+    uses: 0,
+    mostRecentUse: null,
+    mostRecentMillis: null,
+    lastQuantity: null,
+    hasFinishedEvent: false,
+    finishedAt: null
+  };
+  let status = allowedStatusOr_(product.status, CANN.STATUS.UNOPENED);
+  if (canonical.hasFinishedEvent) {
+    status = CANN.STATUS.FINISHED;
+  } else if (canonical.eventCount > 0 && status === CANN.STATUS.UNOPENED) {
+    status = CANN.STATUS.ACTIVE;
+  }
+  return {
+    status: status,
+    uses: canonical.uses,
+    mostRecentUse: canonical.mostRecentUse,
+    mostRecentMillis: canonical.mostRecentMillis,
+    lastQuantity: canonical.lastQuantity,
+    finishedAt: canonical.hasFinishedEvent
+      ? canonical.finishedAt
+      : product.finishedAt
+  };
+}
+
+function rebuildProductProjectionsFromCanonical_(ss, productIds) {
+  const context = productContext_(ss);
+  const canonical = canonicalProductProjections_(ss);
+  const requests = [];
+  (productIds || []).forEach(legacyProductId => {
+    const product = context.byLegacyId[legacyProductId];
+    if (!product) {
+      throw new Error(
+        'PRODUCT_PROJECTION_REBUILD_BLOCKED: missing ' + legacyProductId
+      );
+    }
+    const expected = expectedProjectionForProduct_(
+      product,
+      canonical[legacyProductId]
+    );
+    const headers = context.headers;
+    requests.push(updateCellsRequest_(
+      context.purchasesSheet,
+      product.rowNumber,
+      headers['Finished'] + 1,
+      [[expected.status]]
+    ));
+    requests.push(updateCellsRequest_(
+      context.purchasesSheet,
+      product.rowNumber,
+      headers['Uses'] + 1,
+      [[expected.uses]]
+    ));
+    requests.push(updateCellsRequest_(
+      context.purchasesSheet,
+      product.rowNumber,
+      headers['Most recent use'] + 1,
+      [[expected.mostRecentUse || '']]
+    ));
+    requests.push(updateCellsRequest_(
+      context.purchasesSheet,
+      product.rowNumber,
+      headers['Finished At'] + 1,
+      [[expected.finishedAt || '']]
+    ));
+    requests.push(updateCellsRequest_(
+      context.purchasesSheet,
+      product.rowNumber,
+      headers['Last quantity'] + 1,
+      [[expected.lastQuantity == null ? '' : expected.lastQuantity]]
+    ));
+  });
+  sheetsBatchUpdateInChunks_(ss, requests, 400);
+  return { rebuiltProducts: (productIds || []).length };
+}
+
+/**
+ * Read-only maintenance entrypoint for production rollout and incident checks.
+ * Passing null deliberately reconciles every product found in Purchases or
+ * canonical history; it never invokes the projection rebuild helper.
+ */
+function reconcileProductProjections() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    assertSpreadsheetTimeZone_(ss);
+    const result = reconcileProductProjections_(ss, null);
+    console.log(JSON.stringify({
+      type: 'product_projections_reconciled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reconcileProductProjections_(ss, productIds) {
+  const context = productContext_(ss);
+  const canonical = canonicalProductProjections_(ss);
+  const ids = productIds == null
+    ? Array.from(new Set(
+      Object.keys(context.byLegacyId).concat(Object.keys(canonical))
+    ))
+    : Array.from(new Set(productIds));
+  const differences = [];
+  ids.forEach(legacyProductId => {
+    const product = context.byLegacyId[legacyProductId];
+    if (!product) {
+      differences.push({
+        type: 'MISSING_PRODUCT',
+        legacyProductId: legacyProductId
+      });
+      return;
+    }
+    const expected = expectedProjectionForProduct_(
+      product,
+      canonical[legacyProductId]
+    );
+    const actualRecentMillis = timestampMillisOrNull_(
+      product.mostRecentUse
+    );
+    const actualFinishedMillis = timestampMillisOrNull_(
+      product.finishedAt
+    );
+    const expectedFinishedMillis = timestampMillisOrNull_(
+      expected.finishedAt
+    );
+    if (Math.abs(finiteNumberOr_(product.uses, 0) - expected.uses) >
+          1e-9 ||
+        allowedStatusOr_(product.status, CANN.STATUS.UNOPENED) !==
+          expected.status ||
+        actualRecentMillis !== expected.mostRecentMillis ||
+        optionalFiniteNumber_(product.lastQuantity) !==
+          optionalFiniteNumber_(expected.lastQuantity) ||
+        actualFinishedMillis !== expectedFinishedMillis) {
+      differences.push({
+        type: 'PRODUCT_PROJECTION_MISMATCH',
+        legacyProductId: legacyProductId,
+        rowNumber: product.rowNumber,
+        expected: expected,
+        actual: {
+          status: product.status,
+          uses: product.uses,
+          mostRecentMillis: actualRecentMillis,
+          lastQuantity: product.lastQuantity,
+          finishedAtMillis: actualFinishedMillis
+        }
+      });
+    }
+  });
+  return {
+    checkedProducts: ids.length,
+    differences: differences
+  };
+}
+
+function resolveMigrationIssuesForSourceRows_(
+  ss,
+  sourceSheet,
+  sourceRows,
+  resolution
+) {
+  const uniqueRows = {};
+  (sourceRows || []).forEach(row => { uniqueRows[Number(row)] = true; });
+  if (!Object.keys(uniqueRows).length) return 0;
+  const sheet = ensureMigrationResolutionSchema_(ss);
+  const headers = headerMap_(sheet);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  const rows = sheet.getRange(
+    2,
+    1,
+    lastRow - 1,
+    sheet.getLastColumn()
+  ).getValues();
+  const resolutionValues = rows.map(row => [
+    value_(row, headers, 'Resolved At'),
+    value_(row, headers, 'Resolution')
+  ]);
+  let resolved = 0;
+  rows.forEach((row, index) => {
+    if (text_(value_(row, headers, 'Source Sheet')) !== sourceSheet ||
+        !uniqueRows[Number(value_(row, headers, 'Source Row'))] ||
+        value_(row, headers, 'Resolved At')) return;
+    resolutionValues[index] = [new Date(), resolution];
+    resolved++;
+  });
+  if (resolved) {
+    sheet.getRange(
+      2,
+      headers['Resolved At'] + 1,
+      resolutionValues.length,
+      2
+    ).setValues(resolutionValues);
+    SpreadsheetApp.flush();
+  }
+  return resolved;
+}
+
+function enableRecoverableSyncApply() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    assertSpreadsheetTimeZone_(ss);
+    assertAdvancedSheetsService_();
+    ensureCompatibilityIdentitySchema_(ss);
+    ensureSheet_(ss, CANN.SHEETS.APPLY_JOURNAL, CANN.APPLY_JOURNAL_HEADERS);
+    ensureConfigKey_(
+      ss,
+      CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY,
+      0,
+      'Recoverable multi-sheet apply version'
+    );
+    ensureConfigKey_(
+      ss,
+      CANN.PENDING_APPLY_KEY,
+      '',
+      'Apply UUID awaiting finalization'
+    );
+    repairRecoverableStateLocked_({ ss: ss, config: {}, sheets: {}, headers: {} });
+    // Close the prepare/deploy/enable window: marker-0 writes made after the
+    // first prepare receive their identities before marker 1 becomes visible.
+    backfillCompatibilityIdentities_(ss);
+
+    const configSheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+    const config = configValuesFromSheet_(configSheet, headerMap_(configSheet));
+    if (!interactionSummaryReady_(config)) {
+      throw new Error(
+        'RECOVERABLE_APPLY_ENABLE_BLOCKED: interaction summary fast path must be enabled first'
+      );
+    }
+    const reconciliation = reconcileRecoverableSyncApply_(ss);
+    if (reconciliation.blockingDifferences.length) {
+      throw new Error(
+        'RECOVERABLE_APPLY_ENABLE_BLOCKED: ' +
+        JSON.stringify(reconciliation.blockingDifferences.slice(0, 10))
+      );
+    }
+    setConfigValue_(
+      ss,
+      CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY,
+      CANN.RECOVERABLE_SYNC_APPLY_VERSION,
+      'Recoverable multi-sheet apply version'
+    );
+    SpreadsheetApp.flush();
+    const result = {
+      configVersion: CANN.RECOVERABLE_SYNC_APPLY_VERSION,
+      fastPathEnabled: true,
+      blockingDifferences: 0
+    };
+    console.log(JSON.stringify({
+      type: 'recoverable_sync_apply_enabled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function disableRecoverableSyncApply() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    repairRecoverableStateLocked_({ ss: ss, config: {}, sheets: {}, headers: {} });
+    setConfigValue_(
+      ss,
+      CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY,
+      0,
+      'Recoverable multi-sheet apply version'
+    );
+    SpreadsheetApp.flush();
+    const result = {
+      configVersion: 0,
+      fastPathEnabled: false,
+      fallback: 'LEGACY_MULTI_WRITE'
+    };
+    console.log(JSON.stringify({
+      type: 'recoverable_sync_apply_disabled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function repairRecoverableSyncApply() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const runtimeContext = {
+      ss: ss,
+      config: {},
+      sheets: {},
+      headers: {}
+    };
+    const pending = repairRecoverableStateLocked_(runtimeContext);
+    const configSheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+    runtimeContext.config = configValuesFromSheet_(
+      configSheet,
+      headerMap_(configSheet)
+    );
+    runtimeContext.sheets = {
+      purchases: requiredSheet_(ss, CANN.SHEETS.PURCHASES),
+      responses: requiredSheet_(ss, CANN.SHEETS.RESPONSES),
+      events: requiredSheet_(ss, CANN.SHEETS.EVENTS),
+      ledger: requiredSheet_(ss, CANN.SHEETS.LEDGER),
+      config: configSheet,
+      migrationReport: requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT),
+      applyJournal: requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL)
+    };
+    runtimeContext.headers = {
+      purchases: headerMap_(runtimeContext.sheets.purchases),
+      responses: headerMap_(runtimeContext.sheets.responses),
+      events: headerMap_(runtimeContext.sheets.events),
+      ledger: headerMap_(runtimeContext.sheets.ledger),
+      config: headerMap_(configSheet),
+      migrationReport: headerMap_(runtimeContext.sheets.migrationReport),
+      applyJournal: headerMap_(runtimeContext.sheets.applyJournal)
+    };
+    const orphans = recoverableSyncApplyReady_(runtimeContext.config)
+      ? repairOrphanFormResponsesLocked_(runtimeContext)
+      : { repairedRows: 0, scannedRows: 0, issues: [] };
+    const result = { pending: pending, orphanForms: orphans };
+    console.log(JSON.stringify({
+      type: 'recoverable_sync_apply_repaired',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reconcileRecoverableSyncApply() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const result = reconcileRecoverableSyncApply_(ss);
+    console.log(JSON.stringify({
+      type: 'recoverable_sync_apply_reconciled',
+      result: result
+    }));
+    return result;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function ensureCompatibilityIdentitySchema_(ss) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+  const headers = headerMap_(sheet);
+  const eventIndex = headers[CANN.COMPATIBILITY_EVENT_HEADER];
+  const requestIndex = headers[CANN.COMPATIBILITY_REQUEST_HEADER];
+  if ((eventIndex === undefined) !== (requestIndex === undefined)) {
+    throw new Error(
+      'SCHEMA_MISMATCH: incomplete compatibility identity header pair'
+    );
+  }
+  if (eventIndex !== undefined) {
+    requireCompatibilityIdentityHeaders_(headers);
+    return {
+      eventColumn: eventIndex + 1,
+      requestColumn: requestIndex + 1,
+      originalOwnedColumns: eventIndex
+    };
+  }
+
+  // getLastColumn() is the last column with content, not the grid width. This
+  // places the identities after the actual Form-owned columns: J/K in the
+  // inspected production sheet and H/I in the inspected sandbox.
+  const firstIdentityColumn = sheet.getLastColumn() + 1;
+  if (sheet.getMaxColumns() < firstIdentityColumn + 1) {
+    sheet.insertColumnsAfter(
+      sheet.getMaxColumns(),
+      firstIdentityColumn + 1 - sheet.getMaxColumns()
+    );
+  }
+  sheet.getRange(1, firstIdentityColumn, 1, 2).setValues([[
+    CANN.COMPATIBILITY_EVENT_HEADER,
+    CANN.COMPATIBILITY_REQUEST_HEADER
+  ]]);
+  return {
+    eventColumn: firstIdentityColumn,
+    requestColumn: firstIdentityColumn + 1,
+    originalOwnedColumns: firstIdentityColumn - 1
+  };
+}
+
+function backfillCompatibilityIdentities_(ss) {
+  const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+  const responseHeaders = headerMap_(responses);
+  requireCompatibilityIdentityHeaders_(responseHeaders);
+  const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const eventHeaders = headerMap_(events);
+  requireExactHeaders_(eventHeaders, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
+  const responseLastRow = responses.getLastRow();
+  if (responseLastRow < 2) return { rowsBackfilled: 0 };
+
+  const responseRows = responses.getRange(
+    2,
+    1,
+    responseLastRow - 1,
+    responses.getLastColumn()
+  ).getValues();
+  const identityValues = responseRows.map(row => [
+    value_(row, responseHeaders, CANN.COMPATIBILITY_EVENT_HEADER),
+    value_(row, responseHeaders, CANN.COMPATIBILITY_REQUEST_HEADER)
+  ]);
+  const seenSourceRows = {};
+  const validationErrors = [];
+  let rowsBackfilled = 0;
+
+  readDataRows_(events).forEach(row => {
+    if (text_(value_(row, eventHeaders, 'Legacy Source Sheet')) !==
+        responses.getName()) return;
+    const sourceRow = Number(value_(row, eventHeaders, 'Legacy Source Row'));
+    const eventId = text_(value_(row, eventHeaders, 'Event UUID'));
+    if (!Number.isInteger(sourceRow) || sourceRow < 2 ||
+        sourceRow > responseLastRow) {
+      validationErrors.push({
+        type: 'INVALID_SOURCE_ROW',
+        eventId: eventId,
+        sourceRow: sourceRow
+      });
+      return;
+    }
+    if (seenSourceRows[sourceRow] && seenSourceRows[sourceRow] !== eventId) {
+      validationErrors.push({
+        type: 'DUPLICATE_SOURCE_ROW',
+        sourceRow: sourceRow,
+        firstEventId: seenSourceRows[sourceRow],
+        eventId: eventId
+      });
+      return;
+    }
+    seenSourceRows[sourceRow] = eventId;
+    const responseRow = responseRows[sourceRow - 2];
+    const timestampMatches =
+      timestampMillisOrNull_(value_(responseRow, responseHeaders, 'Timestamp')) ===
+      timestampMillisOrNull_(value_(row, eventHeaders, 'Timestamp'));
+    const productMatches =
+      text_(value_(responseRow, responseHeaders, 'Product')) ===
+      text_(value_(row, eventHeaders, 'Legacy Product ID'));
+    const responseUses = finiteNumber_(value_(responseRow, responseHeaders, 'Uses'));
+    const canonicalUses = finiteNumber_(value_(row, eventHeaders, 'Uses'));
+    const usesMatches = responseUses != null && canonicalUses != null &&
+      Math.abs(responseUses - canonicalUses) <= 1e-9;
+    if (!timestampMatches || !productMatches || !usesMatches) {
+      validationErrors.push({
+        type: 'SOURCE_ROW_CONTENT_MISMATCH',
+        eventId: eventId,
+        sourceRow: sourceRow
+      });
+      return;
+    }
+
+    const requestId = text_(value_(row, eventHeaders, 'Request UUID'));
+    const existingEventId = text_(identityValues[sourceRow - 2][0]);
+    const existingRequestId = text_(identityValues[sourceRow - 2][1]);
+    if ((existingEventId && existingEventId !== eventId) ||
+        (existingRequestId && existingRequestId !== requestId)) {
+      validationErrors.push({
+        type: 'IDENTITY_CONFLICT',
+        eventId: eventId,
+        sourceRow: sourceRow
+      });
+      return;
+    }
+    if (!existingEventId && eventId) rowsBackfilled++;
+    identityValues[sourceRow - 2] = [eventId, requestId];
+  });
+
+  responses.getRange(
+    2,
+    responseHeaders[CANN.COMPATIBILITY_EVENT_HEADER] + 1,
+    identityValues.length,
+    2
+  ).setValues(identityValues);
+  SpreadsheetApp.flush();
+  if (validationErrors.length) {
+    throw new Error(
+      'COMPATIBILITY_IDENTITY_BACKFILL_BLOCKED: safe rows were retained; ' +
+      JSON.stringify({
+        rowsBackfilled: rowsBackfilled,
+        validationErrors: validationErrors.slice(0, 10)
+      })
+    );
+  }
+  return { rowsBackfilled: rowsBackfilled };
+}
+
+function reconcileRecoverableSyncApply_(ss) {
+  const differences = [];
+  const blockingDifferences = [];
+  const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+  const responseHeaders = headerMap_(responses);
+  requireCompatibilityIdentityHeaders_(responseHeaders);
+  const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const eventHeaders = headerMap_(events);
+  requireExactHeaders_(eventHeaders, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
+  const responseLastRow = responses.getLastRow();
+  const responseRows = responseLastRow < 2
+    ? []
+    : responses.getRange(
+      2,
+      1,
+      responseLastRow - 1,
+      responses.getLastColumn()
+    ).getValues();
+  const canonicalRows = readDataRows_(events);
+  const canonicalByEventId = {};
+  const seenSourceRows = {};
+
+  canonicalRows.forEach((row, index) => {
+    const eventId = text_(value_(row, eventHeaders, 'Event UUID'));
+    if (!eventId) {
+      blockingDifferences.push({
+        type: 'MALFORMED_CANONICAL_EVENT',
+        canonicalRow: index + 2
+      });
+      return;
+    }
+    if (canonicalByEventId[eventId]) {
+      blockingDifferences.push({
+        type: 'DUPLICATE_CANONICAL_EVENT_UUID',
+        eventId: eventId
+      });
+    }
+    canonicalByEventId[eventId] = { row: row, rowNumber: index + 2 };
+    const lineageSheet = text_(value_(
+      row,
+      eventHeaders,
+      'Legacy Source Sheet'
+    ));
+    if (lineageSheet !== responses.getName()) {
+      blockingDifferences.push({
+        type: 'MISSING_OR_INVALID_COMPATIBILITY_LINEAGE',
+        eventId: eventId,
+        sourceSheet: lineageSheet
+      });
+      return;
+    }
+
+    const sourceRow = Number(value_(row, eventHeaders, 'Legacy Source Row'));
+    if (!Number.isInteger(sourceRow) || sourceRow < 2 ||
+        sourceRow > responseLastRow) {
+      blockingDifferences.push({
+        type: 'INVALID_COMPATIBILITY_LINEAGE',
+        eventId: eventId,
+        sourceRow: sourceRow
+      });
+      return;
+    }
+    if (seenSourceRows[sourceRow] && seenSourceRows[sourceRow] !== eventId) {
+      blockingDifferences.push({
+        type: 'DUPLICATE_COMPATIBILITY_LINEAGE',
+        eventId: eventId,
+        sourceRow: sourceRow,
+        firstEventId: seenSourceRows[sourceRow]
+      });
+      return;
+    }
+    seenSourceRows[sourceRow] = eventId;
+    const responseRow = responseRows[sourceRow - 2];
+    const identityMatches =
+      text_(value_(
+        responseRow,
+        responseHeaders,
+        CANN.COMPATIBILITY_EVENT_HEADER
+      )) === eventId &&
+      text_(value_(
+        responseRow,
+        responseHeaders,
+        CANN.COMPATIBILITY_REQUEST_HEADER
+      )) === text_(value_(row, eventHeaders, 'Request UUID'));
+    const dataMatches =
+      timestampMillisOrNull_(value_(responseRow, responseHeaders, 'Timestamp')) ===
+        timestampMillisOrNull_(value_(row, eventHeaders, 'Timestamp')) &&
+      text_(value_(responseRow, responseHeaders, 'Product')) ===
+        text_(value_(row, eventHeaders, 'Legacy Product ID')) &&
+      Math.abs(
+        finiteNumberOr_(value_(responseRow, responseHeaders, 'Uses'), NaN) -
+        finiteNumberOr_(value_(row, eventHeaders, 'Uses'), NaN)
+      ) <= 1e-9;
+    if (!identityMatches || !dataMatches) {
+      blockingDifferences.push({
+        type: 'COMPATIBILITY_LINEAGE_MISMATCH',
+        eventId: eventId,
+        sourceRow: sourceRow
+      });
+    }
+  });
+
+  if (responseRows.length) {
+    const seenCompatibilityIds = {};
+    responseRows.forEach((row, index) => {
+      const eventId = text_(value_(
+        row,
+        responseHeaders,
+        CANN.COMPATIBILITY_EVENT_HEADER
+      ));
+      if (!eventId) {
+        const dataBearing =
+          timestampMillisOrNull_(value_(
+            row,
+            responseHeaders,
+            'Timestamp'
+          )) != null &&
+          !!text_(value_(row, responseHeaders, 'Product')) &&
+          finiteNumber_(value_(row, responseHeaders, 'Uses')) != null;
+        if (dataBearing) {
+          blockingDifferences.push({
+            type: 'UNIDENTIFIED_COMPATIBILITY_ROW',
+            sourceRow: index + 2
+          });
+        }
+        return;
+      }
+      if (seenCompatibilityIds[eventId]) {
+        blockingDifferences.push({
+          type: 'DUPLICATE_COMPATIBILITY_EVENT_UUID',
+          eventId: eventId,
+          sourceRow: index + 2
+        });
+      }
+      seenCompatibilityIds[eventId] = true;
+      if (!canonicalByEventId[eventId]) {
+        blockingDifferences.push({
+          type: 'COMPATIBILITY_WITHOUT_CANONICAL',
+          eventId: eventId,
+          sourceRow: index + 2
+        });
+      }
+    });
+  }
+
+  const pendingApplyId = text_(configValue_(ss, CANN.PENDING_APPLY_KEY, ''));
+  const journal = requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const journalHeaders = headerMap_(journal);
+  requireExactHeaders_(
+    journalHeaders,
+    CANN.APPLY_JOURNAL_HEADERS,
+    CANN.SHEETS.APPLY_JOURNAL
+  );
+  const incompleteJournalIds = [];
+  readDataRows_(journal).forEach(row => {
+    const applyId = text_(value_(row, journalHeaders, 'Apply UUID'));
+    const state = text_(value_(row, journalHeaders, 'State'));
+    if (state !== 'CORE_COMMITTED' && state !== 'COMPLETE') {
+      blockingDifferences.push({
+        type: 'INVALID_JOURNAL_STATE',
+        applyId: applyId,
+        state: state
+      });
+    }
+    if (state === 'CORE_COMMITTED') incompleteJournalIds.push(applyId);
+  });
+  if (pendingApplyId) {
+    blockingDifferences.push({
+      type: 'PENDING_APPLY',
+      applyId: pendingApplyId
+    });
+  }
+  incompleteJournalIds.forEach(applyId => {
+    blockingDifferences.push({
+      type: 'INCOMPLETE_JOURNAL',
+      applyId: applyId,
+      pendingPointerMatches: pendingApplyId === applyId
+    });
+  });
+  if (pendingApplyId &&
+      incompleteJournalIds.indexOf(pendingApplyId) < 0) {
+    blockingDifferences.push({
+      type: 'PENDING_POINTER_WITHOUT_INCOMPLETE_JOURNAL',
+      applyId: pendingApplyId
+    });
+  }
+  if (incompleteJournalIds.length > 1) {
+    blockingDifferences.push({
+      type: 'MULTIPLE_INCOMPLETE_JOURNALS',
+      applyIds: incompleteJournalIds
+    });
+  }
+
+  const summary = reconcileInteractionSummary_(ss);
+  summary.differences.forEach(item => {
+    blockingDifferences.push({
+      type: 'INTERACTION_SUMMARY_' + item.type,
+      detail: item
+    });
+  });
+  const compatibilityCanonical = reconcileReliabilityMigration_(ss);
+  compatibilityCanonical.differences.forEach(item => {
+    blockingDifferences.push({
+      type: 'COMPATIBILITY_CANONICAL_DRIFT',
+      detail: item
+    });
+  });
+  if (compatibilityCanonical.responseEventCount !==
+      compatibilityCanonical.canonicalEventCount) {
+    blockingDifferences.push({
+      type: 'COMPATIBILITY_CANONICAL_COUNT_MISMATCH',
+      responseEventCount: compatibilityCanonical.responseEventCount,
+      canonicalEventCount: compatibilityCanonical.canonicalEventCount
+    });
+  }
+  if (compatibilityCanonical.unresolvedRows) {
+    blockingDifferences.push({
+      type: 'UNRESOLVED_MIGRATION_ROWS',
+      unresolvedRows: compatibilityCanonical.unresolvedRows
+    });
+  }
+
+  differences.push.apply(differences, blockingDifferences);
+  return {
+    pendingApplyId: pendingApplyId || null,
+    journalRows: Math.max(0, journal.getLastRow() - 1),
+    incompleteJournalRows: incompleteJournalIds.length,
+    canonicalRows: canonicalRows.length,
+    interactionSummaryDifferences: summary.differences.length,
+    differences: differences,
+    blockingDifferences: blockingDifferences
+  };
+}
+
+/**
+ * doPost reads Config before waiting for the script lock. Refresh both rollout
+ * state values after the lock so an enable or predecessor core commit cannot be
+ * hidden by that stale request context.
+ */
+function refreshRecoverableSyncApplyStateLocked_(runtimeContext) {
+  const ss = runtimeContext.ss;
+  const configSheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+  const values = configValuesFromSheet_(configSheet, headerMap_(configSheet));
+  runtimeContext.config[CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY] =
+    values[CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY];
+  runtimeContext.config[CANN.PENDING_APPLY_KEY] =
+    values[CANN.PENDING_APPLY_KEY];
+  runtimeContext.config.RECOVERABLE_SYNC_APPLY_READY =
+    recoverableSyncApplyReady_(values);
+  if (runtimeContext.config.RECOVERABLE_SYNC_APPLY_READY) {
+    const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+    runtimeContext.headers.responses = headerMap_(responses);
+    requireCompatibilityIdentityHeaders_(runtimeContext.headers.responses);
+    runtimeContext.sheets.applyJournal =
+      requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+    runtimeContext.headers.applyJournal =
+      headerMap_(runtimeContext.sheets.applyJournal);
+    requireExactHeaders_(
+      runtimeContext.headers.applyJournal,
+      CANN.APPLY_JOURNAL_HEADERS,
+      CANN.SHEETS.APPLY_JOURNAL
+    );
+  }
+}
+
+function applyRecoverableSyncLocked_(settings) {
+  const runtimeContext = settings.runtimeContext;
+  const ss = runtimeContext.ss;
+  // The caller already attempted repair under this same lock. Re-read the
+  // durable marker rather than trusting the pre-lock request context.
+  const pendingBefore = text_(configValue_(ss, CANN.PENDING_APPLY_KEY, ''));
+  if (pendingBefore) {
+    throw new Error(
+      'RECOVERABLE_APPLY_BLOCKED: pending apply was not repaired ' +
+      pendingBefore
+    );
+  }
+
+  const applyId = Utilities.getUuid();
+  const now = new Date();
+  const stagedPurchases = settings.stagedPurchases || [];
+  const stagedConsumptions = settings.stagedConsumptions || [];
+  const purchasePlan = planRecoverablePurchaseRows_(
+    settings.productContext,
+    stagedPurchases,
+    now,
+    runtimeContext.config.TAX_RATE
+  );
+  const effects = calculateProductEffects_(
+    settings.productContext,
+    stagedConsumptions
+  );
+  applyEffectsToPlannedPurchaseRows_(
+    purchasePlan,
+    effects,
+    settings.productContext.headers
+  );
+
+  const responseRows = settings.compatibilityExistingRow
+    ? []
+    : buildRecoverableCompatibilityRows_(
+      runtimeContext,
+      stagedConsumptions
+    );
+  const eventRows = buildRecoverableEventRows_(stagedConsumptions);
+  const journalSheet = requiredSheet_(
+    ss,
+    CANN.SHEETS.APPLY_JOURNAL
+  );
+  const responseLastRowBefore =
+    runtimeContext.sheets.responses.getLastRow();
+  const eventFirstRow = runtimeContext.sheets.events.getLastRow() + 1;
+  const journalRowNumber = journalSheet.getLastRow() + 1;
+  const plan = {
+    applyId: applyId,
+    kind: settings.kind,
+    requestId: settings.requestId || '',
+    eventIds: stagedConsumptions.map(item => item.eventId),
+    compatibilitySheet: runtimeContext.sheets.responses.getName(),
+    formRefreshRequired: settings.formRefreshRequired === true,
+    ledger: settings.ledger ? {
+      requestId: settings.requestId,
+      apiVersion: CANN.API_VERSION,
+      receivedAtEpochMillis: now.getTime(),
+      durationMsAtCoreStart: settings.ledger.durationMs,
+      purchaseCount: settings.ledger.purchaseCount,
+      consumptionCount: settings.ledger.consumptionCount,
+      result: settings.ledger.result,
+      durationMs: settings.ledger.durationMs,
+      errorCode: settings.ledger.errorCode || ''
+    } : null
+  };
+
+  const coreRequests = [];
+  if (purchasePlan.rows.length) {
+    coreRequests.push(appendCellsRequest_(
+      runtimeContext.sheets.purchases,
+      purchasePlan.rows
+    ));
+  }
+  if (settings.compatibilityExistingRow) {
+    const responseHeaders = runtimeContext.headers.responses;
+    requireCompatibilityIdentityHeaders_(responseHeaders);
+    const event = stagedConsumptions[0];
+    const currentIdentity = runtimeContext.sheets.responses.getRange(
+      settings.compatibilityExistingRow,
+      responseHeaders[CANN.COMPATIBILITY_EVENT_HEADER] + 1,
+      1,
+      2
+    ).getValues()[0];
+    if ((text_(currentIdentity[0]) &&
+         text_(currentIdentity[0]) !== event.eventId) ||
+        (text_(currentIdentity[1]) &&
+         text_(currentIdentity[1]) !== text_(event.requestId))) {
+      throw new Error(
+        'FORM_COMPATIBILITY_IDENTITY_CONFLICT: row ' +
+        settings.compatibilityExistingRow
+      );
+    }
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.responses,
+      settings.compatibilityExistingRow,
+      responseHeaders[CANN.COMPATIBILITY_EVENT_HEADER] + 1,
+      [[event.eventId, event.requestId || '']]
+    ));
+  } else if (responseRows.length) {
+    coreRequests.push(appendCellsRequest_(
+      runtimeContext.sheets.responses,
+      responseRows
+    ));
+  }
+  maybeInjectSandboxSyncApplyBatchFault_(
+    CANN.SYNC_APPLY_FAULTS.COMPATIBILITY,
+    coreRequests
+  );
+
+  if (eventRows.length) {
+    coreRequests.push(appendCellsRequest_(
+      runtimeContext.sheets.events,
+      eventRows
+    ));
+  }
+  maybeInjectSandboxSyncApplyBatchFault_(
+    CANN.SYNC_APPLY_FAULTS.CANONICAL,
+    coreRequests
+  );
+
+  effects.filter(effect => !effect.pendingAppend).forEach(effect => {
+    const headers = settings.productContext.headers;
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Finished'] + 1,
+      [[effect.status]]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Uses'] + 1,
+      [[effect.uses]]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Finished At'] + 1,
+      [[effect.finishedAt || '']]
+    ));
+  });
+  maybeInjectSandboxSyncApplyBatchFault_(
+    CANN.SYNC_APPLY_FAULTS.PRODUCT_EFFECTS,
+    coreRequests
+  );
+
+  effects.filter(effect => !effect.pendingAppend).forEach(effect => {
+    const headers = settings.productContext.headers;
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Most recent use'] + 1,
+      [[effect.mostRecentUse || '']]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Last quantity'] + 1,
+      [[effect.lastQuantity == null ? '' : effect.lastQuantity]]
+    ));
+  });
+  maybeInjectSandboxSyncApplyBatchFault_(
+    CANN.SYNC_APPLY_FAULTS.INTERACTION_SUMMARY,
+    coreRequests
+  );
+
+  coreRequests.push(appendCellsRequest_(
+    journalSheet,
+    [[
+      applyId,
+      settings.kind,
+      settings.apiVersion,
+      settings.requestId || '',
+      'CORE_COMMITTED',
+      now,
+      '',
+      JSON.stringify(plan),
+      settings.response == null ? '' : JSON.stringify(settings.response)
+    ]]
+  ));
+  coreRequests.push(updateCellsRequest_(
+    requiredSheet_(ss, CANN.SHEETS.CONFIG),
+    findConfigRowNumber_(ss, CANN.PENDING_APPLY_KEY),
+    2,
+    [[applyId]]
+  ));
+
+  const coreStarted = Date.now();
+  sheetsBatchUpdate_(ss, coreRequests);
+  recordBackendPhase_(settings.timing, 'recoverableCoreBatch', coreStarted);
+  maybeInjectSandboxSyncApplyFault_(
+    CANN.SYNC_APPLY_FAULTS.CORE_COMMITTED
+  );
+  const materialized = materializedRecoverableRowsAfterCore_(
+    ss,
+    {
+      applyId: applyId,
+      kind: settings.kind,
+      requestId: settings.requestId || '',
+      now: now,
+      plan: plan,
+      response: settings.response,
+      eventIds: plan.eventIds,
+      compatibilityExistingRow: settings.compatibilityExistingRow,
+      responseLastRowBefore: responseLastRowBefore,
+      compatibilityEventColumn:
+        runtimeContext.headers.responses[
+          CANN.COMPATIBILITY_EVENT_HEADER
+        ] + 1,
+      eventFirstRow: eventFirstRow,
+      eventRowCount: eventRows.length,
+      journalRowNumber: journalRowNumber
+    }
+  );
+
+  if (settings.formRefreshRequired) {
+    const formStarted = Date.now();
+    try {
+      // This operation is intentionally between the two atomic batches. It is
+      // safe to repeat and repair reruns it before finalization.
+      updateFormAndDescriptionLocked_(ss);
+    } catch (error) {
+      if (settings.apiVersion === 1) {
+        // V1 has no stable request/action/event identity across an HTTP retry.
+        // Return its already-committed success rather than invite a duplicate;
+        // leave CORE_COMMITTED + pending marker for explicit/next-run repair.
+        console.error(
+          'V1 Form refresh deferred to recoverable repair: ' +
+          conciseError_(error)
+        );
+        return {
+          applyId: applyId,
+          complete: false,
+          pendingRepair: true,
+          v1RetryBoundary: true
+        };
+      }
+      throw error;
+    }
+    recordBackendPhase_(settings.timing, 'formRefresh', formStarted);
+  }
+
+  const finalStarted = Date.now();
+  const result = finalizeRecoverableApplyLocked_(ss, applyId, {
+    ledgerDurationMs: settings.ledger &&
+      settings.ledger.startedAtEpochMillis != null
+      ? Date.now() - settings.ledger.startedAtEpochMillis
+      : null,
+    journalRecord: materialized.journalRecord,
+    canonicalRowsByEventId: materialized.canonicalRowsByEventId,
+    compatibilityRowsByEventId:
+      materialized.compatibilityRowsByEventId
+  });
+  recordBackendPhase_(settings.timing, 'recoverableFinalBatch', finalStarted);
+  maybeInjectSandboxSyncApplyFault_(
+    CANN.SYNC_APPLY_FAULTS.POST_COMPLETE
+  );
+
+  effects.forEach(effect => {
+    const product =
+      settings.productContext.byLegacyId[effect.legacyProductId];
+    if (!product) return;
+    product.status = effect.status;
+    product.uses = effect.uses;
+    product.mostRecentUse = effect.mostRecentUse;
+    product.finishedAt = effect.finishedAt;
+    product.lastQuantity = effect.lastQuantity;
+  });
+  return result;
+}
+
+function planRecoverablePurchaseRows_(context, staged, now, configuredTaxRate) {
+  const taxRate = finiteNumberOr_(configuredTaxRate, 0.13);
+  const rows = staged.map(item => {
+    const p = item.item;
+    const cost = finiteNumberOr_(p.cost, 0);
+    const postTax = truthy_(p.postTax);
+    const row = [
+      text_(p.date), text_(p.type), text_(p.name), cost,
+      finiteNumberOr_(p.thc, 0), finiteNumberOr_(p.grams, 0),
+      truthy_(p.borrowed) ? 1 : 0, CANN.STATUS.UNOPENED,
+      item.legacyProductId, 0, postTax,
+      postTax ? cost : cost * (1 + taxRate),
+      '', item.productUuid, item.actionId, now, '', ''
+    ];
+    item.pendingAppend = true;
+    item.row = row;
+    item.status = CANN.STATUS.UNOPENED;
+    item.uses = 0;
+    item.mostRecentUse = null;
+    item.finishedAt = null;
+    item.lastQuantity = null;
+    context.byLegacyId[item.legacyProductId] = item;
+    if (item.productUuid) context.byProductUuid[item.productUuid] = item;
+    if (item.actionId && context.byActionId) {
+      context.byActionId[item.actionId] = item;
+    }
+    return row;
+  });
+  const byLegacyId = {};
+  staged.forEach((item, index) => {
+    byLegacyId[item.legacyProductId] = rows[index];
+  });
+  return { rows: rows, byLegacyId: byLegacyId };
+}
+
+function applyEffectsToPlannedPurchaseRows_(purchasePlan, effects, headers) {
+  effects.forEach(effect => {
+    const row = purchasePlan.byLegacyId[effect.legacyProductId];
+    if (!row) return;
+    row[headers['Finished']] = effect.status;
+    row[headers['Uses']] = effect.uses;
+    row[headers['Most recent use']] = effect.mostRecentUse || '';
+    row[headers['Finished At']] = effect.finishedAt || '';
+    row[headers['Last quantity']] =
+      effect.lastQuantity == null ? '' : effect.lastQuantity;
+    effect.pendingAppend = true;
+  });
+}
+
+function buildRecoverableCompatibilityRows_(runtimeContext, staged) {
+  const sheet = runtimeContext.sheets.responses;
+  const headers = runtimeContext.headers.responses;
+  requireHeaders_(headers, ['Timestamp', 'Product', 'Uses']);
+  requireCompatibilityIdentityHeaders_(headers);
+  return staged.map(item => {
+    const row = Array(sheet.getLastColumn()).fill('');
+    row[headers.Timestamp] = item.timestamp;
+    row[headers.Product] = item.legacyProductId;
+    row[headers.Uses] = item.uses;
+    if (headers.Date !== undefined) row[headers.Date] = item.localDate;
+    if (headers.Time !== undefined) row[headers.Time] = item.localTime;
+    if (headers['Weight code'] !== undefined) {
+      row[headers['Weight code']] = item.weightCode || '';
+    }
+    if (headers['Mark as Finished?'] !== undefined) {
+      row[headers['Mark as Finished?']] = item.isFinished ? 'Yes' : '';
+    }
+    row[headers[CANN.COMPATIBILITY_EVENT_HEADER]] = item.eventId;
+    row[headers[CANN.COMPATIBILITY_REQUEST_HEADER]] =
+      item.requestId || '';
+    return row;
+  });
+}
+
+function buildRecoverableEventRows_(staged) {
+  return staged.map(item => [
+    item.eventId, item.timestamp, item.localDate, item.localTime,
+    item.productUuid, item.legacyProductId, item.uses,
+    item.weightCode || '', !!item.isFinished, item.source,
+    item.requestId || '', '', ''
+  ]);
+}
+
+function repairRecoverableStateLocked_(runtimeContext) {
+  const ss = runtimeContext.ss;
+  const first = repairPendingSyncApplyLocked_(runtimeContext);
+  const journal = requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const headers = headerMap_(journal);
+  const incomplete = readDataRows_(journal).filter(row =>
+    text_(value_(row, headers, 'State')) === 'CORE_COMMITTED'
+  ).map(row => text_(value_(row, headers, 'Apply UUID')));
+  if (!incomplete.length) return first;
+  if (incomplete.length > 1) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: multiple incomplete journals ' +
+      JSON.stringify(incomplete)
+    );
+  }
+  const pending = text_(configValue_(ss, CANN.PENDING_APPLY_KEY, ''));
+  if (pending && pending !== incomplete[0]) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: pending pointer does not match journal'
+    );
+  }
+  if (!pending) {
+    sheetsBatchUpdate_(ss, [updateCellsRequest_(
+      requiredSheet_(ss, CANN.SHEETS.CONFIG),
+      findConfigRowNumber_(ss, CANN.PENDING_APPLY_KEY),
+      2,
+      [[incomplete[0]]]
+    )]);
+  }
+  return repairPendingSyncApplyLocked_(runtimeContext);
+}
+
+function repairPendingSyncApplyLocked_(runtimeContext) {
+  const ss = runtimeContext.ss;
+  // Always reread under the acquired script lock. A predecessor may have
+  // committed its core while this request was waiting.
+  const applyId = text_(configValue_(ss, CANN.PENDING_APPLY_KEY, ''));
+  if (!applyId) return { repaired: false, pendingApplyId: null };
+  const journalRecord = readApplyJournalRecord_(ss, applyId);
+  if (!journalRecord) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: pending apply has no journal row ' +
+      applyId
+    );
+  }
+  if (journalRecord.state === 'COMPLETE') {
+    sheetsBatchUpdate_(ss, [updateCellsRequest_(
+      requiredSheet_(ss, CANN.SHEETS.CONFIG),
+      findConfigRowNumber_(ss, CANN.PENDING_APPLY_KEY),
+      2,
+      [['']]
+    )]);
+    return {
+      repaired: true,
+      applyId: applyId,
+      previousState: 'COMPLETE'
+    };
+  }
+  if (journalRecord.state !== 'CORE_COMMITTED') {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: invalid journal state ' +
+      journalRecord.state
+    );
+  }
+  const plan = JSON.parse(journalRecord.finalizationJson);
+  if (plan.formRefreshRequired) updateFormAndDescriptionLocked_(ss);
+  const result = finalizeRecoverableApplyLocked_(ss, applyId);
+  return {
+    repaired: true,
+    applyId: applyId,
+    previousState: journalRecord.state,
+    result: result
+  };
+}
+
+function repairOrphanFormResponsesLocked_(runtimeContext) {
+  const ss = runtimeContext.ss;
+  if (!recoverableSyncApplyReady_(runtimeContext.config)) {
+    return { repairedRows: 0, checkedThroughRow: null, issues: [] };
+  }
+  const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+  const responseHeaders = headerMap_(responses);
+  requireCompatibilityIdentityHeaders_(responseHeaders);
+  runtimeContext.sheets.responses = responses;
+  runtimeContext.headers.responses = responseHeaders;
+
+  const lastRow = responses.getLastRow();
+  if (lastRow < 2) {
+    return {
+      repairedRows: 0,
+      scannedRows: 0,
+      issues: []
+    };
+  }
+
+  const rows = responses.getRange(
+    2,
+    1,
+    lastRow - 1,
+    responses.getLastColumn()
+  ).getValues();
+  const issues = [];
+  let repairedRows = 0;
+  for (let index = 0; index < rows.length; index++) {
+    const rowNumber = index + 2;
+    const row = rows[index];
+    const eventIdentity = text_(value_(
+      row,
+      responseHeaders,
+      CANN.COMPATIBILITY_EVENT_HEADER
+    ));
+    const requestIdentity = text_(value_(
+      row,
+      responseHeaders,
+      CANN.COMPATIBILITY_REQUEST_HEADER
+    ));
+    if (eventIdentity) continue;
+    if (requestIdentity) {
+      issues.push({
+        type: 'FORM_ORPHAN_IDENTITY_CONFLICT',
+        rowNumber: rowNumber
+      });
+      continue;
+    }
+    if (!row.some(cell => cell !== '' && cell != null)) continue;
+
+    const timestamp = dateOrNull_(
+      value_(row, responseHeaders, 'Timestamp')
+    );
+    const legacyId = text_(value_(row, responseHeaders, 'Product'));
+    const uses = finiteNumber_(value_(row, responseHeaders, 'Uses'));
+    const context = productContext_(ss, {
+      runtimeContext: runtimeContext
+    });
+    const product = context.byLegacyId[legacyId];
+    if (!timestamp || !product || uses == null) {
+      issues.push({
+        type: 'FORM_ORPHAN_INVALID',
+        rowNumber: rowNumber,
+        productId: legacyId
+      });
+      continue;
+    }
+
+    const eventId = deterministicLegacyEventUuid_(
+      ss.getId(),
+      responses.getName(),
+      rowNumber
+    );
+    if (eventContext_(ss, runtimeContext, [eventId]).eventIds.has(eventId)) {
+      issues.push({
+        type: 'FORM_ORPHAN_CANONICAL_WITHOUT_IDENTITY',
+        rowNumber: rowNumber,
+        eventId: eventId
+      });
+      continue;
+    }
+    const event = {
+      eventId: eventId,
+      timestamp: timestamp,
+      localDate: formatDate_(timestamp),
+      localTime: formatTime_(timestamp),
+      productUuid: product.productUuid,
+      legacyProductId: product.legacyProductId,
+      uses: uses,
+      weightCode: text_(value_(row, responseHeaders, 'Weight code')),
+      isFinished: truthy_(value_(
+        row,
+        responseHeaders,
+        'Mark as Finished?'
+      )),
+      source: 'FORM_RECOVERY',
+      requestId: '',
+      legacySourceSheet: responses.getName(),
+      legacySourceRow: rowNumber,
+      compatibilityRow: null
+    };
+    applyRecoverableSyncLocked_({
+      runtimeContext: runtimeContext,
+      productContext: context,
+      stagedPurchases: [],
+      stagedConsumptions: [event],
+      kind: 'FORM_RECOVERY',
+      apiVersion: 0,
+      requestId: '',
+      response: null,
+      formRefreshRequired: true,
+      compatibilityExistingRow: rowNumber,
+      ledger: null,
+      timing: null
+    });
+    repairedRows++;
+  }
+
+  return {
+    repairedRows: repairedRows,
+    scannedRows: rows.length,
+    issues: issues
+  };
+}
+
+function finalizeRecoverableApplyLocked_(ss, applyId, options) {
+  const settings = options || {};
+  const journalRecord = settings.journalRecord ||
+    readApplyJournalRecord_(ss, applyId);
+  if (!journalRecord) {
+    throw new Error('RECOVERABLE_APPLY_CORRUPT: missing journal ' + applyId);
+  }
+  if (journalRecord.state === 'COMPLETE') {
+    return { applyId: applyId, alreadyComplete: true };
+  }
+  if (journalRecord.state !== 'CORE_COMMITTED') {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: invalid journal state ' +
+      journalRecord.state
+    );
+  }
+  const plan = JSON.parse(journalRecord.finalizationJson);
+  const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
+  const responseHeaders = headerMap_(responses);
+  requireCompatibilityIdentityHeaders_(responseHeaders);
+  const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const eventHeaders = headerMap_(events);
+  const finalRequests = [];
+
+  const plannedEventIds = plan.eventIds || [];
+  const canonicalRowsByEventId =
+    settings.canonicalRowsByEventId ||
+    resolveUniqueRowsByIds_(
+      events,
+      eventHeaders['Event UUID'] + 1,
+      plannedEventIds
+    );
+  const compatibilityRowsByEventId =
+    settings.compatibilityRowsByEventId ||
+    resolveUniqueRowsByIds_(
+      responses,
+      responseHeaders[CANN.COMPATIBILITY_EVENT_HEADER] + 1,
+      plannedEventIds
+    );
+  plannedEventIds.forEach(eventId => {
+    const canonicalRow = canonicalRowsByEventId[eventId];
+    const compatibilityRow = compatibilityRowsByEventId[eventId];
+    if (!canonicalRow || !compatibilityRow) {
+      throw new Error(
+        'RECOVERABLE_APPLY_CORRUPT: missing materialized row for ' +
+        eventId
+      );
+    }
+    finalRequests.push(updateCellsRequest_(
+      events,
+      canonicalRow,
+      eventHeaders['Legacy Source Sheet'] + 1,
+      [[responses.getName(), compatibilityRow]]
+    ));
+  });
+
+  if (plan.ledger) {
+    const ledger = requiredSheet_(ss, CANN.SHEETS.LEDGER);
+    const ledgerHeaders = headerMap_(ledger);
+    const existingLedgerRow = findOptionalUniqueExactCellRow_(
+      ledger,
+      ledgerHeaders['Request UUID'] + 1,
+      plan.ledger.requestId
+    );
+    const ledgerValues = [[
+      plan.ledger.requestId,
+      plan.ledger.apiVersion,
+      new Date(plan.ledger.receivedAtEpochMillis),
+      plan.ledger.purchaseCount,
+      plan.ledger.consumptionCount,
+      plan.ledger.result,
+      settings.ledgerDurationMs != null
+        ? settings.ledgerDurationMs
+        : plan.ledger.durationMsAtCoreStart,
+      plan.ledger.errorCode || ''
+    ]];
+    if (existingLedgerRow) {
+      finalRequests.push(updateCellsRequest_(
+        ledger,
+        existingLedgerRow,
+        1,
+        ledgerValues
+      ));
+    } else {
+      finalRequests.push(appendCellsRequest_(ledger, ledgerValues));
+    }
+    // Add an invalid request to the same final transaction. Sheets rejects the
+    // whole batch, proving that lineage/ledger/state/clear cannot split.
+    maybeInjectSandboxSyncApplyBatchFault_(
+      CANN.SYNC_APPLY_FAULTS.LEDGER,
+      finalRequests
+    );
+  }
+
+  finalRequests.push(updateCellsRequest_(
+    requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL),
+    journalRecord.rowNumber,
+    5,
+    [['COMPLETE', journalRecord.coreCommittedAt, new Date()]]
+  ));
+  finalRequests.push(updateCellsRequest_(
+    requiredSheet_(ss, CANN.SHEETS.CONFIG),
+    findConfigRowNumber_(ss, CANN.PENDING_APPLY_KEY),
+    2,
+    [['']]
+  ));
+  sheetsBatchUpdate_(ss, finalRequests);
+  return {
+    applyId: applyId,
+    eventCount: (plan.eventIds || []).length,
+    ledgerFinalized: !!plan.ledger,
+    complete: true
+  };
+}
+
+function readApplyJournalRecord_(ss, applyId) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const headers = headerMap_(sheet);
+  requireExactHeaders_(
+    headers,
+    CANN.APPLY_JOURNAL_HEADERS,
+    CANN.SHEETS.APPLY_JOURNAL
+  );
+  const rowNumber = findOptionalUniqueExactCellRow_(
+    sheet,
+    headers['Apply UUID'] + 1,
+    applyId
+  );
+  if (!rowNumber) return null;
+  const row = sheet.getRange(
+    rowNumber,
+    1,
+    1,
+    sheet.getLastColumn()
+  ).getValues()[0];
+  return {
+    rowNumber: rowNumber,
+    state: text_(value_(row, headers, 'State')),
+    coreCommittedAt: value_(row, headers, 'Core Committed At'),
+    finalizationJson: text_(value_(row, headers, 'Finalization JSON')),
+    responseJson: text_(value_(row, headers, 'Response JSON'))
+  };
+}
+
+function findConfigRowNumber_(ss, key) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+  const row = findOptionalUniqueExactCellRow_(sheet, 1, key);
+  if (!row) throw new Error('SCHEMA_MISMATCH: missing Config key ' + key);
+  return row;
+}
+
+function findUniqueExactCellRow_(sheet, columnNumber, value) {
+  const row = findOptionalUniqueExactCellRow_(sheet, columnNumber, value);
+  if (!row) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: missing ' + value +
+      ' in ' + sheet.getName()
+    );
+  }
+  return row;
+}
+
+function resolveUniqueRowsByIds_(sheet, columnNumber, ids) {
+  const submitted = Array.from(new Set((ids || []).map(text_).filter(Boolean)));
+  const resolved = {};
+  if (!submitted.length) return resolved;
+  if (submitted.length <= CANN.EVENT_TEXT_FINDER_MAX_BATCH) {
+    submitted.forEach(id => {
+      resolved[id] = findUniqueExactCellRow_(sheet, columnNumber, id);
+    });
+    return resolved;
+  }
+
+  const wanted = {};
+  submitted.forEach(id => { wanted[id] = true; });
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    sheet.getRange(2, columnNumber, lastRow - 1, 1)
+      .getValues()
+      .forEach((row, index) => {
+        const id = text_(row[0]);
+        if (!wanted[id]) return;
+        if (resolved[id]) {
+          throw new Error(
+            'RECOVERABLE_APPLY_CORRUPT: duplicate ' + id +
+            ' in ' + sheet.getName()
+          );
+        }
+        resolved[id] = index + 2;
+      });
+  }
+  submitted.forEach(id => {
+    if (!resolved[id]) {
+      throw new Error(
+        'RECOVERABLE_APPLY_CORRUPT: missing ' + id +
+        ' in ' + sheet.getName()
+      );
+    }
+  });
+  return resolved;
+}
+
+function findOptionalUniqueExactCellRow_(sheet, columnNumber, value) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  const matches = sheet.getRange(2, columnNumber, lastRow - 1, 1)
+    .createTextFinder(String(value))
+    .matchEntireCell(true)
+    .matchCase(true)
+    .useRegularExpression(false)
+    .findAll();
+  if (matches.length > 1) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: duplicate ' + value +
+      ' in ' + sheet.getName()
+    );
+  }
+  return matches.length ? matches[0].getRow() : null;
+}
+
+function appendCellsRequest_(sheet, rows) {
+  return {
+    appendCells: {
+      sheetId: sheet.getSheetId(),
+      rows: rows.map(row => ({
+        values: row.map(sheetCellData_)
+      })),
+      fields: 'userEnteredValue'
+    }
+  };
+}
+
+function updateCellsRequest_(sheet, rowNumber, columnNumber, rows) {
+  return {
+    updateCells: {
+      start: {
+        sheetId: sheet.getSheetId(),
+        rowIndex: rowNumber - 1,
+        columnIndex: columnNumber - 1
+      },
+      rows: rows.map(row => ({
+        values: row.map(sheetCellData_)
+      })),
+      fields: 'userEnteredValue'
+    }
+  };
+}
+
+function sheetCellData_(value) {
+  if (value == null || value === '') return {};
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    if (!Number.isFinite(value.getTime())) return {};
+    return {
+      userEnteredValue: {
+        numberValue: spreadsheetLocalDateSerial_(value)
+      }
+    };
+  }
+  if (typeof value === 'boolean') {
+    return { userEnteredValue: { boolValue: value } };
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return { userEnteredValue: { numberValue: value } };
+  }
+  return { userEnteredValue: { stringValue: String(value) } };
+}
+
+function spreadsheetLocalDateSerial_(value) {
+  // Sheets serials represent spreadsheet-local wall-clock components. A raw
+  // UTC epoch/86400000 value shifts visible timestamps by the UTC offset.
+  const parts = Utilities.formatDate(
+    new Date(value),
+    CANN.TIME_ZONE,
+    'yyyy,MM,dd,HH,mm,ss,SSS'
+  ).split(',').map(Number);
+  return Date.UTC(
+    parts[0],
+    parts[1] - 1,
+    parts[2],
+    parts[3],
+    parts[4],
+    parts[5],
+    parts[6]
+  ) / 86400000 + 25569;
+}
+
+function sheetsBatchUpdate_(ss, requests) {
+  if (!requests.length) return { replies: [] };
+  assertAdvancedSheetsService_();
+  return Sheets.Spreadsheets.batchUpdate(
+    { requests: requests },
+    ss.getId()
+  );
+}
+
+function sheetsBatchUpdateInChunks_(ss, requests, requestedChunkSize) {
+  const chunkSize = Math.max(
+    1,
+    Math.floor(finiteNumberOr_(requestedChunkSize, 400))
+  );
+  for (let start = 0; start < requests.length; start += chunkSize) {
+    sheetsBatchUpdate_(ss, requests.slice(start, start + chunkSize));
+  }
+}
+
+/**
+ * The Advanced Sheets write becomes durable before SpreadsheetApp refreshes
+ * its in-process read cache. Journal and canonical rows have single-writer,
+ * lock-protected positions. Google Forms can append compatibility rows outside
+ * that lock, so reread only the newly appended identity-column tail through the
+ * Advanced service, which observes the just-committed batch.
+ */
+function materializedRecoverableRowsAfterCore_(ss, details) {
+  const eventIds = (details.eventIds || []).map(text_);
+  const eventCount = Number(details.eventRowCount || 0);
+  const eventFirstRow = Number(details.eventFirstRow);
+  const journalRowNumber = Number(details.journalRowNumber);
+  if (eventIds.length !== eventCount ||
+      !Number.isInteger(journalRowNumber) ||
+      journalRowNumber < 2 ||
+      (eventCount &&
+       (!Number.isInteger(eventFirstRow) || eventFirstRow < 2))) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: core response row count mismatch'
+    );
+  }
+  const canonicalRows = Array.from(
+    { length: eventCount },
+    (_, index) => eventFirstRow + index
+  );
+  const compatibilityRowsByEventId =
+    details.compatibilityExistingRow
+      ? rowsByStableIds_(
+        eventIds,
+        [Number(details.compatibilityExistingRow)]
+      )
+      : resolveFreshCompatibilityRowsByIds_(
+        ss,
+        requiredSheet_(ss, CANN.SHEETS.RESPONSES),
+        details.compatibilityEventColumn,
+        Number(details.responseLastRowBefore) + 1,
+        eventIds
+      );
+  return {
+    journalRecord: {
+      rowNumber: journalRowNumber,
+      state: 'CORE_COMMITTED',
+      coreCommittedAt: details.now,
+      finalizationJson: JSON.stringify(details.plan),
+      responseJson: details.response == null
+        ? ''
+        : JSON.stringify(details.response)
+    },
+    canonicalRowsByEventId: rowsByStableIds_(
+      eventIds,
+      canonicalRows
+    ),
+    compatibilityRowsByEventId: compatibilityRowsByEventId
+  };
+}
+
+function resolveFreshCompatibilityRowsByIds_(
+  ss,
+  sheet,
+  columnNumber,
+  firstPossibleRow,
+  ids
+) {
+  const submitted = Array.from(
+    new Set((ids || []).map(text_).filter(Boolean))
+  );
+  if (!submitted.length) return {};
+  const column = sheetColumnLetters_(columnNumber);
+  const firstRow = Math.max(2, Math.floor(firstPossibleRow));
+  const sheetName = "'" +
+    sheet.getName().replace(/'/g, "''") +
+    "'";
+  const response = Sheets.Spreadsheets.Values.get(
+    ss.getId(),
+    sheetName + '!' + column + firstRow + ':' + column
+  );
+  const wanted = {};
+  submitted.forEach(id => { wanted[id] = true; });
+  const resolved = {};
+  (response.values || []).forEach((row, index) => {
+    const id = text_(row && row[0]);
+    if (!wanted[id]) return;
+    if (resolved[id]) {
+      throw new Error(
+        'RECOVERABLE_APPLY_CORRUPT: duplicate ' + id +
+        ' in ' + sheet.getName()
+      );
+    }
+    resolved[id] = firstRow + index;
+  });
+  submitted.forEach(id => {
+    if (!resolved[id]) {
+      throw new Error(
+        'RECOVERABLE_APPLY_CORRUPT: missing fresh compatibility ' +
+        id
+      );
+    }
+  });
+  return resolved;
+}
+
+function rowsByStableIds_(ids, rowNumbers) {
+  if (ids.length !== rowNumbers.length) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: stable ID row count mismatch'
+    );
+  }
+  const rows = {};
+  ids.forEach((id, index) => {
+    if (!id || rows[id]) {
+      throw new Error(
+        'RECOVERABLE_APPLY_CORRUPT: invalid materialized stable ID ' +
+        id
+      );
+    }
+    rows[id] = rowNumbers[index];
+  });
+  return rows;
+}
+
+function sheetColumnLetters_(columnNumber) {
+  let value = Number(columnNumber);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(
+      'RECOVERABLE_APPLY_CORRUPT: invalid sheet column ' +
+      columnNumber
+    );
+  }
+  let result = '';
+  while (value > 0) {
+    value--;
+    result = String.fromCharCode(65 + value % 26) + result;
+    value = Math.floor(value / 26);
+  }
+  return result;
+}
+
+function assertAdvancedSheetsService_() {
+  if (typeof Sheets === 'undefined' ||
+      !Sheets.Spreadsheets ||
+      !Sheets.Spreadsheets.batchUpdate ||
+      !Sheets.Spreadsheets.Values ||
+      !Sheets.Spreadsheets.Values.get) {
+    throw new Error(
+      'CONFIGURATION_ERROR: Advanced Google Sheets service v4 is required'
+    );
+  }
+}
+
+function setSandboxSyncApplyFault(stage) {
+  if (environment_() !== 'SANDBOX') {
+    throw new Error('SANDBOX_FAULT_GUARD: ENVIRONMENT must be SANDBOX');
+  }
+  const allowed = Object.keys(CANN.SYNC_APPLY_FAULTS)
+    .map(key => CANN.SYNC_APPLY_FAULTS[key]);
+  const normalized = text_(stage).toUpperCase();
+  if (allowed.indexOf(normalized) < 0) {
+    throw new Error(
+      'SANDBOX_FAULT_GUARD: unsupported stage ' + normalized
+    );
+  }
+  PropertiesService.getScriptProperties().setProperty(
+    CANN.SANDBOX_FAULT_PROPERTY,
+    normalized
+  );
+  return { armed: normalized };
+}
+
+function clearSandboxSyncApplyFault() {
+  if (environment_() !== 'SANDBOX') {
+    throw new Error('SANDBOX_FAULT_GUARD: ENVIRONMENT must be SANDBOX');
+  }
+  PropertiesService.getScriptProperties().deleteProperty(
+    CANN.SANDBOX_FAULT_PROPERTY
+  );
+  return { armed: null };
+}
+
+function armedSandboxSyncApplyFault_(stage) {
+  if (environment_() !== 'SANDBOX') return false;
+  const properties = PropertiesService.getScriptProperties();
+  const armed = text_(
+    properties.getProperty(CANN.SANDBOX_FAULT_PROPERTY)
+  ).toUpperCase();
+  if (armed !== stage) return false;
+  properties.deleteProperty(CANN.SANDBOX_FAULT_PROPERTY);
+  return true;
+}
+
+function maybeInjectSandboxSyncApplyBatchFault_(stage, requests) {
+  if (!armedSandboxSyncApplyFault_(stage)) return;
+  // A non-existent sheet makes the Advanced Sheets request invalid. Because it
+  // is part of the same batch, every otherwise-valid request rolls back.
+  requests.push({
+    updateCells: {
+      start: {
+        sheetId: -2147483648,
+        rowIndex: 0,
+        columnIndex: 0
+      },
+      rows: [{ values: [{ userEnteredValue: { stringValue: 'FAULT' } }] }],
+      fields: 'userEnteredValue'
+    }
+  });
+}
+
+function maybeInjectSandboxSyncApplyFault_(stage) {
+  if (!armedSandboxSyncApplyFault_(stage)) return;
+  throw new Error('SANDBOX_INJECTED_SYNC_APPLY_STOP: ' + stage);
+}
+
+function productContext_(ss, options) {
+  const settings = options || {};
+  const runtimeContext = settings.runtimeContext;
+  const includeActionIds = settings.includeActionIds !== false;
+  const sheet = runtimeContext ? runtimeContext.sheets.purchases : requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const headers = runtimeContext ? runtimeContext.headers.purchases : headerMap_(sheet);
   requireHeaders_(headers, ['Product ID', 'Product UUID', 'Client Action UUID', 'Type', 'Borrowed']);
-  const byLegacyId = {}, byProductUuid = {}, byActionId = {}, rows = readDataRows_(sheet);
+  const lastRow = sheet.getLastRow();
+  // Do not filter blank physical rows: the array index must remain the true
+  // sheet row number for targeted writes.
+  const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, sheet.getLastColumn()).getValues();
+  const byLegacyId = {}, byProductUuid = {}, byActionId = {};
   rows.forEach((row, index) => {
     const legacyProductId = text_(value_(row, headers, 'Product ID'));
     if (!legacyProductId) return;
@@ -815,9 +4301,15 @@ function productContext_(ss) {
       rowNumber: index + 2,
       legacyProductId: legacyProductId,
       productUuid: text_(value_(row, headers, 'Product UUID')),
-      actionId: text_(value_(row, headers, 'Client Action UUID')),
+      actionId: includeActionIds ? text_(value_(row, headers, 'Client Action UUID')) : '',
       type: text_(value_(row, headers, 'Type')),
-      borrowed: truthy_(value_(row, headers, 'Borrowed'))
+      borrowed: truthy_(value_(row, headers, 'Borrowed')),
+      status: allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE),
+      uses: finiteNumberOr_(value_(row, headers, 'Uses'), 0),
+      mostRecentUse: value_(row, headers, 'Most recent use') || null,
+      finishedAt: value_(row, headers, 'Finished At') || null,
+      lastQuantity: optionalFiniteNumber_(value_(row, headers, 'Last quantity')),
+      row: row
     };
     byLegacyId[legacyProductId] = product;
     if (product.productUuid) byProductUuid[product.productUuid] = product;
@@ -826,15 +4318,35 @@ function productContext_(ss) {
   return { purchasesSheet: sheet, headers: headers, rows: rows, byLegacyId: byLegacyId, byProductUuid: byProductUuid, byActionId: byActionId };
 }
 
-function eventContext_(ss) {
-  const sheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
-  const headers = headerMap_(sheet);
-  const byEventId = {};
-  readDataRows_(sheet).forEach((row, index) => {
-    const eventId = text_(value_(row, headers, 'Event UUID'));
-    if (eventId) byEventId[eventId] = { rowNumber: index + 2 };
+function eventContext_(ss, runtimeContext, submittedEventIds) {
+  const sheet = runtimeContext ? runtimeContext.sheets.events : requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const headers = runtimeContext ? runtimeContext.headers.events : headerMap_(sheet);
+  requireHeaders_(headers, ['Event UUID']);
+  const lastRow = sheet.getLastRow();
+  const eventIds = new Set();
+  if (lastRow < 2) return { sheet: sheet, eventIds: eventIds, lookupStrategy: 'EMPTY' };
+
+  const uuidRange = sheet.getRange(2, headers['Event UUID'] + 1, lastRow - 1, 1);
+  const submitted = submittedEventIds == null
+    ? null
+    : Array.from(new Set(submittedEventIds.map(text_).filter(eventId => eventId)));
+  if (submitted && submitted.length <= CANN.EVENT_TEXT_FINDER_MAX_BATCH) {
+    submitted.forEach(eventId => {
+      const match = uuidRange.createTextFinder(eventId)
+        .matchEntireCell(true)
+        .useRegularExpression(false)
+        .findNext();
+      if (match) eventIds.add(eventId);
+    });
+    return { sheet: sheet, eventIds: eventIds, lookupStrategy: 'TEXT_FINDER' };
+  }
+
+  const values = uuidRange.getValues();
+  values.forEach(row => {
+    const eventId = text_(row[0]);
+    if (eventId) eventIds.add(eventId);
   });
-  return { sheet: sheet, byEventId: byEventId };
+  return { sheet: sheet, eventIds: eventIds, lookupStrategy: 'COLUMN_SET' };
 }
 
 function stagePurchases_(items, context) {
@@ -970,6 +4482,42 @@ function validateV2Consumption_(item, index) {
   return null;
 }
 
+function preflightSyncRequest_(payload, apiVersion) {
+  const purchases = arrayOrEmpty_(payload && payload.purchases);
+  const consumptions = arrayOrEmpty_(payload && payload.consumptions);
+  const sizeError = validateBatchSize_(purchases, consumptions);
+  if (sizeError) {
+    return {
+      purchases: purchases,
+      consumptions: consumptions,
+      failure: itemError_('INVALID_ITEM', sizeError)
+    };
+  }
+  if (apiVersion === CANN.API_VERSION) {
+    if (!isUuid_(text_(payload && payload.requestId))) {
+      return {
+        purchases: purchases,
+        consumptions: consumptions,
+        failure: itemError_('INVALID_ITEM', 'requestId must be a UUID')
+      };
+    }
+    const duplicateActionId = firstDuplicate_(purchases.map(item => text_(item && item.actionId)).filter(Boolean));
+    const duplicateEventId = firstDuplicate_(consumptions.map(item => text_(item && item.eventId)).filter(Boolean));
+    if (duplicateActionId || duplicateEventId) {
+      return {
+        purchases: purchases,
+        consumptions: consumptions,
+        failure: itemError_('INVALID_ITEM', 'Duplicate UUID inside request')
+      };
+    }
+  }
+  return { purchases: purchases, consumptions: consumptions, failure: null };
+}
+
+function isRequestPayloadObject_(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function validateBatchSize_(purchases, consumptions) {
   if (!Array.isArray(purchases) || !Array.isArray(consumptions)) return 'purchases and consumptions must be arrays';
   if (purchases.length + consumptions.length > CANN.MAX_BATCH_SIZE) return 'Batch exceeds maximum size';
@@ -1048,6 +4596,62 @@ function latestInteractions_(ss) {
 // General helpers
 // -----------------------------------------------------------------------------
 
+function newBackendTiming_(handler, startedAt) {
+  const started = startedAt == null ? Date.now() : Number(startedAt);
+  return { handler: handler, startedAt: started, phasesMs: {} };
+}
+
+function recordBackendPhase_(timing, phase, startedAt, endedAt) {
+  if (!timing) return;
+  const ended = endedAt == null ? Date.now() : Number(endedAt);
+  const duration = Math.max(0, ended - Number(startedAt));
+  timing.phasesMs[phase] = finiteNumberOr_(timing.phasesMs[phase], 0) + duration;
+}
+
+function backendTimingRecord_(timing, outcome, details, endedAt) {
+  const ended = endedAt == null ? Date.now() : Number(endedAt);
+  const total = Math.max(0, ended - timing.startedAt);
+  const record = {
+    recordType: 'cannsheet_backend_timing',
+    handler: timing.handler,
+    outcome: outcome,
+    phasesMs: Object.assign({}, timing.phasesMs),
+    serverDurationMs: timing.serverDurationMs == null ? total : timing.serverDurationMs,
+    totalHandlerMs: total
+  };
+  Object.keys(details || {}).forEach(key => {
+    if (details[key] !== undefined) record[key] = details[key];
+  });
+  return record;
+}
+
+function logBackendTiming_(timing, outcome, details) {
+  if (!timing) return;
+  try {
+    console.log(JSON.stringify(backendTimingRecord_(timing, outcome, details)));
+  } catch (ignored) {
+    // Timing must never change request behavior if logging is unavailable.
+  }
+}
+
+function addServerTimingFields_(response, timing, environment) {
+  if (!response || !timing) return response;
+  timing.serverDurationMs = Math.max(0, Date.now() - timing.startedAt);
+  response.serverDurationMs = timing.serverDurationMs;
+  if (environment === 'SANDBOX') {
+    response.serverTimings = Object.assign({}, timing.phasesMs);
+  }
+  return response;
+}
+
+function timedRequestFailure_(timing, code, message, environment, details) {
+  const output = requestFailure_(code, message, environment, timing);
+  const timingDetails = Object.assign({ errorCode: code }, details || {});
+  if (environment) timingDetails.environment = environment;
+  logBackendTiming_(timing, 'rejected', timingDetails);
+  return output;
+}
+
 function requiredSheet_(ss, name) {
   const sheet = ss.getSheetByName(name);
   if (!sheet) throw new Error('SCHEMA_MISMATCH: Missing sheet ' + name);
@@ -1094,6 +4698,46 @@ function configValue_(ss, key, fallback) {
   const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
   const match = rows.find(row => text_(row[0]) === key);
   return match && match[1] !== '' ? match[1] : fallback;
+}
+
+function setConfigValue_(ss, key, value, description) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+  const headers = headerMap_(sheet);
+  requireExactHeaders_(
+    headers,
+    ['Key', 'Value', 'Description'],
+    CANN.SHEETS.CONFIG
+  );
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2
+    ? []
+    : sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  const matches = [];
+  rows.forEach((row, index) => {
+    if (text_(row[0]) === key) matches.push(index + 2);
+  });
+  if (matches.length > 1) {
+    throw new Error('SCHEMA_MISMATCH: duplicate Config key ' + key);
+  }
+  const rowNumber = matches.length ? matches[0] : lastRow + 1;
+  sheet.getRange(rowNumber, 1, 1, 3).setValues([[
+    key,
+    value,
+    description || ''
+  ]]);
+}
+
+function ensureConfigKey_(ss, key, defaultValue, description) {
+  const sheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
+  const lastRow = sheet.getLastRow();
+  const rows = lastRow < 2 ? [] : sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  const matches = [];
+  rows.forEach((row, index) => {
+    if (text_(row[0]) === key) matches.push(index + 2);
+  });
+  if (matches.length > 1) throw new Error('SCHEMA_MISMATCH: duplicate Config key ' + key);
+  if (!matches.length) setConfigValue_(ss, key, defaultValue, description);
+  return matches.length ? matches[0] : sheet.getLastRow();
 }
 
 function requiredScriptProperty_(name) {
@@ -1150,8 +4794,15 @@ function deterministicLegacyEventUuid_(spreadsheetId, sheetName, rowNumber) {
   return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
 }
 
-function requestFailure_(code, message, environment) {
-  return jsonOutput_({ success: false, message: message, errorCode: code, productIdMap: {}, environment: environment });
+function requestFailure_(code, message, environment, timing) {
+  const responseConstructionStarted = Date.now();
+  const response = { success: false, message: message, errorCode: code, productIdMap: {}, environment: environment };
+  recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
+  addServerTimingFields_(response, timing, environment);
+  const responseRoutingStarted = Date.now();
+  const output = jsonOutput_(response);
+  recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+  return output;
 }
 
 function jsonOutput_(value) {
@@ -1162,11 +4813,19 @@ function conciseError_(error) { return error && error.message ? String(error.mes
 function text_(value) { return value == null ? '' : String(value).trim(); }
 function arrayOrEmpty_(value) { return value == null ? [] : value; }
 function finiteNumber_(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
+function optionalFiniteNumber_(value) {
+  return value == null || value === '' ? null : finiteNumber_(value);
+}
 function finiteNumberOr_(value, fallback) { const number = finiteNumber_(value); return number == null ? fallback : number; }
 function isFiniteNumber_(value) { return finiteNumber_(value) != null; }
 function allowedStatusOr_(value, fallback) { const status = Number(value); return [0, 1, 2].indexOf(status) >= 0 ? status : fallback; }
 function truthy_(value) { return value === true || value === 1 || text_(value).toLowerCase() === 'true' || text_(value).toLowerCase() === 'yes'; }
 function dateOrNow_(value) { const date = new Date(value); return isNaN(date.getTime()) ? new Date() : date; }
 function dateOrNull_(value) { const date = new Date(value); return isNaN(date.getTime()) ? null : date; }
+function timestampMillisOrNull_(value) {
+  if (value == null || value === '') return null;
+  const millis = new Date(value).getTime();
+  return Number.isFinite(millis) ? millis : null;
+}
 function isUuid_(value) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 function firstDuplicate_(values) { const seen = {}; for (let i = 0; i < values.length; i++) { if (seen[values[i]]) return values[i]; seen[values[i]] = true; } return ''; }
