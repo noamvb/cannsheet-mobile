@@ -12,6 +12,14 @@
 
 const CANN = Object.freeze({
   API_VERSION: 2,
+  ANALYTICS_VERSION: 1,
+  ANALYTICS_DEFAULT_RANGE_DAYS: 180,
+  ANALYTICS_MAX_RANGE_DAYS: 3660,
+  ANALYTICS_READ_LOCK_TIMEOUT_MS: 5000,
+  HISTORY_DEFAULT_LIMIT: 50,
+  HISTORY_MAX_LIMIT: 200,
+  HISTORY_MAX_QUERY_LENGTH: 80,
+  HISTORY_MAX_CURSOR_LENGTH: 1024,
   // The additive Purchases projection has its own readiness version so the
   // existing v2 deployment remains usable while the migration runs.
   SCHEMA_VERSION: 2,
@@ -77,7 +85,8 @@ const CANN = Object.freeze({
 // HTTP API
 // -----------------------------------------------------------------------------
 
-function doGet() {
+function doGet(e) {
+  if (analyticsResourceWasSupplied_(e)) return handleReadResource_(e);
   const timing = newBackendTiming_('GET');
   let environment = '';
   try {
@@ -181,6 +190,1582 @@ function doGet() {
     });
     return output;
   }
+}
+
+// -----------------------------------------------------------------------------
+// Read-only analytics API
+// -----------------------------------------------------------------------------
+
+function analyticsResourceWasSupplied_(e) {
+  return !!(
+    e && (
+      (e.parameter && Object.prototype.hasOwnProperty.call(e.parameter, 'resource')) ||
+      (e.parameters && Object.prototype.hasOwnProperty.call(e.parameters, 'resource'))
+    )
+  );
+}
+
+function handleReadResource_(e) {
+  const timing = newBackendTiming_('GET_ANALYTICS');
+  let resource = '';
+  let environment = '';
+  try {
+    const query = analyticsQuery_(e);
+    resource = text_(query.values.resource);
+    if (resource !== 'insights' && resource !== 'history') {
+      throw analyticsError_('UNSUPPORTED_RESOURCE', 'Unsupported analytics resource');
+    }
+
+    const recognized = resource === 'insights'
+      ? ['resource', 'analyticsVersion', 'environment', 'from', 'to', 'scope']
+      : [
+        'resource', 'analyticsVersion', 'environment', 'from', 'to',
+        'productUuid', 'productId', 'type', 'q', 'limit', 'cursor'
+      ];
+    validateAnalyticsParameterNames_(query, recognized);
+    validateAnalyticsCommonQuery_(query.values);
+
+    environment = environment_();
+    if (query.values.environment !== environment) {
+      throw analyticsError_(
+        'ENVIRONMENT_MISMATCH',
+        'Client and server environments do not match'
+      );
+    }
+
+    const parsed = resource === 'insights'
+      ? parseInsightsQuery_(query.values)
+      : parseHistoryQuery_(query.values);
+    const cursor = resource === 'history' && parsed.cursor
+      ? decodeHistoryCursor_(parsed.cursor)
+      : null;
+    const snapshot = readAnalyticsSnapshot_(
+      resource,
+      environment,
+      cursor
+    );
+    const quality = newAnalyticsQuality_();
+    const products = normalizeAnalyticsProducts_(snapshot, quality);
+    const events = normalizeAnalyticsEvents_(snapshot, products, quality);
+    const response = resource === 'insights'
+      ? buildInsightsResponse_(
+        snapshot,
+        products,
+        events,
+        normalizeLedgerRows_(snapshot),
+        parsed,
+        quality,
+        timing
+      )
+      : buildHistoryResponse_(
+        snapshot,
+        products,
+        events,
+        parsed,
+        cursor,
+        quality,
+        timing
+      );
+    logBackendTiming_(timing, 'success', {
+      environment: environment,
+      resource: resource,
+      purchaseRows: snapshot.purchaseRows.length,
+      eventRows: snapshot.eventRows.length,
+      ledgerRows: snapshot.ledgerRows.length,
+      rangeDays: response.range ? response.range.dayCount : undefined,
+      pageSize: response.events ? response.events.length : undefined,
+      hasFilters: resource === 'history' ? historyHasFilters_(parsed) : undefined
+    });
+    return jsonOutput_(response);
+  } catch (error) {
+    const code = analyticsErrorCode_(error);
+    const message = analyticsErrorMessage_(error);
+    const response = analyticsFailure_(
+      resource || text_(
+        e && e.parameter && e.parameter.resource
+      ),
+      environment || undefined,
+      code,
+      message,
+      timing
+    );
+    logBackendTiming_(timing, 'error', {
+      environment: environment || undefined,
+      resource: resource || undefined,
+      errorCode: code
+    });
+    return jsonOutput_(response);
+  }
+}
+
+function analyticsQuery_(e) {
+  const single = e && e.parameter && typeof e.parameter === 'object'
+    ? e.parameter
+    : {};
+  const multi = e && e.parameters && typeof e.parameters === 'object'
+    ? e.parameters
+    : {};
+  const names = {};
+  Object.keys(single).forEach(name => { names[name] = true; });
+  Object.keys(multi).forEach(name => { names[name] = true; });
+  const values = {};
+  const counts = {};
+  Object.keys(names).forEach(name => {
+    let supplied;
+    if (Object.prototype.hasOwnProperty.call(multi, name)) {
+      supplied = Array.isArray(multi[name]) ? multi[name] : [multi[name]];
+    } else {
+      supplied = [single[name]];
+    }
+    counts[name] = supplied.length;
+    values[name] = text_(supplied.length ? supplied[0] : '');
+  });
+  return { values: values, counts: counts };
+}
+
+function validateAnalyticsParameterNames_(query, recognized) {
+  const allowed = {};
+  recognized.forEach(name => { allowed[name] = true; });
+  Object.keys(query.values).forEach(name => {
+    if (!allowed[name]) {
+      throw analyticsError_('INVALID_QUERY', 'Unrecognized query parameter: ' + name);
+    }
+    if (query.counts[name] !== 1) {
+      throw analyticsError_('INVALID_QUERY', 'Duplicate query parameter: ' + name);
+    }
+  });
+}
+
+function validateAnalyticsCommonQuery_(values) {
+  if (values.analyticsVersion !== String(CANN.ANALYTICS_VERSION)) {
+    throw analyticsError_(
+      'UNSUPPORTED_ANALYTICS_VERSION',
+      'analyticsVersion must be ' + CANN.ANALYTICS_VERSION
+    );
+  }
+  if (values.environment !== 'PRODUCTION' && values.environment !== 'SANDBOX') {
+    throw analyticsError_(
+      'INVALID_QUERY',
+      'environment must be PRODUCTION or SANDBOX'
+    );
+  }
+}
+
+function parseInsightsQuery_(values) {
+  const fromText = text_(values.from);
+  const toText = text_(values.to);
+  const scopeText = text_(values.scope);
+  if (!!fromText !== !!toText) {
+    throw analyticsError_('INVALID_QUERY', 'from and to must be supplied together');
+  }
+  if (scopeText && scopeText !== 'all') {
+    throw analyticsError_('INVALID_QUERY', 'scope must be all');
+  }
+  if (scopeText && (fromText || toText)) {
+    throw analyticsError_('INVALID_QUERY', 'scope cannot be combined with from or to');
+  }
+  if (scopeText === 'all') {
+    return {
+      scope: 'ALL',
+      from: null,
+      to: localToday_()
+    };
+  }
+  if (fromText) {
+    const from = strictLocalDate_(fromText);
+    const to = strictLocalDate_(toText);
+    if (!from || !to) {
+      throw analyticsError_('INVALID_QUERY', 'from and to must use YYYY-MM-DD');
+    }
+    const dayCount = localDateDayCount_(from, to);
+    if (dayCount < 1) {
+      throw analyticsError_('INVALID_QUERY', 'from must not be after to');
+    }
+    if (dayCount > CANN.ANALYTICS_MAX_RANGE_DAYS) {
+      throw analyticsError_('RANGE_TOO_LARGE', 'Requested range is too large');
+    }
+    return { scope: 'CUSTOM', from: from, to: to };
+  }
+  const to = localToday_();
+  return {
+    scope: 'DEFAULT',
+    from: shiftLocalDate_(to, -(CANN.ANALYTICS_DEFAULT_RANGE_DAYS - 1)),
+    to: to
+  };
+}
+
+function parseHistoryQuery_(values) {
+  const from = text_(values.from);
+  const to = text_(values.to);
+  const parsedFrom = from ? strictLocalDate_(from) : null;
+  const parsedTo = to ? strictLocalDate_(to) : null;
+  if ((from && !parsedFrom) || (to && !parsedTo)) {
+    throw analyticsError_('INVALID_QUERY', 'from and to must use YYYY-MM-DD');
+  }
+  if (parsedFrom && parsedTo) {
+    const dayCount = localDateDayCount_(parsedFrom, parsedTo);
+    if (dayCount < 1) {
+      throw analyticsError_('INVALID_QUERY', 'from must not be after to');
+    }
+    if (dayCount > CANN.ANALYTICS_MAX_RANGE_DAYS) {
+      throw analyticsError_('RANGE_TOO_LARGE', 'Requested range is too large');
+    }
+  }
+
+  const productUuid = text_(values.productUuid);
+  const productId = text_(values.productId);
+  if (productUuid && productId) {
+    throw analyticsError_(
+      'INVALID_QUERY',
+      'productUuid and productId are mutually exclusive'
+    );
+  }
+  if (productUuid && !isUuid_(productUuid)) {
+    throw analyticsError_('INVALID_QUERY', 'productUuid must be a UUID');
+  }
+  const queryText = text_(values.q);
+  if (queryText.length > CANN.HISTORY_MAX_QUERY_LENGTH) {
+    throw analyticsError_('INVALID_QUERY', 'q is too long');
+  }
+  const rawLimit = text_(values.limit);
+  if (rawLimit && !/^\d+$/.test(rawLimit)) {
+    throw analyticsError_('INVALID_QUERY', 'limit must be an integer');
+  }
+  const limit = rawLimit ? Number(rawLimit) : CANN.HISTORY_DEFAULT_LIMIT;
+  if (
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > CANN.HISTORY_MAX_LIMIT
+  ) {
+    throw analyticsError_(
+      'INVALID_QUERY',
+      'limit must be between 1 and ' + CANN.HISTORY_MAX_LIMIT
+    );
+  }
+  const cursor = text_(values.cursor);
+  if (cursor.length > CANN.HISTORY_MAX_CURSOR_LENGTH) {
+    throw analyticsError_('INVALID_CURSOR', 'cursor is too long');
+  }
+  return {
+    from: parsedFrom,
+    to: parsedTo,
+    productUuid: productUuid ? productUuid.toLowerCase() : '',
+    productId: productId,
+    type: text_(values.type).toUpperCase(),
+    q: queryText.toLowerCase(),
+    qDisplay: queryText,
+    limit: limit,
+    cursor: cursor
+  };
+}
+
+function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.ANALYTICS_READ_LOCK_TIMEOUT_MS)) {
+    throw analyticsError_('BACKEND_BUSY', 'The backend is busy; retry this request');
+  }
+  try {
+    const ss = spreadsheet_();
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, expectedEnvironment);
+    assertSupportedSchemaVersion_(runtimeConfig.values);
+    if (!recoverableSyncApplyReady_(runtimeConfig.values)) {
+      throw analyticsError_(
+        'SCHEMA_MISMATCH',
+        'Recoverable sync apply must be enabled before analytics reads'
+      );
+    }
+    if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
+      throw analyticsError_(
+        'BACKEND_BUSY',
+        'A recoverable sync apply is pending; retry this request'
+      );
+    }
+    if (ss.getSpreadsheetTimeZone() !== CANN.TIME_ZONE) {
+      throw analyticsError_(
+        'CONFIGURATION_ERROR',
+        'Spreadsheet time zone must be ' + CANN.TIME_ZONE
+      );
+    }
+
+    const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+    const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+    const purchaseHeaders = headerMap_(purchases);
+    const eventHeaders = headerMap_(events);
+    requireExactHeaders_(
+      purchaseHeaders,
+      CANN.PURCHASE_HEADERS,
+      CANN.SHEETS.PURCHASES
+    );
+    requireExactHeaders_(
+      eventHeaders,
+      CANN.EVENT_HEADERS,
+      CANN.SHEETS.EVENTS
+    );
+
+    const currentPurchaseLastRow = purchases.getLastRow();
+    const currentEventLastRow = events.getLastRow();
+    const purchaseLastRow = cursor ? cursor.purchaseLastRow : currentPurchaseLastRow;
+    const eventLastRow = cursor ? cursor.eventLastRow : currentEventLastRow;
+    if (
+      currentPurchaseLastRow < purchaseLastRow ||
+      currentEventLastRow < eventLastRow
+    ) {
+      throw analyticsError_(
+        'CURSOR_STALE',
+        'The captured history snapshot is no longer available'
+      );
+    }
+
+    let ledger = null;
+    let ledgerHeaders = {};
+    let ledgerLastRow = 1;
+    if (resource === 'insights') {
+      ledger = requiredSheet_(ss, CANN.SHEETS.LEDGER);
+      ledgerHeaders = headerMap_(ledger);
+      requireExactHeaders_(
+        ledgerHeaders,
+        CANN.LEDGER_HEADERS,
+        CANN.SHEETS.LEDGER
+      );
+      ledgerLastRow = ledger.getLastRow();
+    }
+
+    return {
+      environment: expectedEnvironment,
+      taxRate: finiteNumberOr_(runtimeConfig.values.TAX_RATE, 0.13),
+      purchaseHeaders: purchaseHeaders,
+      eventHeaders: eventHeaders,
+      ledgerHeaders: ledgerHeaders,
+      purchaseRows: readAnalyticsRowsThrough_(purchases, purchaseLastRow),
+      eventRows: readAnalyticsRowsThrough_(events, eventLastRow),
+      ledgerRows: ledger ? readAnalyticsRowsThrough_(ledger, ledgerLastRow) : [],
+      purchaseLastRow: purchaseLastRow,
+      eventLastRow: eventLastRow,
+      ledgerLastRow: ledgerLastRow
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function readAnalyticsRowsThrough_(sheet, lastRow) {
+  if (lastRow < 2) return [];
+  return sheet.getRange(
+    2,
+    1,
+    lastRow - 1,
+    sheet.getLastColumn()
+  ).getValues().map((cells, index) => ({
+    canonicalRow: index + 2,
+    cells: cells
+  }));
+}
+
+function newAnalyticsQuality_() {
+  return {
+    estimatedPurchaseDateCount: 0,
+    unknownPurchaseDateCount: 0,
+    unknownPersonalCostCount: 0,
+    unknownBorrowedCostCount: 0,
+    ambiguousThcCount: 0,
+    invalidThcCount: 0,
+    invalidGramsCount: 0,
+    unknownStatusCount: 0,
+    unknownBorrowedFlagCount: 0,
+    localDateMismatchCount: 0,
+    localTimeMismatchCount: 0,
+    unknownSourceCount: 0,
+    invalidUnreferencedPurchaseRowCount: 0
+  };
+}
+
+function analyticsQualityResponse_(quality) {
+  const warnings = {};
+  Object.keys(newAnalyticsQuality_()).forEach(name => {
+    warnings[name] = Number(quality[name]) || 0;
+  });
+  return {
+    complete: Object.keys(warnings).every(name => warnings[name] === 0),
+    warnings: warnings
+  };
+}
+
+function normalizeAnalyticsProducts_(snapshot, quality) {
+  const products = [];
+  const byProductUuid = {};
+  const byProductId = {};
+  const seenProductUuids = {};
+  const seenProductIds = {};
+  snapshot.purchaseRows.forEach(raw => {
+    const row = raw.cells;
+    if (!row.some(cell => cell !== '' && cell != null)) return;
+    const headers = snapshot.purchaseHeaders;
+    const productId = text_(value_(row, headers, 'Product ID'));
+    const name = text_(value_(row, headers, 'Product name'));
+    if (productId && seenProductIds[productId]) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Duplicate Product ID: ' + productId
+      );
+    }
+    if (productId) seenProductIds[productId] = true;
+    const rawUuid = text_(value_(row, headers, 'Product UUID'));
+    if (rawUuid && !isUuid_(rawUuid)) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Invalid Product UUID for ' + productId
+      );
+    }
+    const productUuid = rawUuid ? rawUuid.toLowerCase() : null;
+    if (productUuid && seenProductUuids[productUuid]) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Duplicate Product UUID: ' + productUuid
+      );
+    }
+    if (productUuid) seenProductUuids[productUuid] = true;
+    if (!productId || !name) {
+      quality.invalidUnreferencedPurchaseRowCount++;
+      return;
+    }
+
+    const borrowed = strictBorrowed_(value_(row, headers, 'Borrowed'));
+    if (!borrowed.known) quality.unknownBorrowedFlagCount++;
+    const status = strictAnalyticsStatus_(value_(row, headers, 'Finished'));
+    if (!status.known) quality.unknownStatusCount++;
+    const purchaseDate = effectivePurchaseDate_(
+      value_(row, headers, 'Date'),
+      value_(row, headers, 'Created At')
+    );
+    if (purchaseDate.source === 'CREATED_AT_FALLBACK') {
+      quality.estimatedPurchaseDateCount++;
+    } else if (purchaseDate.source === 'UNKNOWN') {
+      quality.unknownPurchaseDateCount++;
+    }
+    const cost = analyticsCost_(
+      value_(row, headers, 'Pre-tax cost'),
+      value_(row, headers, 'Post-tax'),
+      value_(row, headers, 'Final cost'),
+      snapshot.taxRate
+    );
+    if (cost.finalCostCents == null && borrowed.known) {
+      if (borrowed.value) quality.unknownBorrowedCostCount++;
+      else quality.unknownPersonalCostCount++;
+    }
+    const thcRaw = optionalFiniteNumber_(value_(row, headers, 'THC%'));
+    const thcQuality = classifyThc_(value_(row, headers, 'THC%'));
+    if (thcQuality === 'AMBIGUOUS_SCALE') quality.ambiguousThcCount++;
+    if (thcQuality === 'INVALID') quality.invalidThcCount++;
+    const grams = optionalFiniteNumber_(value_(row, headers, 'Grams'));
+    const validGrams = grams != null && grams > 0 ? grams : null;
+    if (validGrams == null) quality.invalidGramsCount++;
+
+    const product = {
+      canonicalRow: raw.canonicalRow,
+      productUuid: productUuid,
+      productId: productId,
+      name: name,
+      type: text_(value_(row, headers, 'Type')).toUpperCase() || 'UNKNOWN',
+      status: status.label,
+      statusCode: status.value,
+      borrowed: borrowed.known ? borrowed.value : null,
+      purchaseDate: purchaseDate.date,
+      purchaseDateSource: purchaseDate.source,
+      preTaxCostCents: cost.preTaxCostCents,
+      finalCostCents: cost.finalCostCents,
+      costKnown: cost.finalCostCents != null,
+      grams: validGrams,
+      thcRaw: thcRaw,
+      thcQuality: thcQuality,
+      createdAtEpochMillis: timestampMillisOrNull_(
+        value_(row, headers, 'Created At')
+      ),
+      purchaseFinishedAtEpochMillis: timestampMillisOrNull_(
+        value_(row, headers, 'Finished At')
+      )
+    };
+    products.push(product);
+    byProductId[productId] = product;
+    if (productUuid) byProductUuid[productUuid] = product;
+  });
+  products.byProductId = byProductId;
+  products.byProductUuid = byProductUuid;
+  return products;
+}
+
+function normalizeAnalyticsEvents_(snapshot, products, quality) {
+  const events = [];
+  const eventIds = {};
+  snapshot.eventRows.forEach(raw => {
+    const row = raw.cells;
+    if (!row.some(cell => cell !== '' && cell != null)) return;
+    const headers = snapshot.eventHeaders;
+    const eventUuid = text_(value_(row, headers, 'Event UUID'));
+    if (!eventUuid || !isUuid_(eventUuid)) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event row has an invalid Event UUID'
+      );
+    }
+    const normalizedEventUuid = eventUuid.toLowerCase();
+    if (eventIds[normalizedEventUuid]) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Duplicate Event UUID: ' + eventUuid
+      );
+    }
+    eventIds[normalizedEventUuid] = true;
+    const occurredAtEpochMillis = timestampMillisOrNull_(
+      value_(row, headers, 'Timestamp')
+    );
+    if (occurredAtEpochMillis == null) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event row has an invalid timestamp'
+      );
+    }
+    const quantity = optionalFiniteNumber_(value_(row, headers, 'Uses'));
+    if (quantity == null || quantity <= 0) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event row has a nonpositive or invalid quantity'
+      );
+    }
+    const rawProductUuid = text_(value_(row, headers, 'Product UUID'));
+    if (rawProductUuid && !isUuid_(rawProductUuid)) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event row has an invalid Product UUID'
+      );
+    }
+    const productUuid = rawProductUuid ? rawProductUuid.toLowerCase() : '';
+    const productId = text_(value_(row, headers, 'Legacy Product ID'));
+    const byUuid = productUuid ? products.byProductUuid[productUuid] : null;
+    const byId = productId ? products.byProductId[productId] : null;
+    if (byUuid && byId && byUuid !== byId) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event product identities conflict'
+      );
+    }
+    const product = byUuid || byId;
+    if (!product) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Canonical event references an unknown product'
+      );
+    }
+
+    const localDate = Utilities.formatDate(
+      new Date(occurredAtEpochMillis),
+      CANN.TIME_ZONE,
+      'yyyy-MM-dd'
+    );
+    const localTime = Utilities.formatDate(
+      new Date(occurredAtEpochMillis),
+      CANN.TIME_ZONE,
+      'HH:mm:ss'
+    );
+    const storedLocalDate = text_(value_(row, headers, 'Local Date'));
+    const storedLocalTime = text_(value_(row, headers, 'Local Time'));
+    if (storedLocalDate && storedLocalDate !== localDate) {
+      quality.localDateMismatchCount++;
+    }
+    if (storedLocalTime && storedLocalTime !== localTime) {
+      quality.localTimeMismatchCount++;
+    }
+    const source = normalizeAnalyticsSource_(
+      value_(row, headers, 'Source')
+    );
+    if (source === 'UNKNOWN') quality.unknownSourceCount++;
+    events.push({
+      canonicalRow: raw.canonicalRow,
+      eventUuid: normalizedEventUuid,
+      occurredAtEpochMillis: occurredAtEpochMillis,
+      localDate: localDate,
+      localTime: localTime,
+      product: product,
+      quantity: quantity,
+      weightCode: text_(value_(row, headers, 'Weight Code')) || null,
+      finished: truthy_(value_(row, headers, 'Finished')),
+      source: source
+    });
+  });
+  return events;
+}
+
+function normalizeLedgerRows_(snapshot) {
+  if (!snapshot.ledgerHeaders || !Object.keys(snapshot.ledgerHeaders).length) {
+    return [];
+  }
+  const rows = [];
+  snapshot.ledgerRows.forEach(raw => {
+    const row = raw.cells;
+    if (!row.some(cell => cell !== '' && cell != null)) return;
+    const receivedAtEpochMillis = timestampMillisOrNull_(
+      value_(row, snapshot.ledgerHeaders, 'Received At')
+    );
+    if (receivedAtEpochMillis == null) return;
+    const duration = optionalFiniteNumber_(
+      value_(row, snapshot.ledgerHeaders, 'Duration Ms')
+    );
+    rows.push({
+      receivedAtEpochMillis: receivedAtEpochMillis,
+      result: text_(value_(row, snapshot.ledgerHeaders, 'Result')).toUpperCase(),
+      durationMs: duration != null && duration >= 0 ? duration : null
+    });
+  });
+  return rows;
+}
+
+function strictBorrowed_(value) {
+  const normalized = text_(value).toLowerCase();
+  if (
+    value === true ||
+    value === 1 ||
+    normalized === '1' ||
+    normalized === 'yes'
+  ) {
+    return { known: true, value: true };
+  }
+  if (
+    value === false ||
+    value === 0 ||
+    normalized === '0' ||
+    normalized === 'no'
+  ) {
+    return { known: true, value: false };
+  }
+  return { known: false, value: null };
+}
+
+function strictAnalyticsStatus_(value) {
+  if (
+    typeof value !== 'boolean' &&
+    value !== '' &&
+    value != null &&
+    /^[012]$/.test(text_(value))
+  ) {
+    const numeric = Number(value);
+    return {
+      known: true,
+      value: numeric,
+      label: numeric === CANN.STATUS.ACTIVE
+        ? 'ACTIVE'
+        : (numeric === CANN.STATUS.FINISHED ? 'FINISHED' : 'UNOPENED')
+    };
+  }
+  return { known: false, value: null, label: 'UNKNOWN' };
+}
+
+function moneyToCents_(value) {
+  if (value == null || value === '') return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return null;
+  return Math.round(number * 100);
+}
+
+function analyticsCost_(preTaxValue, postTaxValue, finalValue, taxRate) {
+  const preTaxCostCents = moneyToCents_(preTaxValue);
+  const recordedFinal = moneyToCents_(finalValue);
+  if (recordedFinal != null) {
+    return {
+      preTaxCostCents: preTaxCostCents,
+      finalCostCents: recordedFinal
+    };
+  }
+  if (preTaxCostCents == null) {
+    return { preTaxCostCents: null, finalCostCents: null };
+  }
+  const postTax = strictPostTax_(postTaxValue);
+  if (!postTax.known) {
+    return {
+      preTaxCostCents: preTaxCostCents,
+      finalCostCents: null
+    };
+  }
+  const numericPreTax = Number(preTaxValue);
+  return {
+    preTaxCostCents: preTaxCostCents,
+    finalCostCents: postTax.value
+      ? preTaxCostCents
+      : Math.round(numericPreTax * (1 + taxRate) * 100)
+  };
+}
+
+function strictPostTax_(value) {
+  if (
+    value === true ||
+    value === 1 ||
+    text_(value).toLowerCase() === 'true' ||
+    text_(value).toLowerCase() === 'yes'
+  ) {
+    return { known: true, value: true };
+  }
+  if (
+    value === false ||
+    value === 0 ||
+    text_(value).toLowerCase() === 'false' ||
+    text_(value).toLowerCase() === 'no'
+  ) {
+    return { known: true, value: false };
+  }
+  return { known: false, value: null };
+}
+
+function classifyThc_(value) {
+  if (value == null || value === '') return 'UNKNOWN';
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 100) return 'INVALID';
+  if (number === 0) return 'UNKNOWN';
+  if (number <= 1) return 'AMBIGUOUS_SCALE';
+  return 'RECORDED_PERCENT';
+}
+
+function effectivePurchaseDate_(recordedValue, createdAtValue) {
+  const recordedDate = strictSheetDate_(recordedValue);
+  if (recordedDate) {
+    return { date: recordedDate, source: 'RECORDED' };
+  }
+  const createdAt = timestampMillisOrNull_(createdAtValue);
+  if (createdAt != null) {
+    return {
+      date: Utilities.formatDate(
+        new Date(createdAt),
+        CANN.TIME_ZONE,
+        'yyyy-MM-dd'
+      ),
+      source: 'CREATED_AT_FALLBACK'
+    };
+  }
+  return { date: null, source: 'UNKNOWN' };
+}
+
+function strictSheetDate_(value) {
+  if (
+    value &&
+    Object.prototype.toString.call(value) === '[object Date]' &&
+    Number.isFinite(value.getTime())
+  ) {
+    return Utilities.formatDate(value, CANN.TIME_ZONE, 'yyyy-MM-dd');
+  }
+  return typeof value === 'string' ? strictLocalDate_(value.trim()) : null;
+}
+
+function strictLocalDate_(value) {
+  const text = String(value || '');
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return text;
+}
+
+function localToday_() {
+  return Utilities.formatDate(new Date(), CANN.TIME_ZONE, 'yyyy-MM-dd');
+}
+
+function localDateOrdinal_(dateText) {
+  const parts = dateText.split('-').map(Number);
+  return Math.floor(Date.UTC(parts[0], parts[1] - 1, parts[2]) / 86400000);
+}
+
+function localDateFromOrdinal_(ordinal) {
+  const date = new Date(ordinal * 86400000);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function shiftLocalDate_(dateText, days) {
+  return localDateFromOrdinal_(localDateOrdinal_(dateText) + Number(days));
+}
+
+function localDateDayCount_(from, to) {
+  return localDateOrdinal_(to) - localDateOrdinal_(from) + 1;
+}
+
+function dateInRange_(dateText, from, to) {
+  return !!dateText && (!from || dateText >= from) && (!to || dateText <= to);
+}
+
+function normalizeAnalyticsSource_(value) {
+  const source = text_(value).toUpperCase();
+  if (source.indexOf('ANDROID_') === 0 || source === 'ANDROID') return 'ANDROID';
+  if (source === 'FORM' || source === 'FORM_LEGACY') return 'FORM';
+  if (source.indexOf('RECOVERY') >= 0 || source.indexOf('REPAIR') >= 0) {
+    return 'RECOVERY';
+  }
+  return 'UNKNOWN';
+}
+
+function analyticsError_(code, message) {
+  const error = new Error(message);
+  error.analyticsCode = code;
+  return error;
+}
+
+function analyticsErrorCode_(error) {
+  if (error && error.analyticsCode) return String(error.analyticsCode);
+  const message = conciseError_(error);
+  const known = [
+    'INVALID_QUERY', 'UNSUPPORTED_RESOURCE', 'UNSUPPORTED_ANALYTICS_VERSION',
+    'ENVIRONMENT_MISMATCH', 'INVALID_CURSOR', 'CURSOR_STALE', 'BACKEND_BUSY',
+    'DATA_INTEGRITY_ERROR', 'RANGE_TOO_LARGE', 'SCHEMA_MISMATCH',
+    'CONFIGURATION_ERROR'
+  ];
+  const match = known.find(code => message.indexOf(code + ':') === 0);
+  return match || 'INTERNAL_ERROR';
+}
+
+function analyticsErrorMessage_(error) {
+  const message = conciseError_(error);
+  return message.replace(/^[A-Z_]+:\s*/, '');
+}
+
+function analyticsFailure_(resource, environment, code, message, timing) {
+  const response = {
+    success: false,
+    apiVersion: CANN.API_VERSION,
+    analyticsVersion: CANN.ANALYTICS_VERSION,
+    resource: resource || undefined,
+    environment: environment,
+    errorCode: code,
+    message: message
+  };
+  return finalizeAnalyticsResponse_(response, timing);
+}
+
+function buildInsightsResponse_(
+  snapshot,
+  products,
+  events,
+  ledgerRows,
+  query,
+  quality,
+  timing
+) {
+  const range = resolveInsightsRange_(query, products, events);
+  const productStats = {};
+  products.forEach(product => {
+    productStats[product.productId] = {
+      allLogCount: 0,
+      allQuantity: 0,
+      allDays: {},
+      allFirst: null,
+      allLast: null,
+      allLastQuantity: null,
+      rangeLogCount: 0,
+      rangeQuantity: 0,
+      rangeDays: {},
+      latestFinished: null
+    };
+  });
+
+  const daily = {};
+  for (
+    let ordinal = localDateOrdinal_(range.from);
+    ordinal <= localDateOrdinal_(range.to);
+    ordinal++
+  ) {
+    const date = localDateFromOrdinal_(ordinal);
+    daily[date] = { logCount: 0, products: {} };
+  }
+  const weekdayCounts = Array(7).fill(0);
+  const hourCounts = Array(24).fill(0);
+  const overviewProducts = {};
+  let overviewFirst = null;
+  let overviewLast = null;
+  let overviewLogCount = 0;
+
+  events.forEach(event => {
+    const stats = productStats[event.product.productId];
+    stats.allLogCount++;
+    stats.allQuantity += event.quantity;
+    stats.allDays[event.localDate] = true;
+    if (
+      stats.allFirst == null ||
+      event.occurredAtEpochMillis < stats.allFirst
+    ) {
+      stats.allFirst = event.occurredAtEpochMillis;
+    }
+    if (
+      stats.allLast == null ||
+      event.occurredAtEpochMillis > stats.allLast
+    ) {
+      stats.allLast = event.occurredAtEpochMillis;
+      stats.allLastQuantity = event.quantity;
+    }
+    if (
+      event.finished &&
+      (
+        stats.latestFinished == null ||
+        event.occurredAtEpochMillis > stats.latestFinished
+      )
+    ) {
+      stats.latestFinished = event.occurredAtEpochMillis;
+    }
+    if (!dateInRange_(event.localDate, range.from, range.to)) return;
+
+    stats.rangeLogCount++;
+    stats.rangeQuantity += event.quantity;
+    stats.rangeDays[event.localDate] = true;
+    daily[event.localDate].logCount++;
+    daily[event.localDate].products[event.product.productId] = true;
+    const isoDay = isoDayForLocalDate_(event.localDate);
+    weekdayCounts[isoDay - 1]++;
+    hourCounts[Number(event.localTime.slice(0, 2))]++;
+    overviewProducts[event.product.productId] = true;
+    overviewLogCount++;
+    if (
+      overviewFirst == null ||
+      event.occurredAtEpochMillis < overviewFirst
+    ) {
+      overviewFirst = event.occurredAtEpochMillis;
+    }
+    if (
+      overviewLast == null ||
+      event.occurredAtEpochMillis > overviewLast
+    ) {
+      overviewLast = event.occurredAtEpochMillis;
+    }
+  });
+
+  const spending = buildSpending_(products, range);
+  const inventory = buildInventory_(products);
+  const byType = buildTypeBreakdown_(products, productStats, range);
+  const productResponses = products.map(product => {
+    const stats = productStats[product.productId];
+    const eligible = (
+      product.status === 'FINISHED' &&
+      product.borrowed === false &&
+      product.costKnown &&
+      stats.allLogCount > 0 &&
+      stats.allQuantity > 0
+    );
+    return {
+      productUuid: product.productUuid,
+      productId: product.productId,
+      name: product.name,
+      type: product.type,
+      status: product.status,
+      borrowed: product.borrowed,
+      purchaseDate: product.purchaseDate,
+      purchaseDateSource: product.purchaseDateSource,
+      preTaxCostCents: product.preTaxCostCents,
+      finalCostCents: product.finalCostCents,
+      grams: product.grams,
+      thcRaw: product.thcRaw,
+      thcQuality: product.thcQuality,
+      latestFinishedLogAtEpochMillis: stats.latestFinished,
+      daysSinceLastLog: stats.allLast == null
+        ? null
+        : daysSinceEpochMillis_(stats.allLast),
+      allTime: {
+        logCount: stats.allLogCount,
+        quantity: analyticsRounded_(stats.allQuantity),
+        activeDayCount: Object.keys(stats.allDays).length,
+        firstLogAtEpochMillis: stats.allFirst,
+        lastLogAtEpochMillis: stats.allLast,
+        lastQuantity: stats.allLastQuantity
+      },
+      range: {
+        logCount: stats.rangeLogCount,
+        quantity: analyticsRounded_(stats.rangeQuantity),
+        activeDayCount: Object.keys(stats.rangeDays).length
+      },
+      costPerLogToDateCents: (
+        product.borrowed === false &&
+        product.costKnown &&
+        stats.allLogCount > 0
+      ) ? Math.round(product.finalCostCents / stats.allLogCount) : null,
+      costPerRecordedUnitToDateCents: (
+        product.borrowed === false &&
+        product.costKnown &&
+        stats.allQuantity > 0
+      ) ? Math.round(product.finalCostCents / stats.allQuantity) : null,
+      completedValueComparisonEligible: eligible
+    };
+  }).sort(compareAnalyticsProducts_);
+
+  const response = {
+    success: true,
+    apiVersion: CANN.API_VERSION,
+    analyticsVersion: CANN.ANALYTICS_VERSION,
+    resource: 'insights',
+    environment: snapshot.environment,
+    timeZone: CANN.TIME_ZONE,
+    range: range,
+    overview: {
+      logCount: overviewLogCount,
+      activeDayCount: Object.keys(daily)
+        .filter(date => daily[date].logCount > 0).length,
+      distinctProductCount: Object.keys(overviewProducts).length,
+      firstLogAtEpochMillis: overviewFirst,
+      lastLogAtEpochMillis: overviewLast,
+      daysSinceLastLog: overviewLast == null
+        ? null
+        : daysSinceEpochMillis_(overviewLast)
+    },
+    dailyActivity: Object.keys(daily).sort().map(date => ({
+      date: date,
+      logCount: daily[date].logCount,
+      distinctProductCount: Object.keys(daily[date].products).length
+    })),
+    byWeekday: weekdayCounts.map((logCount, index) => ({
+      isoDay: index + 1,
+      logCount: logCount
+    })),
+    byHour: hourCounts.map((logCount, hour) => ({
+      hour: hour,
+      logCount: logCount
+    })),
+    inventory: inventory,
+    byType: byType,
+    products: productResponses,
+    spending: spending,
+    syncHealth: buildSyncHealth_(ledgerRows),
+    dataQuality: analyticsQualityResponse_(quality),
+    sourceRevision: {
+      dataVersion: analyticsDataVersion_(snapshot, true),
+      purchaseRowCount: products.length,
+      eventRowCount: events.length,
+      ledgerRowCount: ledgerRows.length
+    },
+    generatedAtEpochMillis: Date.now(),
+    serverDurationMs: 0
+  };
+  return finalizeAnalyticsResponse_(response, timing);
+}
+
+function resolveInsightsRange_(query, products, events) {
+  let from = query.from;
+  const to = query.to;
+  if (query.scope === 'ALL') {
+    const candidates = [];
+    products.forEach(product => {
+      if (product.purchaseDate && product.purchaseDate <= to) {
+        candidates.push(product.purchaseDate);
+      }
+    });
+    events.forEach(event => {
+      if (event.localDate <= to) candidates.push(event.localDate);
+    });
+    from = candidates.length ? candidates.sort()[0] : to;
+  }
+  return {
+    scope: query.scope,
+    from: from,
+    to: to,
+    dayCount: localDateDayCount_(from, to)
+  };
+}
+
+function buildInventory_(products) {
+  const result = {
+    activeCount: 0,
+    unopenedCount: 0,
+    finishedCount: 0,
+    unknownStatusCount: 0,
+    currentPersonalOriginalCostCents: 0,
+    currentBorrowedRecordedValueCents: 0,
+    unknownCurrentCostCount: 0
+  };
+  products.forEach(product => {
+    if (product.status === 'ACTIVE') result.activeCount++;
+    else if (product.status === 'UNOPENED') result.unopenedCount++;
+    else if (product.status === 'FINISHED') result.finishedCount++;
+    else result.unknownStatusCount++;
+
+    if (product.status !== 'ACTIVE' && product.status !== 'UNOPENED') return;
+    if (!product.costKnown) {
+      result.unknownCurrentCostCount++;
+      return;
+    }
+    if (product.borrowed === false) {
+      result.currentPersonalOriginalCostCents += product.finalCostCents;
+    } else if (product.borrowed === true) {
+      result.currentBorrowedRecordedValueCents += product.finalCostCents;
+    }
+  });
+  return result;
+}
+
+function buildTypeBreakdown_(products, statsByProduct, range) {
+  const byType = {};
+  products.forEach(product => {
+    const type = product.type;
+    if (!byType[type]) {
+      byType[type] = {
+        type: type,
+        rangeLogCount: 0,
+        rangeDistinctProductCount: 0,
+        activeCount: 0,
+        unopenedCount: 0,
+        finishedCount: 0,
+        unknownStatusCount: 0,
+        personalSpendCents: 0,
+        personalPurchaseCount: 0,
+        borrowedRecordedValueCents: 0,
+        borrowedPurchaseCount: 0,
+        unknownCostCount: 0
+      };
+    }
+    const bucket = byType[type];
+    const stats = statsByProduct[product.productId];
+    bucket.rangeLogCount += stats.rangeLogCount;
+    if (stats.rangeLogCount > 0) bucket.rangeDistinctProductCount++;
+    if (product.status === 'ACTIVE') bucket.activeCount++;
+    else if (product.status === 'UNOPENED') bucket.unopenedCount++;
+    else if (product.status === 'FINISHED') bucket.finishedCount++;
+    else bucket.unknownStatusCount++;
+    if (!dateInRange_(product.purchaseDate, range.from, range.to)) return;
+    if (product.borrowed === false) {
+      bucket.personalPurchaseCount++;
+      if (product.costKnown) bucket.personalSpendCents += product.finalCostCents;
+      else bucket.unknownCostCount++;
+    } else if (product.borrowed === true) {
+      bucket.borrowedPurchaseCount++;
+      if (product.costKnown) {
+        bucket.borrowedRecordedValueCents += product.finalCostCents;
+      } else {
+        bucket.unknownCostCount++;
+      }
+    } else if (!product.costKnown) {
+      bucket.unknownCostCount++;
+    }
+  });
+  return Object.keys(byType).sort().map(type => byType[type]);
+}
+
+function emptySpendBucket_() {
+  return {
+    personalSpendCents: 0,
+    personalPurchaseCount: 0,
+    borrowedRecordedValueCents: 0,
+    borrowedPurchaseCount: 0,
+    unknownPersonalCostCount: 0,
+    unknownBorrowedCostCount: 0,
+    estimatedDateCount: 0,
+    unknownDateCount: 0
+  };
+}
+
+function addProductToSpendBucket_(bucket, product) {
+  if (product.purchaseDateSource === 'CREATED_AT_FALLBACK') {
+    bucket.estimatedDateCount++;
+  }
+  if (product.purchaseDateSource === 'UNKNOWN') bucket.unknownDateCount++;
+  if (product.borrowed === false) {
+    bucket.personalPurchaseCount++;
+    if (product.costKnown) bucket.personalSpendCents += product.finalCostCents;
+    else bucket.unknownPersonalCostCount++;
+  } else if (product.borrowed === true) {
+    bucket.borrowedPurchaseCount++;
+    if (product.costKnown) {
+      bucket.borrowedRecordedValueCents += product.finalCostCents;
+    } else {
+      bucket.unknownBorrowedCostCount++;
+    }
+  }
+}
+
+function buildSpending_(products, range) {
+  const allTime = emptySpendBucket_();
+  const selectedRange = emptySpendBucket_();
+  const months = monthKeysBetween_(range.from, range.to);
+  const byMonth = {};
+  months.forEach(month => { byMonth[month] = emptySpendBucket_(); });
+  products.forEach(product => {
+    addProductToSpendBucket_(allTime, product);
+    if (!dateInRange_(product.purchaseDate, range.from, range.to)) return;
+    addProductToSpendBucket_(selectedRange, product);
+    addProductToSpendBucket_(byMonth[product.purchaseDate.slice(0, 7)], product);
+  });
+  return {
+    allTime: allTime,
+    range: selectedRange,
+    byMonth: months.map(month => Object.assign({ month: month }, byMonth[month]))
+  };
+}
+
+function monthKeysBetween_(from, to) {
+  const fromParts = from.split('-').map(Number);
+  const toParts = to.split('-').map(Number);
+  let year = fromParts[0];
+  let month = fromParts[1];
+  const result = [];
+  while (year < toParts[0] || (year === toParts[0] && month <= toParts[1])) {
+    result.push(year + '-' + String(month).padStart(2, '0'));
+    month++;
+    if (month === 13) {
+      month = 1;
+      year++;
+    }
+  }
+  return result;
+}
+
+function buildSyncHealth_(ledgerRows) {
+  const sorted = ledgerRows.slice().sort((left, right) => (
+    left.receivedAtEpochMillis - right.receivedAtEpochMillis
+  ));
+  const latest = sorted.length ? sorted[sorted.length - 1] : null;
+  const cutoff = Date.now() - 30 * 86400000;
+  const recent = sorted.filter(row => row.receivedAtEpochMillis >= cutoff);
+  const durations = recent
+    .map(row => row.durationMs)
+    .filter(value => value != null)
+    .sort((left, right) => left - right);
+  return {
+    coverage: 'SERVER_ACKNOWLEDGED_REQUESTS_ONLY',
+    lastAcknowledgedAtEpochMillis: latest
+      ? latest.receivedAtEpochMillis
+      : null,
+    lastResult: latest ? latest.result || null : null,
+    lastDurationMs: latest ? latest.durationMs : null,
+    acknowledgedRequestCount30d: recent.length,
+    partialRequestCount30d: recent.filter(row => row.result === 'PARTIAL').length,
+    medianDurationMs30d: analyticsPercentile_(durations, 0.5),
+    p95DurationMs30d: analyticsPercentile_(durations, 0.95)
+  };
+}
+
+function analyticsPercentile_(sortedValues, percentile) {
+  if (!sortedValues.length) return null;
+  if (percentile === 0.5 && sortedValues.length % 2 === 0) {
+    const right = sortedValues.length / 2;
+    return Math.round((sortedValues[right - 1] + sortedValues[right]) / 2);
+  }
+  const index = Math.max(0, Math.ceil(percentile * sortedValues.length) - 1);
+  return Math.round(sortedValues[index]);
+}
+
+function buildHistoryResponse_(
+  snapshot,
+  products,
+  events,
+  query,
+  cursor,
+  quality,
+  timing
+) {
+  const filterHash = normalizedFilterHash_(query);
+  const snapshotHash = analyticsHistorySnapshotHash_(snapshot);
+  if (cursor) {
+    if (cursor.filterHash !== filterHash) {
+      throw analyticsError_(
+        'INVALID_CURSOR',
+        'Cursor filters do not match this request'
+      );
+    }
+    if (cursor.snapshotHash !== snapshotHash) {
+      throw analyticsError_(
+        'CURSOR_STALE',
+        'The captured history snapshot has changed'
+      );
+    }
+  }
+
+  let filtered = events.filter(event => historyEventMatches_(event, query));
+  filtered.sort((left, right) => (
+    right.occurredAtEpochMillis - left.occurredAtEpochMillis ||
+    right.canonicalRow - left.canonicalRow
+  ));
+  if (cursor) {
+    filtered = filtered.filter(event => (
+      event.occurredAtEpochMillis < cursor.lastTimestampMillis ||
+      (
+        event.occurredAtEpochMillis === cursor.lastTimestampMillis &&
+        event.canonicalRow < cursor.lastCanonicalRow
+      )
+    ));
+  }
+  const hasMore = filtered.length > query.limit;
+  const pageEvents = filtered.slice(0, query.limit);
+  let nextCursor = null;
+  if (hasMore && pageEvents.length) {
+    const last = pageEvents[pageEvents.length - 1];
+    nextCursor = encodeHistoryCursor_({
+      v: 1,
+      resource: 'history',
+      eventLastRow: snapshot.eventLastRow,
+      purchaseLastRow: snapshot.purchaseLastRow,
+      snapshotHash: snapshotHash,
+      filterHash: filterHash,
+      lastTimestampMillis: last.occurredAtEpochMillis,
+      lastCanonicalRow: last.canonicalRow
+    });
+  }
+
+  const response = {
+    success: true,
+    apiVersion: CANN.API_VERSION,
+    analyticsVersion: CANN.ANALYTICS_VERSION,
+    resource: 'history',
+    environment: snapshot.environment,
+    timeZone: CANN.TIME_ZONE,
+    filters: historyFiltersResponse_(query),
+    sort: 'TIMESTAMP_DESC_CANONICAL_ROW_DESC',
+    events: pageEvents.map(event => ({
+      eventUuid: event.eventUuid,
+      occurredAtEpochMillis: event.occurredAtEpochMillis,
+      localDate: event.localDate,
+      localTime: event.localTime,
+      productUuid: event.product.productUuid,
+      productId: event.product.productId,
+      productName: event.product.name,
+      productType: event.product.type,
+      quantity: event.quantity,
+      weightCode: event.weightCode,
+      finished: event.finished,
+      source: event.source
+    })),
+    page: {
+      limit: query.limit,
+      hasMore: hasMore,
+      nextCursor: nextCursor
+    },
+    dataQuality: analyticsQualityResponse_(quality),
+    sourceRevision: {
+      dataVersion: snapshotHash,
+      purchaseRowCount: products.length,
+      eventRowCount: events.length
+    },
+    generatedAtEpochMillis: Date.now(),
+    serverDurationMs: 0
+  };
+  return finalizeAnalyticsResponse_(response, timing);
+}
+
+function historyEventMatches_(event, query) {
+  if (!dateInRange_(event.localDate, query.from, query.to)) return false;
+  if (
+    query.productUuid &&
+    event.product.productUuid !== query.productUuid
+  ) {
+    return false;
+  }
+  if (query.productId && event.product.productId !== query.productId) {
+    return false;
+  }
+  if (query.type && event.product.type !== query.type) return false;
+  if (query.q) {
+    const searchable = (
+      event.product.name + '\n' + event.product.productId
+    ).toLowerCase();
+    if (searchable.indexOf(query.q) < 0) return false;
+  }
+  return true;
+}
+
+function historyFiltersResponse_(query) {
+  return {
+    from: query.from,
+    to: query.to,
+    productUuid: query.productUuid || null,
+    productId: query.productId || null,
+    type: query.type || null,
+    q: query.qDisplay || null
+  };
+}
+
+function historyHasFilters_(query) {
+  return !!(
+    query.from ||
+    query.to ||
+    query.productUuid ||
+    query.productId ||
+    query.type ||
+    query.q
+  );
+}
+
+function normalizedFilterHash_(query) {
+  return sha256Hex_(JSON.stringify({
+    from: query.from || null,
+    to: query.to || null,
+    productUuid: query.productUuid || null,
+    productId: query.productId || null,
+    type: query.type || null,
+    q: query.q || null
+  }));
+}
+
+function encodeHistoryCursor_(value) {
+  const json = JSON.stringify(value);
+  return Utilities.base64EncodeWebSafe(
+    json,
+    Utilities.Charset.UTF_8
+  );
+}
+
+function decodeHistoryCursor_(cursorText) {
+  try {
+    if (
+      !cursorText ||
+      cursorText.length > CANN.HISTORY_MAX_CURSOR_LENGTH ||
+      !/^[A-Za-z0-9_-]+={0,2}$/.test(cursorText)
+    ) {
+      throw new Error('Malformed cursor encoding');
+    }
+    const bytes = Utilities.base64DecodeWebSafe(cursorText);
+    const json = bytes.map(byte => (
+      String.fromCharCode((Number(byte) + 256) % 256)
+    )).join('');
+    const value = JSON.parse(json);
+    const expectedFields = [
+      'v', 'resource', 'eventLastRow', 'purchaseLastRow', 'snapshotHash',
+      'filterHash', 'lastTimestampMillis', 'lastCanonicalRow'
+    ];
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      Object.keys(value).length !== expectedFields.length ||
+      expectedFields.some(name => !Object.prototype.hasOwnProperty.call(value, name)) ||
+      value.v !== 1 ||
+      value.resource !== 'history' ||
+      !Number.isInteger(value.eventLastRow) ||
+      value.eventLastRow < 1 ||
+      !Number.isInteger(value.purchaseLastRow) ||
+      value.purchaseLastRow < 1 ||
+      !/^[0-9a-f]{64}$/.test(value.snapshotHash) ||
+      !/^[0-9a-f]{64}$/.test(value.filterHash) ||
+      !Number.isFinite(value.lastTimestampMillis) ||
+      !Number.isInteger(value.lastCanonicalRow) ||
+      value.lastCanonicalRow < 2
+    ) {
+      throw new Error('Malformed cursor payload');
+    }
+    return value;
+  } catch (error) {
+    throw analyticsError_('INVALID_CURSOR', 'Cursor is invalid');
+  }
+}
+
+function analyticsHistorySnapshotHash_(snapshot) {
+  return sha256Hex_(JSON.stringify({
+    purchases: analyticsHashRows_(
+      snapshot.purchaseRows,
+      snapshot.purchaseHeaders,
+      ['Product UUID', 'Product ID', 'Product name', 'Type']
+    ),
+    events: analyticsHashRows_(
+      snapshot.eventRows,
+      snapshot.eventHeaders,
+      [
+        'Event UUID', 'Timestamp', 'Local Date', 'Local Time', 'Product UUID',
+        'Legacy Product ID', 'Uses', 'Weight Code', 'Finished', 'Source'
+      ]
+    )
+  }));
+}
+
+function analyticsDataVersion_(snapshot, includeLedger) {
+  const value = {
+    purchases: analyticsHashRows_(
+      snapshot.purchaseRows,
+      snapshot.purchaseHeaders,
+      CANN.PURCHASE_HEADERS
+    ),
+    events: analyticsHashRows_(
+      snapshot.eventRows,
+      snapshot.eventHeaders,
+      CANN.EVENT_HEADERS
+    )
+  };
+  if (includeLedger) {
+    value.ledger = analyticsHashRows_(
+      snapshot.ledgerRows,
+      snapshot.ledgerHeaders,
+      CANN.LEDGER_HEADERS
+    );
+  }
+  return sha256Hex_(JSON.stringify(value));
+}
+
+function analyticsHashRows_(rawRows, headers, fields) {
+  return rawRows.map(raw => ({
+    row: raw.canonicalRow,
+    values: fields.map(field => (
+      analyticsHashValue_(value_(raw.cells, headers, field))
+    ))
+  }));
+}
+
+function analyticsHashValue_(value) {
+  if (
+    value &&
+    Object.prototype.toString.call(value) === '[object Date]' &&
+    Number.isFinite(value.getTime())
+  ) {
+    return { type: 'date', value: value.getTime() };
+  }
+  if (value == null) return { type: 'null', value: null };
+  if (typeof value === 'number') return { type: 'number', value: value };
+  if (typeof value === 'boolean') return { type: 'boolean', value: value };
+  return { type: 'string', value: String(value) };
+}
+
+function sha256Hex_(value) {
+  return Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(value),
+    Utilities.Charset.UTF_8
+  ).map(byte => (
+    ('0' + ((Number(byte) + 256) % 256).toString(16)).slice(-2)
+  )).join('');
+}
+
+function isoDayForLocalDate_(dateText) {
+  const day = new Date(
+    localDateOrdinal_(dateText) * 86400000
+  ).getUTCDay();
+  return day === 0 ? 7 : day;
+}
+
+function daysSinceEpochMillis_(epochMillis) {
+  const localDate = Utilities.formatDate(
+    new Date(epochMillis),
+    CANN.TIME_ZONE,
+    'yyyy-MM-dd'
+  );
+  return Math.max(
+    0,
+    localDateOrdinal_(localToday_()) - localDateOrdinal_(localDate)
+  );
+}
+
+function analyticsRounded_(value) {
+  return Math.round(Number(value) * 1000000) / 1000000;
+}
+
+function compareAnalyticsProducts_(left, right) {
+  const leftName = left.name.toLowerCase();
+  const rightName = right.name.toLowerCase();
+  if (leftName < rightName) return -1;
+  if (leftName > rightName) return 1;
+  return left.productId < right.productId
+    ? -1
+    : (left.productId > right.productId ? 1 : 0);
+}
+
+function finalizeAnalyticsResponse_(response, timing) {
+  const duration = Math.max(0, Date.now() - timing.startedAt);
+  timing.serverDurationMs = duration;
+  response.serverDurationMs = duration;
+  return response;
 }
 
 function doPost(e) {

@@ -387,7 +387,10 @@ assert.deepEqual(
 
 assert.equal(api.CANN.PURCHASE_HEADERS.at(-1), 'Last quantity');
 
-const doGetSource = source.slice(source.indexOf('function doGet('), source.indexOf('function doPost('));
+const doGetSource = source.slice(
+  source.indexOf('function doGet('),
+  source.indexOf('// Read-only analytics API'),
+);
 assert.match(doGetSource, /const summaryReady = interactionSummaryReady_\(runtimeConfig\.values\)/);
 assert.match(doGetSource, /const legacyInteractions = summaryReady \? null : latestInteractions_\(ss\)/);
 assert.match(

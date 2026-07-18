@@ -1,0 +1,1000 @@
+{
+  "schemaVersion": 1,
+  "harnessVersion": "1.0",
+  "suite": "optimized",
+  "generatedAtUtc": "2026-07-18T17:43:45+00:00",
+  "endpoint": "https://script.google.com/macros/s/AKfycbxHPo_Zet7ctELj-rDl4iZSbDwAOxOWOHHsmVUVyteKzZbrjNDVI3GOKhJN_IX69AinuA/exec",
+  "preflight": {
+    "environment": "SANDBOX",
+    "apiVersion": 2,
+    "productCount": 400,
+    "httpStatus": 200,
+    "wallTimeMs": 4233.554,
+    "selectedProduct": {
+      "productId": "*P1B",
+      "productUuid": "51000000-0000-4000-8000-000000000001",
+      "status": 0
+    },
+    "checks": [
+      {
+        "name": "http_status_200",
+        "passed": true,
+        "actual": 200,
+        "expected": 200
+      },
+      {
+        "name": "json_object",
+        "passed": true,
+        "actual": "dict",
+        "expected": "object"
+      },
+      {
+        "name": "environment_is_sandbox",
+        "passed": true,
+        "actual": "SANDBOX",
+        "expected": "SANDBOX"
+      },
+      {
+        "name": "products_is_array",
+        "passed": true,
+        "actual": "list",
+        "expected": "list"
+      }
+    ]
+  },
+  "configuration": {
+    "namespace": "5752a4e2-e54a-5f9d-9230-3354a437f52c",
+    "suiteExcludedFromUuidGeneration": true,
+    "timestampBase": "2030-01-15T12:00:00",
+    "timeoutSeconds": 60.0,
+    "maxResponseBytes": 512000,
+    "coldIntervalSeconds": 0.0,
+    "counts": {
+      "coldGet": 0,
+      "warmGet": 20,
+      "empty": 0,
+      "warmConsumption": 0,
+      "coldConsumption": 0,
+      "duplicateRetry": 0,
+      "newPurchase": 0,
+      "mixed": 0,
+      "partialRejection": 0,
+      "concurrentPairs": 0
+    }
+  },
+  "correctness": {
+    "passed": true,
+    "totalRecords": 20,
+    "passedRecords": 20,
+    "failedRecords": 0
+  },
+  "summaries": [
+    {
+      "scenario": "get",
+      "temperature": "warm",
+      "operation": "GET",
+      "sampleCount": 20,
+      "correctnessPassedCount": 20,
+      "correctnessFailedCount": 0,
+      "metrics": {
+        "serverDurationMs": {
+          "count": 20,
+          "min": 1181.0,
+          "median": 1720.5,
+          "max": 2503.0,
+          "p95": 2331.0
+        },
+        "getWallTimeMs": {
+          "count": 20,
+          "min": 2773.188,
+          "median": 3569.359,
+          "max": 4541.033,
+          "p95": 4351.722
+        }
+      }
+    }
+  ],
+  "concurrencyPairs": [],
+  "records": [
+    {
+      "sequence": 1,
+      "scenario": "get",
+      "sampleIndex": 0,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1191.0,
+      "getWallTimeMs": 3947.708,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 2,
+      "scenario": "get",
+      "sampleIndex": 1,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1451.0,
+      "getWallTimeMs": 3035.536,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 3,
+      "scenario": "get",
+      "sampleIndex": 2,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2064.0,
+      "getWallTimeMs": 4019.777,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 4,
+      "scenario": "get",
+      "sampleIndex": 3,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1524.0,
+      "getWallTimeMs": 3099.812,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 5,
+      "scenario": "get",
+      "sampleIndex": 4,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2331.0,
+      "getWallTimeMs": 3971.803,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 6,
+      "scenario": "get",
+      "sampleIndex": 5,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1479.0,
+      "getWallTimeMs": 3394.56,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 7,
+      "scenario": "get",
+      "sampleIndex": 6,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2503.0,
+      "getWallTimeMs": 4541.033,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 8,
+      "scenario": "get",
+      "sampleIndex": 7,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2115.0,
+      "getWallTimeMs": 4351.722,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 9,
+      "scenario": "get",
+      "sampleIndex": 8,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1873.0,
+      "getWallTimeMs": 3982.751,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 10,
+      "scenario": "get",
+      "sampleIndex": 9,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1181.0,
+      "getWallTimeMs": 2773.188,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 11,
+      "scenario": "get",
+      "sampleIndex": 10,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1917.0,
+      "getWallTimeMs": 3532.607,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 12,
+      "scenario": "get",
+      "sampleIndex": 11,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2236.0,
+      "getWallTimeMs": 3669.282,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 13,
+      "scenario": "get",
+      "sampleIndex": 12,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1285.0,
+      "getWallTimeMs": 2902.531,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 14,
+      "scenario": "get",
+      "sampleIndex": 13,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1381.0,
+      "getWallTimeMs": 3050.636,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 15,
+      "scenario": "get",
+      "sampleIndex": 14,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1225.0,
+      "getWallTimeMs": 2944.733,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 16,
+      "scenario": "get",
+      "sampleIndex": 15,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1743.0,
+      "getWallTimeMs": 3606.11,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 17,
+      "scenario": "get",
+      "sampleIndex": 16,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1563.0,
+      "getWallTimeMs": 2849.175,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 18,
+      "scenario": "get",
+      "sampleIndex": 17,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1977.0,
+      "getWallTimeMs": 3713.239,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 19,
+      "scenario": "get",
+      "sampleIndex": 18,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 2229.0,
+      "getWallTimeMs": 3994.889,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    },
+    {
+      "sequence": 20,
+      "scenario": "get",
+      "sampleIndex": 19,
+      "operation": "GET",
+      "temperature": "warm",
+      "idleBeforeSeconds": 0.0,
+      "serverDurationMs": 1698.0,
+      "getWallTimeMs": 3504.136,
+      "httpStatus": 200,
+      "response": {
+        "apiVersion": 2,
+        "environment": "SANDBOX",
+        "productCount": 400
+      },
+      "transportError": null,
+      "jsonError": null,
+      "checks": [
+        {
+          "name": "http_status_200",
+          "passed": true,
+          "actual": 200,
+          "expected": 200
+        },
+        {
+          "name": "json_object",
+          "passed": true,
+          "actual": "dict",
+          "expected": "object"
+        },
+        {
+          "name": "environment_is_sandbox",
+          "passed": true,
+          "actual": "SANDBOX",
+          "expected": "SANDBOX"
+        },
+        {
+          "name": "products_is_array",
+          "passed": true,
+          "actual": "list",
+          "expected": "list"
+        }
+      ],
+      "correctnessPassed": true
+    }
+  ]
+}

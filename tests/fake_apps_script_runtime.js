@@ -210,6 +210,20 @@ function buildConfigRows(options = {}) {
       'Purchases interaction-summary version',
     ]);
   }
+  if (options.recoverableSyncApplyVersion !== undefined) {
+    rows.push([
+      'RECOVERABLE_SYNC_APPLY_VERSION',
+      options.recoverableSyncApplyVersion,
+      'Recoverable sync apply version',
+    ]);
+  }
+  if (options.pendingApplyKey !== undefined) {
+    rows.push([
+      'PENDING_APPLY_KEY',
+      options.pendingApplyKey,
+      'Pending recoverable apply pointer',
+    ]);
+  }
   return rows;
 }
 
@@ -1491,6 +1505,24 @@ function createAppsScriptRuntime(options = {}) {
           byte > 127 ? byte - 256 : byte
         ));
         audit.record('services', { service: 'Utilities', method: 'computeDigest', algorithm });
+        return bytes;
+      },
+      base64EncodeWebSafe(value) {
+        const encoded = Buffer.from(String(value), 'utf8')
+          .toString('base64')
+          .replace(/\+/g, '-')
+          .replace(/\//g, '_');
+        audit.record('services', { service: 'Utilities', method: 'base64EncodeWebSafe' });
+        return encoded;
+      },
+      base64DecodeWebSafe(value) {
+        const normalized = String(value)
+          .replace(/-/g, '+')
+          .replace(/_/g, '/');
+        const bytes = Array.from(Buffer.from(normalized, 'base64'), byte => (
+          byte > 127 ? byte - 256 : byte
+        ));
+        audit.record('services', { service: 'Utilities', method: 'base64DecodeWebSafe' });
         return bytes;
       },
       formatDate(date, timeZone, format) {
