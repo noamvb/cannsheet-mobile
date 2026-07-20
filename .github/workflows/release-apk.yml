@@ -37,6 +37,11 @@ jobs:
           test -n "$app_version"
           test "$app_version" = "$tag_version"
 
+      - name: Run unit tests and lint
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest lintDebug
+
       - name: Validate release secrets
         shell: bash
         env:

@@ -192,6 +192,68 @@ class DatabaseMigrationTest {
         version5.close()
     }
 
+    @Test
+    fun migrationFrom5To6PreservesExistingDataAndAddsAnalyticsCache() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version5 = factory.create(configuration(5, object : SupportSQLiteOpenHelper.Callback(5) {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)")
+                db.execSQL(
+                    "CREATE TABLE purchase_actions (tempId TEXT NOT NULL PRIMARY KEY, actionId TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE consumption_actions " +
+                        "(id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, eventId TEXT NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE product_interactions " +
+                        "(productId TEXT NOT NULL PRIMARY KEY, lastLoggedAtEpochMillis INTEGER NOT NULL, " +
+                        "lastQuantity REAL NOT NULL)",
+                )
+                db.execSQL(
+                    "CREATE TABLE sync_request_state " +
+                        "(id INTEGER NOT NULL PRIMARY KEY, requestId TEXT NOT NULL, " +
+                        "createdAtEpochMillis INTEGER NOT NULL)",
+                )
+                db.execSQL("INSERT INTO products VALUES ('p1', 'Keep me')")
+                db.execSQL("INSERT INTO purchase_actions VALUES ('temp-1', 'action-1')")
+                db.execSQL("INSERT INTO consumption_actions (eventId) VALUES ('event-1')")
+                db.execSQL("INSERT INTO product_interactions VALUES ('p1', 123456, 1)")
+                db.execSQL("INSERT INTO sync_request_state VALUES (1, 'request-1', 123456)")
+            }
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }))
+        version5.writableDatabase
+        version5.close()
+
+        val version6 = factory.create(configuration(6, object : SupportSQLiteOpenHelper.Callback(6) {
+            override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                AppDatabase.MIGRATION_5_6.migrate(db)
+            }
+        }))
+        val migrated = version6.writableDatabase
+
+        listOf(
+            "products",
+            "purchase_actions",
+            "consumption_actions",
+            "product_interactions",
+            "sync_request_state",
+        ).forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM `$table`").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(1, cursor.getInt(0))
+            }
+        }
+        migrated.query(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'analytics_cache'",
+        ).use { cursor -> assertTrue(cursor.moveToFirst()) }
+        version6.close()
+    }
+
     private fun configuration(
         version: Int,
         callback: SupportSQLiteOpenHelper.Callback,

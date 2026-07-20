@@ -114,6 +114,9 @@ interface GasApiService {
     @GET
     suspend fun getProducts(@Url url: String): okhttp3.ResponseBody
 
+    @GET
+    suspend fun getAnalytics(@Url url: String): okhttp3.ResponseBody
+
     @POST
     suspend fun syncData(@Url url: String, @Body payload: SyncPayload): okhttp3.ResponseBody
 }

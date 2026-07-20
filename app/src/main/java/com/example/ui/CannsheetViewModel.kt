@@ -6,11 +6,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
 import com.example.data.AppDatabase
+import com.example.data.AnalyticsRepository
 import com.example.data.CannsheetRepository
 import com.example.data.ConsumptionAction
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.GasApiService
 import com.example.data.GasProductResponse
+import com.example.data.HistoryFilters
+import com.example.data.InsightsRange
 import com.example.data.Product
 import com.example.data.ProductInteraction
 import com.example.data.ProductStatus
@@ -61,6 +64,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         AppDatabase.MIGRATION_2_3,
         AppDatabase.MIGRATION_3_4,
         AppDatabase.MIGRATION_4_5,
+        AppDatabase.MIGRATION_5_6,
     ).build()
 
     private val repository = CannsheetRepository(db)
@@ -81,6 +85,20 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         .addConverterFactory(MoshiConverterFactory.create(moshi))
         .build()
         .create(GasApiService::class.java)
+
+    private val analyticsCoordinator = AnalyticsCoordinator(
+        repository = AnalyticsRepository(
+            api = apiService,
+            dao = db.cannsheetDao(),
+            moshi = moshi,
+            endpoint = BuildConfig.GAS_URL,
+            environment = BuildConfig.APP_ENVIRONMENT,
+        ),
+        scope = viewModelScope,
+    )
+
+    val insightsState: StateFlow<InsightsUiState> = analyticsCoordinator.insights
+    val historyState: StateFlow<HistoryUiState> = analyticsCoordinator.history
 
     private val _gasUrl = MutableStateFlow(BuildConfig.GAS_URL)
     val gasUrl: StateFlow<String> = _gasUrl
@@ -122,6 +140,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _syncStatus = MutableStateFlow<String?>(null)
     val syncStatus: StateFlow<String?> = _syncStatus
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing
 
     private val _submissionTimer = MutableStateFlow(5)
     val submissionTimer: StateFlow<Int> = _submissionTimer
@@ -360,6 +381,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             syncMutex.withLock {
+                _isSyncing.value = true
                 _syncStatus.value = "Syncing..."
                 try {
                     val pendingPurchases = repository.getPendingPurchases()
@@ -443,14 +465,35 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                         plan.hasAcknowledgements -> "Sync successful"
                         else -> "Sync completed without acknowledgements"
                     }
-                    if (plan.hasAcknowledgements) fetchProducts()
+                    if (plan.hasAcknowledgements) {
+                        fetchProducts()
+                        analyticsCoordinator.markStale()
+                    }
                 } catch (error: Exception) {
                     // No queue rows are removed on network, parsing, or request failure.
                     _syncStatus.value = syncFailureStatus(error)
+                } finally {
+                    _isSyncing.value = false
                 }
             }
         }
     }
+
+    fun onInsightsVisible() = analyticsCoordinator.onVisible()
+
+    fun onInsightsHidden() = analyticsCoordinator.onHidden()
+
+    fun onHistoryVisible() = analyticsCoordinator.onHistoryVisible()
+
+    fun onOverviewVisible() = analyticsCoordinator.onOverviewVisible()
+
+    fun refreshInsights(range: InsightsRange = insightsState.value.displayedRange) =
+        analyticsCoordinator.refreshInsights(range)
+
+    fun refreshHistory(filters: HistoryFilters = historyState.value.appliedFilters) =
+        analyticsCoordinator.refreshHistory(filters)
+
+    fun loadMoreHistory() = analyticsCoordinator.loadMoreHistory()
 
     fun clearSyncStatus() {
         _syncStatus.value = null

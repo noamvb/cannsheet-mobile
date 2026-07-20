@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,12 +30,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 
 sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
-    object Consumption : Screen("consumption", "Log Consumption", { Icon(Icons.Filled.List, contentDescription = "Consumption") })
-    object Purchase : Screen("purchase", "Add Purchase", { Icon(Icons.Filled.AddShoppingCart, contentDescription = "Purchase") })
+    object Consumption : Screen("consumption", "Log", { Icon(Icons.Filled.List, contentDescription = "Consumption") })
+    object Purchase : Screen("purchase", "Purchase", { Icon(Icons.Filled.AddShoppingCart, contentDescription = "Purchase") })
+    object Insights : Screen("insights", "Insights", { Icon(Icons.Filled.Insights, contentDescription = "Insights") })
     object Settings : Screen("settings", "Settings", { Icon(Icons.Filled.Settings, contentDescription = "Settings") })
 }
 
-val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Settings)
+val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.Settings)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +81,7 @@ fun CannsheetApp(viewModel: CannsheetViewModel = viewModel()) {
             NavHost(navController, startDestination = Screen.Consumption.route) {
                 composable(Screen.Consumption.route) { ConsumptionScreen(viewModel) }
                 composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
+                composable(Screen.Insights.route) { InsightsScreen(viewModel) }
                 composable(Screen.Settings.route) { SettingsScreen(viewModel) }
             }
 

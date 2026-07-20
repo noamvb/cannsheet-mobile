@@ -78,6 +78,21 @@ data class SyncRequestState(
     }
 }
 
+@Entity(
+    tableName = "analytics_cache",
+    primaryKeys = ["environment", "resource"],
+)
+data class AnalyticsCacheEntity(
+    val environment: String,
+    val resource: String,
+    val analyticsVersion: Int,
+    val requestJson: String,
+    val payloadJson: String,
+    val sourceDataVersion: String,
+    val generatedAtEpochMillis: Long,
+    val cachedAtEpochMillis: Long,
+)
+
 @Dao
 interface CannsheetDao {
     @Query("SELECT * FROM products ORDER BY name ASC")
@@ -159,6 +174,21 @@ interface CannsheetDao {
     @Query("DELETE FROM sync_request_state")
     suspend fun clearSyncRequestState()
 
+    @Query(
+        "SELECT * FROM analytics_cache " +
+            "WHERE environment = :environment AND resource = :resource LIMIT 1",
+    )
+    suspend fun getAnalyticsCache(environment: String, resource: String): AnalyticsCacheEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAnalyticsCache(cache: AnalyticsCacheEntity)
+
+    @Query(
+        "DELETE FROM analytics_cache " +
+            "WHERE environment = :environment AND resource = :resource",
+    )
+    suspend fun deleteAnalyticsCache(environment: String, resource: String)
+
     @Transaction
     suspend fun replaceProductsAndMergeInteractions(
         products: List<Product>,
@@ -228,8 +258,9 @@ interface CannsheetDao {
         ConsumptionAction::class,
         ProductInteraction::class,
         SyncRequestState::class,
+        AnalyticsCacheEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -307,6 +338,26 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("DELETE FROM `purchase_actions`")
                 db.execSQL("DELETE FROM `consumption_actions`")
                 db.execSQL("DELETE FROM `sync_request_state`")
+            }
+        }
+
+        val MIGRATION_5_6: Migration = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `analytics_cache` (
+                        `environment` TEXT NOT NULL,
+                        `resource` TEXT NOT NULL,
+                        `analyticsVersion` INTEGER NOT NULL,
+                        `requestJson` TEXT NOT NULL,
+                        `payloadJson` TEXT NOT NULL,
+                        `sourceDataVersion` TEXT NOT NULL,
+                        `generatedAtEpochMillis` INTEGER NOT NULL,
+                        `cachedAtEpochMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`environment`, `resource`)
+                    )
+                    """.trimIndent(),
+                )
             }
         }
     }
