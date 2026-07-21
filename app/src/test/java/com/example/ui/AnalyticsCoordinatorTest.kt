@@ -12,6 +12,9 @@ import com.example.data.InsightsResponseDto
 import com.example.data.QualityWarningsDto
 import com.example.data.SourceRevisionDto
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -22,6 +25,26 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnalyticsCoordinatorTest {
+    @Test
+    fun replacingAnInsightsRangeDoesNotShowCancellationAsAnError() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.refreshInsights(InsightsRange.Default)
+            repository.nextInsightsRequest()
+
+            coordinator.refreshInsights(InsightsRange.All)
+            repository.nextInsightsRequest()
+            yield()
+
+            assertEquals(InsightsRange.All, coordinator.insights.value.pendingRange)
+            assertEquals(null, coordinator.insights.value.error)
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
     @Test
     fun loadMoreIsIgnoredWhileFirstPageRefreshIsRunning() = runBlocking {
         val repository = ControlledAnalyticsDataSource()
@@ -145,11 +168,20 @@ class AnalyticsCoordinatorTest {
         val response: CompletableDeferred<HistoryResponseDto>,
     )
 
+    private data class InsightsRequest(
+        val range: InsightsRange,
+        val response: CompletableDeferred<InsightsResponseDto>,
+    )
+
     private class ControlledAnalyticsDataSource : AnalyticsDataSource {
         private val historyRequests = Channel<HistoryRequest>(Channel.UNLIMITED)
+        private val insightsRequests = Channel<InsightsRequest>(Channel.UNLIMITED)
 
-        override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto =
-            error("Insights are not used by these tests")
+        override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto {
+            val response = CompletableDeferred<InsightsResponseDto>()
+            insightsRequests.send(InsightsRequest(range, response))
+            return response.await()
+        }
 
         override suspend fun fetchHistory(
             filters: HistoryFilters,
@@ -171,6 +203,9 @@ class AnalyticsCoordinatorTest {
 
         suspend fun nextHistoryRequest(): HistoryRequest =
             withTimeout(2_000) { historyRequests.receive() }
+
+        suspend fun nextInsightsRequest(): InsightsRequest =
+            withTimeout(2_000) { insightsRequests.receive() }
 
         fun hasQueuedHistoryRequest(): Boolean =
             historyRequests.tryReceive().isSuccess

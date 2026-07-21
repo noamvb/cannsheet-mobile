@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -245,8 +246,13 @@ internal fun InsightsContent(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 NativeBarChart(
-                    data.spending.byMonth.map { it.month to it.personalSpendCents.coerceAtMost(Int.MAX_VALUE.toLong()).toInt() },
+                    data.spending.byMonth.map {
+                        formatChartMonth(it.month) to
+                            it.personalSpendCents.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    },
                     "monthly personal spending in cents",
+                    valueLabel = { cad(it.toLong()) },
+                    minimumCellWidth = 64.dp,
                 )
             }
         }
@@ -263,8 +269,13 @@ internal fun InsightsContent(
         }
         if (data.byType.isNotEmpty()) {
             item {
-                SectionCard("By type") {
-                    NativeBarChart(data.byType.map { it.type to it.rangeLogCount }, "logs by type")
+                SectionCard("Uses by type") {
+                    NativeBarChart(
+                        data.byType.map { it.type to it.rangeLogCount },
+                        "uses by product type",
+                        valueLabel = { "${formatWholeNumber(it)} uses" },
+                        minimumCellWidth = 64.dp,
+                    )
                 }
             }
         }
@@ -492,36 +503,58 @@ private fun SectionCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun NativeBarChart(values: List<Pair<String, Int>>, description: String) {
+private fun NativeBarChart(
+    values: List<Pair<String, Int>>,
+    description: String,
+    valueLabel: (Int) -> String = { formatWholeNumber(it) },
+    minimumCellWidth: androidx.compose.ui.unit.Dp = 48.dp,
+) {
     if (values.isEmpty()) {
         Text("No data")
         return
     }
     val max = values.maxOf { it.second }.coerceAtLeast(1)
     var selected by remember(values) { mutableStateOf<Pair<String, Int>?>(null) }
-    selected?.let { Text("${it.first}: ${it.second}") }
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).heightIn(min = 130.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.Bottom,
-    ) {
-        values.forEach { (label, value) ->
-            Column(
-                Modifier
-                    .width(34.dp)
-                    .clickable { selected = label to value }
-                    .semantics { contentDescription = "$description, $label, $value" },
-                horizontalAlignment = Alignment.CenterHorizontally,
+    selected?.let { Text("${it.first}: ${valueLabel(it.second)}") }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val chartWidth = maxOf(maxWidth, minimumCellWidth * values.size)
+        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            Row(
+                Modifier.width(chartWidth).heightIn(min = 130.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Text(value.toString(), style = MaterialTheme.typography.labelSmall)
-                Box(
-                    Modifier
-                        .width(24.dp)
-                        .height((20 + 80 * value / max).dp)
-                        .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
-                        .background(MaterialTheme.colorScheme.primary),
-                )
-                Text(label.take(7), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelSmall)
+                values.forEach { (label, value) ->
+                    Column(
+                        Modifier
+                            .width(minimumCellWidth)
+                            .clickable { selected = label to value }
+                            .semantics {
+                                contentDescription = "$description, $label, ${valueLabel(value)}"
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            valueLabel(value),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Box(
+                            Modifier
+                                .width(24.dp)
+                                .height((20 + 80 * value / max).dp)
+                                .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
+                                .background(MaterialTheme.colorScheme.primary),
+                        )
+                        Text(
+                            label,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             }
         }
     }
@@ -698,14 +731,7 @@ private fun ProductAnalyticsSheet(product: AnalyticsProductDto, onDismiss: () ->
             product.costPerLogToDateCents?.let { Text("Cost per log: ${cad(it)}") }
             product.costPerRecordedUnitToDateCents?.let { Text("Cost per recorded unit: ${cad(it)}") }
             product.grams?.let { Text("Grams: ${formatDecimal(it)}") }
-            Text(
-                when (product.thcQuality) {
-                    "RECORDED_PERCENT" -> "THC: ${product.thcRaw?.let(::formatDecimal)}%"
-                    "AMBIGUOUS_SCALE" -> "THC: needs scale review"
-                    "INVALID" -> "THC: invalid source value"
-                    else -> "THC: unknown"
-                },
-            )
+            Text(formatThc(product.thcRaw, product.thcQuality))
             Spacer(Modifier.height(20.dp))
         }
     }
@@ -882,6 +908,25 @@ private fun hasHistoryFilters(filters: HistoryFilters) =
 
 private fun cad(cents: Long): String =
     NumberFormat.getCurrencyInstance(Locale.CANADA).format(cents / 100.0)
+
+internal fun formatChartMonth(month: String): String =
+    if (Regex("""\d{4}-\d{2}""").matches(month)) "${month.takeLast(2)}/${month.take(4)}" else month
+
+internal fun formatWholeNumber(value: Int): String =
+    NumberFormat.getIntegerInstance(Locale.CANADA).format(value)
+
+internal fun formatThc(raw: Double?, quality: String): String = when (quality) {
+    "RECORDED_PERCENT" -> "THC: ${raw?.let(::formatDecimal) ?: "unknown"}%"
+    // Older cached analytics classified normal Sheets percentage values (for example,
+    // 0.75 for 75%) as ambiguous. Keep those caches readable after the backend fix.
+    "AMBIGUOUS_SCALE" -> if (raw != null && raw > 0.0 && raw <= 1.0) {
+        "THC: ${formatDecimal(raw * 100.0)}%"
+    } else {
+        "THC: needs scale review"
+    }
+    "INVALID" -> "THC: invalid source value"
+    else -> "THC: unknown"
+}
 
 private fun formatDecimal(value: Double): String =
     if (value % 1.0 == 0.0) value.toInt().toString()

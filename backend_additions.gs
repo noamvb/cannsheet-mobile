@@ -652,8 +652,9 @@ function normalizeAnalyticsProducts_(snapshot, quality) {
       if (borrowed.value) quality.unknownBorrowedCostCount++;
       else quality.unknownPersonalCostCount++;
     }
-    const thcRaw = optionalFiniteNumber_(value_(row, headers, 'THC%'));
-    const thcQuality = classifyThc_(value_(row, headers, 'THC%'));
+    const thc = normalizeThc_(value_(row, headers, 'THC%'));
+    const thcRaw = thc.value;
+    const thcQuality = thc.quality;
     if (thcQuality === 'AMBIGUOUS_SCALE') quality.ambiguousThcCount++;
     if (thcQuality === 'INVALID') quality.invalidThcCount++;
     const grams = optionalFiniteNumber_(value_(row, headers, 'Grams'));
@@ -913,13 +914,21 @@ function strictPostTax_(value) {
   return { known: false, value: null };
 }
 
-function classifyThc_(value) {
-  if (value == null || value === '') return 'UNKNOWN';
+function normalizeThc_(value) {
+  if (value == null || value === '') {
+    return { value: null, quality: 'UNKNOWN' };
+  }
   const number = Number(value);
-  if (!Number.isFinite(number) || number < 0 || number > 100) return 'INVALID';
-  if (number === 0) return 'UNKNOWN';
-  if (number <= 1) return 'AMBIGUOUS_SCALE';
-  return 'RECORDED_PERCENT';
+  if (!Number.isFinite(number) || number < 0 || number > 100) {
+    return { value: null, quality: 'INVALID' };
+  }
+  if (number === 0) return { value: null, quality: 'UNKNOWN' };
+  // Google Sheets stores a percentage-formatted 75% cell as the number 0.75.
+  // Normalize that storage representation before returning analytics to the app.
+  if (number <= 1) {
+    return { value: analyticsRounded_(number * 100), quality: 'RECORDED_PERCENT' };
+  }
+  return { value: number, quality: 'RECORDED_PERCENT' };
 }
 
 function effectivePurchaseDate_(recordedValue, createdAtValue) {

@@ -14,6 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -110,7 +111,7 @@ class AnalyticsCoordinator(
                     error = null,
                 )
             }
-            runCatching { repository.fetchInsights(range) }
+            runCatchingCancellable { repository.fetchInsights(range) }
                 .onSuccess { response ->
                     insightsLoaded = true
                     _insights.value = InsightsUiState(
@@ -160,7 +161,7 @@ class AnalyticsCoordinator(
                     appendError = null,
                 )
             }
-            runCatching { repository.fetchHistory(filters) }
+            runCatchingCancellable { repository.fetchHistory(filters) }
                 .onSuccess { response ->
                     if (generation != historyGeneration) return@onSuccess
                     historyLoaded = true
@@ -195,7 +196,7 @@ class AnalyticsCoordinator(
         val generation = historyGeneration
         _history.update { it.copy(isLoadingMore = true, appendError = null) }
         historyAppendJob = scope.launch {
-            runCatching { repository.fetchHistory(current.appliedFilters, cursor) }
+            runCatchingCancellable { repository.fetchHistory(current.appliedFilters, cursor) }
                 .onSuccess { response ->
                     if (generation != historyGeneration) return@onSuccess
                     val firstVersion = current.response?.sourceRevision?.dataVersion
@@ -322,6 +323,15 @@ class AnalyticsCoordinator(
         )
     }
 }
+
+private suspend inline fun <T> runCatchingCancellable(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
 
 fun analyticsUiError(error: Throwable): AnalyticsUiError {
     if (error is AnalyticsApiException) {

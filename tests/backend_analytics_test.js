@@ -402,6 +402,8 @@ function assertNoMutation(runtime) {
   assert.equal(beta.purchaseDateSource, 'CREATED_AT_FALLBACK');
   assert.equal(beta.finalCostCents, 2000);
   assert.equal(beta.costPerLogToDateCents, null);
+  assert.equal(beta.thcRaw, 50);
+  assert.equal(beta.thcQuality, 'RECORDED_PERCENT');
   assert.equal(response.syncHealth.acknowledgedRequestCount30d, 3);
   assert.equal(response.syncHealth.partialRequestCount30d, 1);
   assert.equal(response.syncHealth.medianDurationMs30d, 200);
@@ -414,7 +416,7 @@ function assertNoMutation(runtime) {
     unknownPurchaseDateCount: 1,
     unknownPersonalCostCount: 1,
     unknownBorrowedCostCount: 0,
-    ambiguousThcCount: 1,
+    ambiguousThcCount: 0,
     invalidThcCount: 1,
     invalidGramsCount: 1,
     unknownStatusCount: 1,

@@ -42,4 +42,16 @@ class AnalyticsUiHelpersTest {
             customRangeForDays(30, "2026-07-18"),
         )
     }
+
+    @Test
+    fun spendingChartUsesCompactDatesAndReadableAmounts() {
+        assertEquals("07/2026", formatChartMonth("2026-07"))
+        assertEquals("2,486", formatWholeNumber(2486))
+    }
+
+    @Test
+    fun fractionalSheetPercentageIsShownAsARealPercent() {
+        assertEquals("THC: 75%", formatThc(0.75, "AMBIGUOUS_SCALE"))
+        assertEquals("THC: 24%", formatThc(24.0, "RECORDED_PERCENT"))
+    }
 }
