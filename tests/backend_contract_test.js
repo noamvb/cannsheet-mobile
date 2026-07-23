@@ -23,7 +23,8 @@ const source = fs.readFileSync('backend_additions.gs', 'utf8');
 vm.runInContext(
   source + `\nthis.testApi = {
     deterministicLegacyEventUuid_, firstDuplicate_, isUuid_,
-    validateV2Consumption_, stagePurchases_, validateRequestEnvironment_,
+    validateV2Consumption_, validateV2FinishAction_, stagePurchases_, validateRequestEnvironment_,
+    recoverableSyncApplyReady_,
     newBackendTiming_, recordBackendPhase_, backendTimingRecord_, addServerTimingFields_,
     preflightSyncRequest_, calculateProductEffects_, timestampMillisOrNull_,
     productContext_, appendPurchaseRows_, applyProductEffects_,
@@ -45,6 +46,8 @@ assert.equal(api.firstDuplicate_(['a', 'b', 'a']), 'a');
 assert.equal(api.firstDuplicate_(['a', 'b']), '');
 assert.equal(api.isUuid_('b0f88bb2-5d82-46e1-92a7-0188e95ba3a6'), true);
 assert.equal(api.isUuid_('temp_12345678'), false);
+assert.equal(api.recoverableSyncApplyReady_({ RECOVERABLE_SYNC_APPLY_VERSION: 1 }), true);
+assert.equal(api.recoverableSyncApplyReady_({ RECOVERABLE_SYNC_APPLY_VERSION: 0 }), false);
 
 const invalidConsumption = api.validateV2Consumption_({
   eventId: 'not-a-uuid',
@@ -52,6 +55,22 @@ const invalidConsumption = api.validateV2Consumption_({
   uses: 1,
 }, 0);
 assert.equal(invalidConsumption.code, 'INVALID_ITEM');
+
+const invalidFinishAction = api.validateV2FinishAction_({
+  actionId: 'not-a-uuid',
+  date: '2025-05-04',
+  time: '12:00:00',
+  productId: '*P1',
+}, 0);
+assert.equal(invalidFinishAction.code, 'INVALID_ITEM');
+
+const invalidFinishTimestamp = api.validateV2FinishAction_({
+  actionId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+  date: '2025-02-30',
+  time: '25:61:00',
+  productId: '*P1',
+}, 0);
+assert.equal(invalidFinishTimestamp.code, 'INVALID_ITEM');
 
 const existing = {
   byLegacyId: {
@@ -111,6 +130,15 @@ const validEmptyPreflight = api.preflightSyncRequest_({
 assert.equal(validEmptyPreflight.failure, null);
 assert.equal(validEmptyPreflight.purchases.length, 0);
 assert.equal(validEmptyPreflight.consumptions.length, 0);
+assert.equal(validEmptyPreflight.finishActions.length, 0);
+
+const legacyFinishPreflight = api.preflightSyncRequest_({
+  purchases: [],
+  consumptions: [],
+  finishActions: [],
+}, 1);
+assert.equal(legacyFinishPreflight.failure.code, 'INVALID_ITEM');
+assert.match(legacyFinishPreflight.failure.message, /apiVersion 2/);
 
 const invalidRequestPreflight = api.preflightSyncRequest_({ purchases: [], consumptions: [] }, 2);
 assert.equal(invalidRequestPreflight.failure.code, 'INVALID_ITEM');
@@ -131,6 +159,24 @@ const oversizedPreflight = api.preflightSyncRequest_({
 }, 2);
 assert.equal(oversizedPreflight.failure.code, 'INVALID_ITEM');
 assert.match(oversizedPreflight.failure.message, /maximum size/);
+
+const oversizedFinishPreflight = api.preflightSyncRequest_({
+  requestId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+  purchases: [],
+  consumptions: [],
+  finishActions: Array.from({ length: 101 }, () => ({})),
+}, 2);
+assert.equal(oversizedFinishPreflight.failure.code, 'INVALID_ITEM');
+assert.match(oversizedFinishPreflight.failure.message, /maximum size/);
+
+const duplicateFinishPreflight = api.preflightSyncRequest_({
+  requestId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+  purchases: [{ actionId: 'c0f88bb2-5d82-46e1-92a7-0188e95ba3a6' }],
+  consumptions: [],
+  finishActions: [{ actionId: 'c0f88bb2-5d82-46e1-92a7-0188e95ba3a6' }],
+}, 2);
+assert.equal(duplicateFinishPreflight.failure.code, 'INVALID_ITEM');
+assert.match(duplicateFinishPreflight.failure.message, /Duplicate UUID inside request/);
 
 const effectProduct = {
   rowNumber: 7,
@@ -436,7 +482,7 @@ assert.doesNotMatch(ledgerSource, /readDataRows_/);
 assert.doesNotMatch(ledgerSource, /\.getValues\(\)/);
 assert.doesNotMatch(ledgerSource, /\.getLastRow\(\)/);
 
-const productEffectsSource = source.slice(source.indexOf('function applyProductEffects_('), source.indexOf('function calculateProductEffects_('));
+const productEffectsSource = source.slice(source.indexOf('function applyProductEffects_('), source.indexOf('function applyFinishActions_('));
 assert.equal((productEffectsSource.match(/\.setValue\(/g) || []).length, 5);
 assert.match(productEffectsSource, /if \(headers\['Last quantity'\] !== undefined\)/);
 assert.doesNotMatch(productEffectsSource, /setValues\(/);

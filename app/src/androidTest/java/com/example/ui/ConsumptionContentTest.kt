@@ -4,6 +4,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -44,6 +45,7 @@ class ConsumptionContentTest {
                         loggedProductId = productId
                         loggedQuantity = quantity
                     },
+                    onFinishWithoutConsumption = {},
                 )
             }
         }
@@ -76,6 +78,7 @@ class ConsumptionContentTest {
                     },
                     onIncludeUnopenedChange = {},
                     onLog = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
                 )
             }
         }
@@ -84,6 +87,102 @@ class ConsumptionContentTest {
 
         composeRule.runOnIdle {
             assertEquals("4", formState.quantityText)
+        }
+    }
+
+    @Test
+    fun finishWithoutConsumptionOnlyCallsCallbackAfterConfirmation() {
+        val product = Product("p1", "Blue Dream", "F", 0)
+        var finishedProductId: String? = null
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0, 2.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = { finishedProductId = it },
+                )
+            }
+        }
+
+        composeRule.onNode(
+            hasText("Finish without logging consumption") and hasClickAction(),
+        ).performScrollTo().performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(null, finishedProductId)
+        }
+        composeRule.onNode(hasText("Finish Blue Dream?")).assertIsDisplayed()
+
+        composeRule.onNode(hasText("Finish product") and hasClickAction()).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(product.id, finishedProductId)
+        }
+    }
+
+    @Test
+    fun unopenedProductCanBeFinishedWithoutConsumption() {
+        val product = Product("p1", "Blue Dream", "F", 2)
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0, 2.0),
+                    includeUnopened = true,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(
+            hasText("Finish without logging consumption") and hasClickAction(),
+        ).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun cancellingFinishWithoutConsumptionDoesNotCallCallback() {
+        val product = Product("p1", "Blue Dream", "F", 0)
+        var finishedProductId: String? = null
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0, 2.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = { finishedProductId = it },
+                )
+            }
+        }
+
+        composeRule.onNode(
+            hasText("Finish without logging consumption") and hasClickAction(),
+        ).performScrollTo().performClick()
+        composeRule.onNode(hasText("Cancel") and hasClickAction()).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(null, finishedProductId)
         }
     }
 }

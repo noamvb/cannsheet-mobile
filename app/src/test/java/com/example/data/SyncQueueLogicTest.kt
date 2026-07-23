@@ -9,6 +9,7 @@ class SyncQueueLogicTest {
     private val snapshot = QueuedSyncSnapshot(
         purchaseActionIds = setOf("purchase-1", "purchase-2"),
         consumptionEventIds = setOf("event-1", "event-2"),
+        finishActionIds = setOf("finish-1", "finish-2"),
         purchaseActionIdByTempId = mapOf("temp-1" to "purchase-1", "temp-2" to "purchase-2"),
     )
 
@@ -30,12 +31,19 @@ class SyncQueueLogicTest {
             rejectedConsumptions = listOf(
                 RejectedConsumption("event-2", "UNKNOWN_PRODUCT", "missing product"),
             ),
+            acknowledgedFinishActions = listOf(
+                AcknowledgedFinishAction("finish-1", "committed"),
+            ),
+            rejectedFinishActions = listOf(
+                RejectedFinishAction("finish-2", "UNKNOWN_PRODUCT", "missing product"),
+            ),
         )
 
         val plan = buildAcknowledgementPlan(snapshot, response)
 
         assertEquals(setOf("purchase-1"), plan.acknowledgedPurchaseActionIds)
         assertEquals(setOf("event-1"), plan.acknowledgedConsumptionEventIds)
+        assertEquals(setOf("finish-1"), plan.acknowledgedFinishActionIds)
         assertEquals("*P1", plan.purchaseRemaps.single().legacyProductId)
         assertTrue(plan.hasRejections)
     }
@@ -51,6 +59,8 @@ class SyncQueueLogicTest {
 
         assertEquals(snapshot.purchaseActionIds, plan.acknowledgedPurchaseActionIds)
         assertEquals(snapshot.consumptionEventIds, plan.acknowledgedConsumptionEventIds)
+        assertTrue(plan.acknowledgedFinishActionIds.isEmpty())
+        assertTrue(plan.finishCapabilityMissing)
         assertEquals("purchase-1", plan.purchaseRemaps.single().actionId)
         assertFalse(plan.hasRejections)
     }
@@ -61,5 +71,42 @@ class SyncQueueLogicTest {
 
         assertFalse(plan.hasAcknowledgements)
         assertTrue(plan.purchaseRemaps.isEmpty())
+    }
+
+    @Test
+    fun v2ResponseFromOldBackendRetainsFinishQueueAndRequestsBackendUpdate() {
+        val response = SyncResponse(
+            success = true,
+            apiVersion = 2,
+            acknowledgedPurchases = emptyList(),
+            acknowledgedConsumptions = emptyList(),
+        )
+
+        val plan = buildAcknowledgementPlan(snapshot, response)
+
+        assertTrue(plan.acknowledgedFinishActionIds.isEmpty())
+        assertTrue(plan.finishCapabilityMissing)
+    }
+
+    @Test
+    fun backendWithoutRecoverableFinishSupportRetainsQueueAndRequestsUpdate() {
+        val response = SyncResponse(
+            success = true,
+            apiVersion = 2,
+            acknowledgedFinishActions = emptyList(),
+            rejectedFinishActions = listOf(
+                RejectedFinishAction(
+                    actionId = "finish-1",
+                    errorCode = "BACKEND_UPDATE_REQUIRED",
+                    message = "Finish actions require recoverable sync support",
+                ),
+            ),
+        )
+
+        val plan = buildAcknowledgementPlan(snapshot, response)
+
+        assertTrue(plan.acknowledgedFinishActionIds.isEmpty())
+        assertEquals(1, plan.rejectedFinishActionCount)
+        assertTrue(plan.finishCapabilityMissing)
     }
 }

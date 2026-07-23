@@ -228,7 +228,18 @@ function payload(ordinal, overrides = {}) {
     environment: 'SANDBOX',
     purchases: overrides.purchases || [],
     consumptions: overrides.consumptions || [consumption],
+    finishActions: overrides.finishActions || [],
   };
+}
+
+function finishAction(ordinal, overrides = {}) {
+  return Object.assign({
+    actionId: deterministicUuid(80000 + ordinal),
+    date: '2025-05-10',
+    time: '13:45:00',
+    productId: '*P1',
+    productUuid: BASE_PRODUCT_UUID,
+  }, overrides);
 }
 
 function dataEntries(runtime, sheetName) {
@@ -606,6 +617,216 @@ exercisePendingFault(FAULTS.LEDGER, 31);
   });
   assert.equal(runtime.audit.batches.length, 0);
   assert.equal(configValue(runtime, 'PENDING_APPLY_KEY'), '');
+}
+
+// Finishing without consumption is a separate projection: it changes only the
+// two finish cells, refreshes the form through the recoverable transaction,
+// and creates neither compatibility nor canonical consumption history.
+{
+  const runtime = buildRuntime();
+  const action = finishAction(1);
+  const requestPayload = payload(80, {
+    consumptions: [],
+    finishActions: [action],
+  });
+  const committed = post(runtime, requestPayload);
+  assert.deepEqual(committed.acknowledgedFinishActions, [{
+    actionId: action.actionId,
+    productUuid: BASE_PRODUCT_UUID,
+    legacyProductId: '*P1',
+    status: 'committed',
+  }]);
+  assert.deepEqual(committed.rejectedFinishActions, []);
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
+  assert.deepEqual(productState(runtime), {
+    status: 1,
+    uses: 2,
+    recentMillis: BASE_RECENT.getTime(),
+    lastQuantity: 0.5,
+    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+  });
+  const purchasesSheetId = runtime.peekSheet('Purchases').getSheetId();
+  const purchaseColumnWrites = runtime.audit.batches
+    .flatMap(batch => batch.effects || [])
+    .filter(effect => effect.sheetId === purchasesSheetId)
+    .map(effect => effect.startColumnIndex)
+    .sort((left, right) => left - right);
+  assert.deepEqual(purchaseColumnWrites, [
+    PURCHASE_HEADERS.indexOf('Finished'),
+    PURCHASE_HEADERS.indexOf('Finished At'),
+  ]);
+  assert.equal(
+    runtime.audit.writes.filter(entry =>
+      ['Form Responses 1', 'ConsumptionEvents'].includes(entry.sheet)
+    ).length,
+    0,
+  );
+
+  runtime.resetAudit();
+  const duplicate = post(runtime, requestPayload);
+  assert.deepEqual(duplicate.acknowledgedFinishActions, [{
+    actionId: action.actionId,
+    productUuid: BASE_PRODUCT_UUID,
+    legacyProductId: '*P1',
+    status: 'duplicate',
+  }]);
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
+  assert.equal(runtime.audit.batches.length, 0);
+  assert.deepEqual(productState(runtime), {
+    status: 1,
+    uses: 2,
+    recentMillis: BASE_RECENT.getTime(),
+    lastQuantity: 0.5,
+    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+  });
+}
+
+// A rejected finish must not cancel independent valid finish work in the same
+// immutable request snapshot.
+{
+  const runtime = buildRuntime();
+  const valid = finishAction(2);
+  const unknown = finishAction(3, {
+    productId: '*UNKNOWN',
+    productUuid: deterministicUuid(89999),
+  });
+  const response = post(runtime, payload(81, {
+    consumptions: [],
+    finishActions: [valid, unknown],
+  }));
+  assert.equal(response.success, true);
+  assert.equal(response.allAccepted, false);
+  assert.equal(response.acknowledgedFinishActions[0].status, 'committed');
+  assert.deepEqual(response.rejectedFinishActions, [{
+    actionId: unknown.actionId,
+    errorCode: 'UNKNOWN_PRODUCT',
+    message: 'Unknown product reference',
+  }]);
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
+  assert.equal(productState(runtime).uses, 2);
+  assert.equal(productState(runtime).lastQuantity, 0.5);
+}
+
+// Finish actions cannot fall back to the non-journal path. With recoverable
+// apply disabled, they are rejected before any product or history-sheet write.
+{
+  const runtime = buildRuntime();
+  runtime.context.setConfigValue_(
+    runtime.spreadsheet,
+    'RECOVERABLE_SYNC_APPLY_VERSION',
+    0,
+    'Recoverable multi-sheet apply version',
+  );
+  const coreSheetsBefore = JSON.stringify([
+    'Purchases', 'Form Responses 1', 'ConsumptionEvents',
+  ].map(name => runtime.peekSheet(name).snapshot()));
+  const action = finishAction(31);
+  const response = post(runtime, payload(83, {
+    consumptions: [],
+    finishActions: [action],
+  }));
+  assert.equal(response.success, true);
+  assert.equal(response.allAccepted, false);
+  assert.deepEqual(response.acknowledgedFinishActions, []);
+  assert.deepEqual(response.rejectedFinishActions, [{
+    actionId: action.actionId,
+    errorCode: 'BACKEND_UPDATE_REQUIRED',
+    message: 'Finish actions require recoverable sync apply; update the backend before retrying',
+  }]);
+  assert.equal(JSON.stringify([
+    'Purchases', 'Form Responses 1', 'ConsumptionEvents',
+  ].map(name => runtime.peekSheet(name).snapshot())), coreSheetsBefore);
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 0 });
+}
+
+// The fallback remains available for ordinary purchases and consumptions in a
+// mixed request; only its finish action is rejected.
+{
+  const runtime = buildRuntime();
+  runtime.context.setConfigValue_(
+    runtime.spreadsheet,
+    'RECOVERABLE_SYNC_APPLY_VERSION',
+    0,
+    'Recoverable multi-sheet apply version',
+  );
+  const action = finishAction(32);
+  const requestPayload = payload(84, { finishActions: [action] });
+  const response = post(runtime, requestPayload);
+  assert.deepEqual(response.acknowledgedConsumptions, [{
+    eventId: requestPayload.consumptions[0].eventId,
+    status: 'committed',
+  }]);
+  assert.equal(response.rejectedFinishActions[0].errorCode, 'BACKEND_UPDATE_REQUIRED');
+  assertCounts(runtime, { responses: 1, events: 1, ledgers: 1, journals: 0 });
+  assert.deepEqual(productState(runtime), {
+    status: 0,
+    uses: 3,
+    recentMillis: eventMillis(requestPayload),
+    lastQuantity: 1,
+    finishedMillis: null,
+  });
+}
+
+// A finish can target a purchase staged in that same request. It still must
+// not create consumption rows or usage summary writes.
+{
+  const runtime = buildRuntime();
+  const purchaseActionId = deterministicUuid(81001);
+  const finish = finishAction(4, {
+    productId: 'new-product',
+    productUuid: '',
+  });
+  const response = post(runtime, {
+    apiVersion: 2,
+    requestId: deterministicUuid(81002),
+    environment: 'SANDBOX',
+    purchases: [{
+      actionId: purchaseActionId,
+      tempId: 'new-product',
+      date: '2025-05-11',
+      type: 'P',
+      name: 'Finished before first use',
+      cost: 10,
+      thc: 20,
+      grams: 3.5,
+      borrowed: 0,
+      postTax: false,
+    }],
+    consumptions: [],
+    finishActions: [finish],
+  });
+  const newId = response.acknowledgedPurchases[0].legacyProductId;
+  assert.equal(response.acknowledgedFinishActions[0].legacyProductId, newId);
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
+  assert.deepEqual(productState(runtime, newId), {
+    status: 1,
+    uses: 0,
+    recentMillis: null,
+    lastQuantity: '',
+    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+  });
+}
+
+// A lost response after the finish-only core batch is repaired and retried as
+// a duplicate, without moving the original Finished At timestamp.
+{
+  const runtime = buildRuntime();
+  const action = finishAction(5);
+  const requestPayload = payload(82, {
+    consumptions: [],
+    finishActions: [action],
+  });
+  runtime.context.setSandboxSyncApplyFault(FAULTS.CORE_COMMITTED);
+  assertInternalFailure(post(runtime, requestPayload));
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 0, journals: 1 });
+  assert.equal(productState(runtime).finishedMillis, new Date('2025-05-10T13:45:00').getTime());
+
+  const retry = post(runtime, requestPayload);
+  assert.equal(retry.acknowledgedFinishActions[0].status, 'duplicate');
+  assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
+  assert.equal(productState(runtime).uses, 2);
+  assert.equal(productState(runtime).lastQuantity, 0.5);
+  assert.equal(productState(runtime).finishedMillis, new Date('2025-05-10T13:45:00').getTime());
 }
 
 // The no-core shortcut must never jump ahead of a predecessor whose atomic

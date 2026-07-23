@@ -111,6 +111,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         onQuantityChange = viewModel::updateConsumptionQuantity,
         onIncludeUnopenedChange = viewModel::setIncludeUnopened,
         onLog = viewModel::queueConsumption,
+        onFinishWithoutConsumption = viewModel::queueFinishProduct,
     )
 }
 
@@ -126,6 +127,7 @@ fun ConsumptionContent(
     onQuantityChange: (String) -> Unit,
     onIncludeUnopenedChange: (Boolean) -> Unit,
     onLog: (String, String, String, Double, Boolean) -> Unit,
+    onFinishWithoutConsumption: (String) -> Unit,
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -137,6 +139,7 @@ fun ConsumptionContent(
     var customMinute by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.MINUTE)) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
+    var showFinishWithoutConsumptionConfirmation by rememberSaveable { mutableStateOf(false) }
     var validationMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
     val selectedProduct = remember(allProducts, formState.selectedProductId) {
@@ -224,6 +227,32 @@ fun ConsumptionContent(
         )
     }
 
+    if (showFinishWithoutConsumptionConfirmation && selectedProduct != null) {
+        AlertDialog(
+            onDismissRequest = { showFinishWithoutConsumptionConfirmation = false },
+            title = { Text("Finish ${selectedProduct.name}?") },
+            text = {
+                Text(
+                    "Finishing removes this product from product choices without adding a consumption log.",
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onFinishWithoutConsumption(selectedProduct.id)
+                        isFinished = false
+                        showFinishWithoutConsumptionConfirmation = false
+                    },
+                ) { Text("Finish product") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFinishWithoutConsumptionConfirmation = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -302,6 +331,17 @@ fun ConsumptionContent(
                             )
                         }
                         Switch(checked = isFinished, onCheckedChange = { isFinished = it })
+                    }
+                }
+            }
+
+            if (selectedProduct?.productStatus?.isSelectable == true) {
+                item {
+                    OutlinedButton(
+                        onClick = { showFinishWithoutConsumptionConfirmation = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Finish without logging consumption")
                     }
                 }
             }

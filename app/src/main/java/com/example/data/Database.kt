@@ -60,6 +60,15 @@ data class ConsumptionAction(
     val productUuid: String? = null,
 )
 
+@Entity(tableName = "finish_actions")
+data class FinishAction(
+    @PrimaryKey val actionId: String,
+    val date: String,
+    val time: String,
+    val productId: String,
+    val productUuid: String? = null,
+)
+
 @Entity(tableName = "product_interactions")
 data class ProductInteraction(
     @PrimaryKey val productId: String,
@@ -125,11 +134,30 @@ interface CannsheetDao {
     @Query("DELETE FROM consumption_actions WHERE eventId IN (:eventIds)")
     suspend fun deleteConsumptionsByEventIds(eventIds: List<String>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertFinishAction(action: FinishAction)
+
+    @Query("SELECT * FROM finish_actions")
+    suspend fun getPendingFinishActions(): List<FinishAction>
+
+    @Query("DELETE FROM finish_actions WHERE actionId IN (:actionIds)")
+    suspend fun deleteFinishActionsByActionIds(actionIds: List<String>)
+
     @Query(
         "UPDATE consumption_actions SET productId = :newProductId, productUuid = :productUuid " +
             "WHERE productId = :oldProductId",
     )
     suspend fun remapPendingConsumptions(
+        oldProductId: String,
+        newProductId: String,
+        productUuid: String?,
+    )
+
+    @Query(
+        "UPDATE finish_actions SET productId = :newProductId, productUuid = :productUuid " +
+            "WHERE productId = :oldProductId",
+    )
+    suspend fun remapPendingFinishActions(
         oldProductId: String,
         newProductId: String,
         productUuid: String?,
@@ -141,11 +169,17 @@ interface CannsheetDao {
     @Query("SELECT COUNT(*) FROM consumption_actions")
     fun getPendingConsumptionsCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM finish_actions")
+    fun getPendingFinishActionsCount(): Flow<Int>
+
     @Query("SELECT COUNT(*) FROM purchase_actions")
     suspend fun getPendingPurchasesCountNow(): Int
 
     @Query("SELECT COUNT(*) FROM consumption_actions")
     suspend fun getPendingConsumptionsCountNow(): Int
+
+    @Query("SELECT COUNT(*) FROM finish_actions")
+    suspend fun getPendingFinishActionsCountNow(): Int
 
     @Query("SELECT * FROM product_interactions ORDER BY lastLoggedAtEpochMillis DESC")
     fun getAllProductInteractions(): Flow<List<ProductInteraction>>
@@ -195,6 +229,7 @@ interface CannsheetDao {
         remoteInteractions: List<ProductInteraction>,
     ) {
         val pendingPurchases = getPendingPurchases()
+        val pendingFinishActions = getPendingFinishActions()
         deleteAllProducts()
         insertProducts(products)
         if (pendingPurchases.isNotEmpty()) {
@@ -209,6 +244,10 @@ interface CannsheetDao {
                     )
                 },
             )
+        }
+
+        pendingFinishActions.forEach { action ->
+            markProductFinished(action.productId)
         }
 
         remoteInteractions.forEach { remote ->
@@ -239,6 +278,12 @@ interface CannsheetDao {
     }
 
     @Transaction
+    suspend fun recordFinishAction(action: FinishAction) {
+        insertFinishAction(action)
+        markProductFinished(action.productId)
+    }
+
+    @Transaction
     suspend fun remapProductInteraction(oldProductId: String, newProductId: String) {
         if (oldProductId == newProductId) return
 
@@ -256,11 +301,12 @@ interface CannsheetDao {
         Product::class,
         PurchaseAction::class,
         ConsumptionAction::class,
+        FinishAction::class,
         ProductInteraction::class,
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -355,6 +401,23 @@ abstract class AppDatabase : RoomDatabase() {
                         `generatedAtEpochMillis` INTEGER NOT NULL,
                         `cachedAtEpochMillis` INTEGER NOT NULL,
                         PRIMARY KEY(`environment`, `resource`)
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `finish_actions` (
+                        `actionId` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `time` TEXT NOT NULL,
+                        `productId` TEXT NOT NULL,
+                        `productUuid` TEXT,
+                        PRIMARY KEY(`actionId`)
                     )
                     """.trimIndent(),
                 )

@@ -1837,6 +1837,7 @@ function doPost(e) {
       payload: payload,
       purchases: preflight.purchases,
       consumptions: preflight.consumptions,
+      finishActions: preflight.finishActions,
       environment: environment,
       ss: ss,
       sheets: runtime.sheets,
@@ -1881,11 +1882,25 @@ function doPost(e) {
       requestId: text_(payload.requestId) || undefined,
       purchaseCount: Array.isArray(payload.purchases) ? payload.purchases.length : undefined,
       consumptionCount: Array.isArray(payload.consumptions) ? payload.consumptions.length : undefined,
+      finishActionCount: Array.isArray(payload.finishActions) ? payload.finishActions.length : undefined,
       allAccepted: response.allAccepted
     };
   } catch (error) {
     console.error('POST failed: ' + conciseError_(error));
-    output = requestFailure_('INTERNAL_ERROR', conciseError_(error), environment, timing);
+    if (apiVersion === CANN.API_VERSION) {
+      const response = v2RequestFailure_(
+        text_(payload.requestId),
+        'INTERNAL_ERROR',
+        conciseError_(error)
+      );
+      response.environment = environment;
+      addServerTimingFields_(response, timing, environment);
+      const responseRoutingStarted = Date.now();
+      output = jsonOutput_(response);
+      recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+    } else {
+      output = requestFailure_('INTERNAL_ERROR', conciseError_(error), environment, timing);
+    }
     outcome = 'error';
     timingDetails = {
       apiVersion: apiVersion,
@@ -1917,6 +1932,7 @@ function handleSync(payload) {
     payload: payload || {},
     purchases: preflight.purchases,
     consumptions: preflight.consumptions,
+    finishActions: preflight.finishActions,
     environment: environment,
     ss: ss,
     sheets: runtime.sheets,
@@ -2043,17 +2059,19 @@ function handleV2SyncLocked_(requestContext, started, timing) {
   const requestId = text_(payload.requestId);
   const purchases = requestContext.purchases;
   const consumptions = requestContext.consumptions;
+  const finishActions = requestContext.finishActions;
   const ss = requestContext.ss;
 
   refreshRecoverableSyncApplyStateLocked_(requestContext);
-  if (recoverableSyncApplyReady_(requestContext.config)) {
+  const recoverableReady = recoverableSyncApplyReady_(requestContext.config);
+  if (recoverableReady) {
     const repairStarted = Date.now();
     repairPendingSyncApplyLocked_(requestContext);
     recordBackendPhase_(timing, 'recoveryRepair', repairStarted);
   }
 
   phaseStarted = Date.now();
-  const context = purchases.length || consumptions.length
+  const context = purchases.length || consumptions.length || finishActions.length
     ? productContext_(ss, {
       includeActionIds: purchases.length > 0,
       runtimeContext: requestContext
@@ -2126,10 +2144,54 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     stagedConsumptions.push(stagedItem);
     acceptedConsumptions.push({ eventId: eventId, status: 'committed' });
   });
+
+  const existingFinishActions = recoverableReady && finishActions.length
+    ? finishActionContext_(ss, requestContext, finishActions
+      .map(item => text_(item && item.actionId))
+      .filter(actionId => isUuid_(actionId)))
+    : {};
+  const acceptedFinishActions = [];
+  const rejectedFinishActions = [];
+  const stagedFinishActions = [];
+  const finishResolverByProductUuid = Object.assign({}, context.byProductUuid);
+  staged.accepted.forEach(item => {
+    if (item.productUuid) finishResolverByProductUuid[item.productUuid] = item;
+  });
+
+  finishActions.forEach((item, index) => {
+    const error = validateV2FinishAction_(item, index);
+    if (error) {
+      rejectedFinishActions.push(rejectedFinishAction_(item, error.code, error.message));
+      return;
+    }
+    if (!recoverableReady) {
+      rejectedFinishActions.push(rejectedFinishAction_(
+        item,
+        'BACKEND_UPDATE_REQUIRED',
+        'Finish actions require recoverable sync apply; update the backend before retrying'
+      ));
+      return;
+    }
+    const actionId = text_(item.actionId);
+    const duplicate = existingFinishActions[actionId];
+    if (duplicate) {
+      acceptedFinishActions.push(finishActionAck_(item, duplicate, 'duplicate'));
+      return;
+    }
+    const resolved = resolveProduct_(item, resolver, finishResolverByProductUuid);
+    if (!resolved) {
+      rejectedFinishActions.push(rejectedFinishAction_(item, 'UNKNOWN_PRODUCT', 'Unknown product reference'));
+      return;
+    }
+    const stagedItem = stageV2FinishAction_(item, resolved);
+    stagedFinishActions.push(stagedItem);
+    acceptedFinishActions.push(finishActionAck_(item, resolved, 'committed'));
+  });
   recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
 
   phaseStarted = Date.now();
-  const allAccepted = rejectedPurchases.length === 0 && rejectedConsumptions.length === 0;
+  const allAccepted = rejectedPurchases.length === 0 &&
+    rejectedConsumptions.length === 0 && rejectedFinishActions.length === 0;
   const productIdMap = {};
   acceptedPurchases.forEach(item => {
     if (item.tempId && item.legacyProductId) productIdMap[item.tempId] = item.legacyProductId;
@@ -2144,25 +2206,28 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     acknowledgedPurchases: acceptedPurchases,
     rejectedPurchases: rejectedPurchases,
     acknowledgedConsumptions: acceptedConsumptions,
-    rejectedConsumptions: rejectedConsumptions
+    rejectedConsumptions: rejectedConsumptions,
+    acknowledgedFinishActions: acceptedFinishActions,
+    rejectedFinishActions: rejectedFinishActions
   };
   recordBackendPhase_(timing, 'responseConstruction', phaseStarted);
 
   const now = new Date();
-  const recoverableReady = recoverableSyncApplyReady_(requestContext.config);
   const hasCoreMutation =
-    staged.accepted.length > 0 || stagedConsumptions.length > 0;
+    staged.accepted.length > 0 || stagedConsumptions.length > 0 ||
+    stagedFinishActions.length > 0;
   if (recoverableReady && hasCoreMutation) {
     applyRecoverableSyncLocked_({
       runtimeContext: requestContext,
       productContext: context,
       stagedPurchases: staged.accepted,
       stagedConsumptions: stagedConsumptions,
+      stagedFinishActions: stagedFinishActions,
       kind: 'ANDROID_V2',
       apiVersion: CANN.API_VERSION,
       requestId: requestId,
       response: response,
-      formRefreshRequired: staged.accepted.length > 0,
+      formRefreshRequired: staged.accepted.length > 0 || stagedFinishActions.length > 0,
       ledger: {
         startedAtEpochMillis: started,
         purchaseCount: purchases.length,
@@ -2181,8 +2246,9 @@ function handleV2SyncLocked_(requestContext, started, timing) {
       appendConsumptionRows_(ss, stagedConsumptions, false, timing, requestContext);
       phaseStarted = Date.now();
       applyProductEffects_(context, stagedConsumptions);
+      applyFinishActions_(context, stagedFinishActions);
       recordBackendPhase_(timing, 'productEffects', phaseStarted);
-      if (staged.accepted.length) {
+      if (staged.accepted.length || stagedFinishActions.length) {
         phaseStarted = Date.now();
         updateFormAndDescriptionLocked_(ss, requestContext);
         recordBackendPhase_(timing, 'formRefresh', phaseStarted);
@@ -2213,7 +2279,9 @@ function v2RequestFailure_(requestId, code, message) {
     acknowledgedPurchases: [],
     rejectedPurchases: [],
     acknowledgedConsumptions: [],
-    rejectedConsumptions: []
+    rejectedConsumptions: [],
+    acknowledgedFinishActions: [],
+    rejectedFinishActions: []
   };
 }
 
@@ -3451,6 +3519,47 @@ function applyProductEffects_(context, consumptions) {
     product.finishedAt = effect.finishedAt;
     product.lastQuantity = effect.lastQuantity;
   });
+}
+
+/**
+ * Finish-only actions deliberately update only the two finish projection cells.
+ * They are not consumption events, so Uses, Most recent use, and Last quantity
+ * must remain untouched.
+ */
+function applyFinishActions_(context, finishActions) {
+  if (!finishActions.length) return;
+  const effects = calculateFinishEffects_(context, finishActions);
+  const sheet = context.purchasesSheet;
+  const headers = context.headers;
+  effects.forEach(effect => {
+    if (!effect.rowNumber) return;
+    sheet.getRange(effect.rowNumber, headers['Finished'] + 1)
+      .setValue(effect.status);
+    sheet.getRange(effect.rowNumber, headers['Finished At'] + 1)
+      .setValue(effect.finishedAt);
+    const product = context.byLegacyId[effect.legacyProductId];
+    if (!product) return;
+    product.status = effect.status;
+    product.finishedAt = effect.finishedAt;
+  });
+}
+
+function calculateFinishEffects_(context, finishActions) {
+  const effectsByProduct = {};
+  finishActions.forEach(action => {
+    const product = context.byLegacyId[action.legacyProductId];
+    if (!product || (!product.rowNumber && !product.pendingAppend)) return;
+    // Preserve append order inside the immutable request snapshot: a later
+    // accepted finish action for the same product supplies the final timestamp.
+    effectsByProduct[action.legacyProductId] = {
+      legacyProductId: action.legacyProductId,
+      rowNumber: product.rowNumber,
+      pendingAppend: product.pendingAppend === true,
+      status: CANN.STATUS.FINISHED,
+      finishedAt: action.timestamp
+    };
+  });
+  return Object.keys(effectsByProduct).map(id => effectsByProduct[id]);
 }
 
 function calculateProductEffects_(context, consumptions) {
@@ -4820,6 +4929,7 @@ function applyRecoverableSyncLocked_(settings) {
   const now = new Date();
   const stagedPurchases = settings.stagedPurchases || [];
   const stagedConsumptions = settings.stagedConsumptions || [];
+  const stagedFinishActions = settings.stagedFinishActions || [];
   const purchasePlan = planRecoverablePurchaseRows_(
     settings.productContext,
     stagedPurchases,
@@ -4833,6 +4943,11 @@ function applyRecoverableSyncLocked_(settings) {
   applyEffectsToPlannedPurchaseRows_(
     purchasePlan,
     effects,
+    settings.productContext.headers
+  );
+  applyFinishActionsToPlannedPurchaseRows_(
+    purchasePlan,
+    stagedFinishActions,
     settings.productContext.headers
   );
 
@@ -4856,6 +4971,12 @@ function applyRecoverableSyncLocked_(settings) {
     kind: settings.kind,
     requestId: settings.requestId || '',
     eventIds: stagedConsumptions.map(item => item.eventId),
+    finishActions: stagedFinishActions.map(item => ({
+      actionId: item.actionId,
+      productUuid: item.productUuid,
+      legacyProductId: item.legacyProductId,
+      timestamp: item.timestamp
+    })),
     compatibilitySheet: runtimeContext.sheets.responses.getName(),
     formRefreshRequired: settings.formRefreshRequired === true,
     ledger: settings.ledger ? {
@@ -4950,6 +5071,24 @@ function applyRecoverableSyncLocked_(settings) {
     CANN.SYNC_APPLY_FAULTS.PRODUCT_EFFECTS,
     coreRequests
   );
+
+  calculateFinishEffects_(settings.productContext, stagedFinishActions)
+    .filter(effect => !effect.pendingAppend)
+    .forEach(effect => {
+      const headers = settings.productContext.headers;
+      coreRequests.push(updateCellsRequest_(
+        runtimeContext.sheets.purchases,
+        effect.rowNumber,
+        headers['Finished'] + 1,
+        [[effect.status]]
+      ));
+      coreRequests.push(updateCellsRequest_(
+        runtimeContext.sheets.purchases,
+        effect.rowNumber,
+        headers['Finished At'] + 1,
+        [[effect.finishedAt]]
+      ));
+    });
 
   effects.filter(effect => !effect.pendingAppend).forEach(effect => {
     const headers = settings.productContext.headers;
@@ -5073,6 +5212,13 @@ function applyRecoverableSyncLocked_(settings) {
     product.finishedAt = effect.finishedAt;
     product.lastQuantity = effect.lastQuantity;
   });
+  calculateFinishEffects_(settings.productContext, stagedFinishActions)
+    .forEach(effect => {
+      const product = settings.productContext.byLegacyId[effect.legacyProductId];
+      if (!product) return;
+      product.status = effect.status;
+      product.finishedAt = effect.finishedAt;
+    });
   return result;
 }
 
@@ -5122,6 +5268,15 @@ function applyEffectsToPlannedPurchaseRows_(purchasePlan, effects, headers) {
     row[headers['Last quantity']] =
       effect.lastQuantity == null ? '' : effect.lastQuantity;
     effect.pendingAppend = true;
+  });
+}
+
+function applyFinishActionsToPlannedPurchaseRows_(purchasePlan, finishActions, headers) {
+  finishActions.forEach(action => {
+    const row = purchasePlan.byLegacyId[action.legacyProductId];
+    if (!row) return;
+    row[headers['Finished']] = CANN.STATUS.FINISHED;
+    row[headers['Finished At']] = action.timestamp;
   });
 }
 
@@ -5502,6 +5657,45 @@ function readApplyJournalRecord_(ss, applyId) {
     finalizationJson: text_(value_(row, headers, 'Finalization JSON')),
     responseJson: text_(value_(row, headers, 'Response JSON'))
   };
+}
+
+/**
+ * Finish actions have no event row by design. Their immutable action IDs live
+ * in the recoverable apply plan, which lets a lost response retry acknowledge
+ * the completed finish without rewriting its timestamp.
+ */
+function finishActionContext_(ss, runtimeContext, submittedActionIds) {
+  const wanted = {};
+  (submittedActionIds || []).forEach(actionId => { wanted[text_(actionId)] = true; });
+  const matches = {};
+  if (!Object.keys(wanted).length) return matches;
+  const sheet = runtimeContext && runtimeContext.sheets.applyJournal
+    ? runtimeContext.sheets.applyJournal
+    : requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const headers = runtimeContext && runtimeContext.headers.applyJournal
+    ? runtimeContext.headers.applyJournal
+    : headerMap_(sheet);
+  readDataRows_(sheet).forEach(row => {
+    const finalizationJson = text_(value_(row, headers, 'Finalization JSON'));
+    if (!finalizationJson) return;
+    let plan;
+    try {
+      plan = JSON.parse(finalizationJson);
+    } catch (error) {
+      throw new Error('RECOVERABLE_APPLY_CORRUPT: invalid finalization JSON');
+    }
+    (plan.finishActions || []).forEach(action => {
+      const actionId = text_(action && action.actionId);
+      if (!wanted[actionId]) return;
+      if (matches[actionId]) {
+        throw new Error(
+          'RECOVERABLE_APPLY_CORRUPT: duplicate finish action ' + actionId
+        );
+      }
+      matches[actionId] = action;
+    });
+  });
+  return matches;
 }
 
 function findConfigRowNumber_(ss, key) {
@@ -6024,6 +6218,15 @@ function stageV2Consumption_(item, resolved, requestId) {
   };
 }
 
+function stageV2FinishAction_(item, resolved) {
+  return {
+    actionId: text_(item.actionId),
+    timestamp: parseClientDateTime_(item.date, item.time),
+    productUuid: resolved.productUuid,
+    legacyProductId: resolved.legacyProductId
+  };
+}
+
 function resolveProduct_(item, byLegacyId, byProductUuid) {
   const productUuid = text_(item.productUuid);
   const productId = text_(item.productId);
@@ -6048,6 +6251,23 @@ function rejectedPurchase_(item, code, message) {
 
 function rejectedConsumption_(item, code, message) {
   return { eventId: text_(item.eventId) || null, errorCode: code, message: message };
+}
+
+function finishActionAck_(requestItem, product, status) {
+  return {
+    actionId: text_(requestItem.actionId),
+    productUuid: text_(product.productUuid) || null,
+    legacyProductId: text_(product.legacyProductId) || null,
+    status: status
+  };
+}
+
+function rejectedFinishAction_(item, code, message) {
+  return {
+    actionId: text_(item && item.actionId) || null,
+    errorCode: code,
+    message: message
+  };
 }
 
 function validateLegacyPurchase_(item, index) {
@@ -6076,14 +6296,40 @@ function validateV2Consumption_(item, index) {
   return null;
 }
 
+function validateV2FinishAction_(item, index) {
+  if (!item || !isUuid_(text_(item.actionId))) {
+    return itemError_('INVALID_ITEM', 'Invalid finish actionId at index ' + index);
+  }
+  if (!isClientDate_(item.date) || !isClientTime_(item.time)) {
+    return itemError_('INVALID_ITEM', 'Invalid finish date or time at index ' + index);
+  }
+  if (!text_(item.productId)) {
+    return itemError_('INVALID_ITEM', 'Missing finish productId at index ' + index);
+  }
+  if (text_(item.productUuid) && !isUuid_(text_(item.productUuid))) {
+    return itemError_('INVALID_ITEM', 'Invalid finish productUuid at index ' + index);
+  }
+  return null;
+}
+
 function preflightSyncRequest_(payload, apiVersion) {
   const purchases = arrayOrEmpty_(payload && payload.purchases);
   const consumptions = arrayOrEmpty_(payload && payload.consumptions);
-  const sizeError = validateBatchSize_(purchases, consumptions);
+  const finishActions = arrayOrEmpty_(payload && payload.finishActions);
+  if (apiVersion === 1 && Object.prototype.hasOwnProperty.call(payload || {}, 'finishActions')) {
+    return {
+      purchases: purchases,
+      consumptions: consumptions,
+      finishActions: finishActions,
+      failure: itemError_('INVALID_ITEM', 'finishActions require apiVersion 2')
+    };
+  }
+  const sizeError = validateBatchSize_(purchases, consumptions, finishActions);
   if (sizeError) {
     return {
       purchases: purchases,
       consumptions: consumptions,
+      finishActions: finishActions,
       failure: itemError_('INVALID_ITEM', sizeError)
     };
   }
@@ -6092,29 +6338,39 @@ function preflightSyncRequest_(payload, apiVersion) {
       return {
         purchases: purchases,
         consumptions: consumptions,
+        finishActions: finishActions,
         failure: itemError_('INVALID_ITEM', 'requestId must be a UUID')
       };
     }
-    const duplicateActionId = firstDuplicate_(purchases.map(item => text_(item && item.actionId)).filter(Boolean));
+    const duplicateActionId = firstDuplicate_(purchases
+      .concat(finishActions)
+      .map(item => text_(item && item.actionId))
+      .filter(Boolean));
     const duplicateEventId = firstDuplicate_(consumptions.map(item => text_(item && item.eventId)).filter(Boolean));
     if (duplicateActionId || duplicateEventId) {
       return {
         purchases: purchases,
         consumptions: consumptions,
+        finishActions: finishActions,
         failure: itemError_('INVALID_ITEM', 'Duplicate UUID inside request')
       };
     }
   }
-  return { purchases: purchases, consumptions: consumptions, failure: null };
+  return {
+    purchases: purchases,
+    consumptions: consumptions,
+    finishActions: finishActions,
+    failure: null
+  };
 }
 
 function isRequestPayloadObject_(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validateBatchSize_(purchases, consumptions) {
-  if (!Array.isArray(purchases) || !Array.isArray(consumptions)) return 'purchases and consumptions must be arrays';
-  if (purchases.length + consumptions.length > CANN.MAX_BATCH_SIZE) return 'Batch exceeds maximum size';
+function validateBatchSize_(purchases, consumptions, finishActions) {
+  if (!Array.isArray(purchases) || !Array.isArray(consumptions) || !Array.isArray(finishActions)) return 'purchases, consumptions, and finishActions must be arrays';
+  if (purchases.length + consumptions.length + finishActions.length > CANN.MAX_BATCH_SIZE) return 'Batch exceeds maximum size';
   return null;
 }
 
@@ -6239,7 +6495,17 @@ function addServerTimingFields_(response, timing, environment) {
 }
 
 function timedRequestFailure_(timing, code, message, environment, details) {
-  const output = requestFailure_(code, message, environment, timing);
+  let output;
+  if (details && details.apiVersion === CANN.API_VERSION) {
+    const response = v2RequestFailure_(details.requestId, code, message);
+    response.environment = environment;
+    addServerTimingFields_(response, timing, environment);
+    const responseRoutingStarted = Date.now();
+    output = jsonOutput_(response);
+    recordBackendPhase_(timing, 'responseRouting', responseRoutingStarted);
+  } else {
+    output = requestFailure_(code, message, environment, timing);
+  }
   const timingDetails = Object.assign({ errorCode: code }, details || {});
   if (environment) timingDetails.environment = environment;
   logBackendTiming_(timing, 'rejected', timingDetails);
@@ -6379,6 +6645,20 @@ function parseClientDateTime_(dateText, timeText) {
   const combined = text_(dateText) + (text_(timeText) ? 'T' + text_(timeText) : 'T00:00:00');
   const parsed = new Date(combined);
   return isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
+function isClientDate_(value) {
+  const text = text_(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const parsed = new Date(text + 'T00:00:00');
+  return !isNaN(parsed.getTime()) &&
+    parsed.getFullYear() === Number(text.slice(0, 4)) &&
+    parsed.getMonth() + 1 === Number(text.slice(5, 7)) &&
+    parsed.getDate() === Number(text.slice(8, 10));
+}
+
+function isClientTime_(value) {
+  return /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/.test(text_(value));
 }
 
 function deterministicLegacyEventUuid_(spreadsheetId, sheetName, rowNumber) {
