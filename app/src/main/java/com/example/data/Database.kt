@@ -37,9 +37,9 @@ data class PurchaseAction(
     val date: String,
     val type: String,
     val name: String,
-    val cost: Double,
-    val thc: Double,
-    val grams: Double,
+    val cost: Double?,
+    val thc: Double?,
+    val grams: Double?,
     val borrowed: Int,
     val postTax: Boolean,
     val productUuid: String? = null,
@@ -306,7 +306,7 @@ interface CannsheetDao {
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -420,6 +420,65 @@ abstract class AppDatabase : RoomDatabase() {
                         PRIMARY KEY(`actionId`)
                     )
                     """.trimIndent(),
+                )
+            }
+        }
+
+        val MIGRATION_7_8: Migration = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE `purchase_actions_new` (
+                        `tempId` TEXT NOT NULL,
+                        `actionId` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `cost` REAL,
+                        `thc` REAL,
+                        `grams` REAL,
+                        `borrowed` INTEGER NOT NULL,
+                        `postTax` INTEGER NOT NULL,
+                        `productUuid` TEXT,
+                        PRIMARY KEY(`tempId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO `purchase_actions_new` (
+                        `tempId`,
+                        `actionId`,
+                        `date`,
+                        `type`,
+                        `name`,
+                        `cost`,
+                        `thc`,
+                        `grams`,
+                        `borrowed`,
+                        `postTax`,
+                        `productUuid`
+                    )
+                    SELECT
+                        `tempId`,
+                        `actionId`,
+                        `date`,
+                        `type`,
+                        `name`,
+                        `cost`,
+                        `thc`,
+                        `grams`,
+                        `borrowed`,
+                        `postTax`,
+                        `productUuid`
+                    FROM `purchase_actions`
+                    """.trimIndent(),
+                )
+                db.execSQL("DROP TABLE `purchase_actions`")
+                db.execSQL("ALTER TABLE `purchase_actions_new` RENAME TO `purchase_actions`")
+                db.execSQL(
+                    "CREATE UNIQUE INDEX `index_purchase_actions_actionId` " +
+                        "ON `purchase_actions` (`actionId`)",
                 )
             }
         }

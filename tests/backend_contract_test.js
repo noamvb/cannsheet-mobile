@@ -23,7 +23,8 @@ const source = fs.readFileSync('backend_additions.gs', 'utf8');
 vm.runInContext(
   source + `\nthis.testApi = {
     deterministicLegacyEventUuid_, firstDuplicate_, isUuid_,
-    validateV2Consumption_, validateV2FinishAction_, stagePurchases_, validateRequestEnvironment_,
+    validateLegacyPurchase_, validateV2Purchase_, validateV2Consumption_, validateV2FinishAction_,
+    stagePurchases_, validateRequestEnvironment_,
     recoverableSyncApplyReady_,
     newBackendTiming_, recordBackendPhase_, backendTimingRecord_, addServerTimingFields_,
     preflightSyncRequest_, calculateProductEffects_, timestampMillisOrNull_,
@@ -55,6 +56,33 @@ const invalidConsumption = api.validateV2Consumption_({
   uses: 1,
 }, 0);
 assert.equal(invalidConsumption.code, 'INVALID_ITEM');
+
+const borrowedPurchaseWithoutNumbers = {
+  tempId: 'borrowed-blank',
+  date: '2025-05-04',
+  type: 'P',
+  name: 'Borrowed product',
+  cost: '  ',
+  thc: null,
+  grams: '',
+  borrowed: 1,
+};
+assert.equal(api.validateLegacyPurchase_(borrowedPurchaseWithoutNumbers, 0), null);
+assert.equal(api.validateV2Purchase_(Object.assign({}, borrowedPurchaseWithoutNumbers, {
+  actionId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+}), 0), null);
+
+const nonBorrowedPurchaseWithoutNumbers = Object.assign({}, borrowedPurchaseWithoutNumbers, {
+  borrowed: 0,
+});
+assert.equal(api.validateLegacyPurchase_(nonBorrowedPurchaseWithoutNumbers, 0).code, 'INVALID_ITEM');
+assert.equal(api.validateV2Purchase_(Object.assign({}, nonBorrowedPurchaseWithoutNumbers, {
+  actionId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+}), 0).code, 'INVALID_ITEM');
+
+assert.equal(api.validateLegacyPurchase_(Object.assign({}, borrowedPurchaseWithoutNumbers, {
+  cost: Infinity,
+}), 0).code, 'INVALID_ITEM');
 
 const invalidFinishAction = api.validateV2FinishAction_({
   actionId: 'not-a-uuid',

@@ -3411,21 +3411,27 @@ function addWarningProtection_(range, description) {
 // Batch write helpers
 // -----------------------------------------------------------------------------
 
+function newPurchaseRow_(item, now, taxRate) {
+  const p = item.item;
+  const cost = purchaseNumberOrBlank_(p.cost);
+  const thc = purchaseNumberOrBlank_(p.thc);
+  const grams = purchaseNumberOrBlank_(p.grams);
+  const postTax = truthy_(p.postTax);
+  const finalCost = cost === '' ? '' : (postTax ? cost : cost * (1 + taxRate));
+  return [
+    text_(p.date), text_(p.type), text_(p.name), cost,
+    thc, grams, truthy_(p.borrowed) ? 1 : 0, CANN.STATUS.UNOPENED,
+    item.legacyProductId, 0, postTax, finalCost,
+    '', item.productUuid, item.actionId, now, ''
+  ];
+}
+
 function appendPurchaseRows_(context, staged, now, configuredTaxRate) {
   if (!staged.length) return;
   const sheet = context.purchasesSheet;
   const taxRate = finiteNumberOr_(configuredTaxRate, 0.13);
   const rows = staged.map(item => {
-    const p = item.item;
-    const cost = finiteNumberOr_(p.cost, 0);
-    const postTax = truthy_(p.postTax);
-    const row = [
-      text_(p.date), text_(p.type), text_(p.name), cost,
-      finiteNumberOr_(p.thc, 0), finiteNumberOr_(p.grams, 0),
-      truthy_(p.borrowed) ? 1 : 0, CANN.STATUS.UNOPENED,
-      item.legacyProductId, 0, postTax, postTax ? cost : cost * (1 + taxRate),
-      '', item.productUuid, item.actionId, now, ''
-    ];
+    const row = newPurchaseRow_(item, now, taxRate);
     if (context.headers && context.headers['Last quantity'] !== undefined) row.push('');
     return row;
   });
@@ -5225,17 +5231,8 @@ function applyRecoverableSyncLocked_(settings) {
 function planRecoverablePurchaseRows_(context, staged, now, configuredTaxRate) {
   const taxRate = finiteNumberOr_(configuredTaxRate, 0.13);
   const rows = staged.map(item => {
-    const p = item.item;
-    const cost = finiteNumberOr_(p.cost, 0);
-    const postTax = truthy_(p.postTax);
-    const row = [
-      text_(p.date), text_(p.type), text_(p.name), cost,
-      finiteNumberOr_(p.thc, 0), finiteNumberOr_(p.grams, 0),
-      truthy_(p.borrowed) ? 1 : 0, CANN.STATUS.UNOPENED,
-      item.legacyProductId, 0, postTax,
-      postTax ? cost : cost * (1 + taxRate),
-      '', item.productUuid, item.actionId, now, '', ''
-    ];
+    const row = newPurchaseRow_(item, now, taxRate);
+    row.push('');
     item.pendingAppend = true;
     item.row = row;
     item.status = CANN.STATUS.UNOPENED;
@@ -6272,7 +6269,12 @@ function rejectedFinishAction_(item, code, message) {
 
 function validateLegacyPurchase_(item, index) {
   if (!item || !text_(item.tempId) || !text_(item.date) || !text_(item.type) || !text_(item.name)) return itemError_('INVALID_ITEM', 'Invalid purchase at index ' + index);
-  if (![item.cost, item.thc, item.grams].every(isFiniteNumber_)) return itemError_('INVALID_ITEM', 'Invalid purchase number at index ' + index);
+  const purchaseNumbers = [item.cost, item.thc, item.grams];
+  const borrowed = truthy_(item.borrowed);
+  const validNumbers = borrowed
+    ? purchaseNumbers.every(isOptionalFinitePurchaseNumber_)
+    : purchaseNumbers.every(isRequiredFinitePurchaseNumber_);
+  if (!validNumbers) return itemError_('INVALID_ITEM', 'Invalid purchase number at index ' + index);
   return null;
 }
 
@@ -6689,6 +6691,16 @@ function arrayOrEmpty_(value) { return value == null ? [] : value; }
 function finiteNumber_(value) { const number = Number(value); return Number.isFinite(number) ? number : null; }
 function optionalFiniteNumber_(value) {
   return value == null || value === '' ? null : finiteNumber_(value);
+}
+function isMissingPurchaseNumber_(value) { return value == null || text_(value) === ''; }
+function isOptionalFinitePurchaseNumber_(value) {
+  return isMissingPurchaseNumber_(value) || isFiniteNumber_(value);
+}
+function isRequiredFinitePurchaseNumber_(value) {
+  return !isMissingPurchaseNumber_(value) && isFiniteNumber_(value);
+}
+function purchaseNumberOrBlank_(value) {
+  return isMissingPurchaseNumber_(value) ? '' : finiteNumber_(value);
 }
 function finiteNumberOr_(value, fallback) { const number = finiteNumber_(value); return number == null ? fallback : number; }
 function isFiniteNumber_(value) { return finiteNumber_(value) != null; }

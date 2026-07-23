@@ -395,6 +395,13 @@ const purchaseResponse = post(purchaseRuntime, v2Payload(4, {
 }));
 assert.equal(purchaseResponse.acknowledgedPurchases[0].status, 'committed');
 assert.equal(populatedDataRows(purchaseRuntime, 'Purchases').length, 3);
+assert.equal(
+  productRow(purchaseRuntime, purchaseResponse.acknowledgedPurchases[0].legacyProductId)[
+    headerIndex(PURCHASE_HEADERS, 'Final cost')
+  ],
+  12 * 1.13,
+  'a supplied cost retains the configured pre-tax calculation',
+);
 assert.equal(populatedDataRows(purchaseRuntime, 'ConsumptionEvents').length, 20);
 assert.equal(populatedDataRows(purchaseRuntime, 'Form Responses 1').length, 0);
 assert.equal(dataReads(purchaseRuntime, 'ConsumptionEvents').length, 0);
@@ -438,6 +445,68 @@ assert.deepEqual(
   writes(mixedRuntime, 'Purchases').filter(entry => entry.operation === 'setValue').map(entry => entry.row),
   [4, 4, 4, 4],
 );
+
+// Borrowed purchases may omit all optional measurements. In the ordinary
+// append path, blanks stay blank, same-request temporary-ID consumption links,
+// and the active B-suffixed product remains usable on later requests.
+const borrowedRuntime = buildRuntime();
+const borrowedActionId = deterministicUuid(93001);
+const borrowedEventId = deterministicUuid(93002);
+const borrowedPayload = v2Payload(51, {
+  purchases: [{
+    actionId: borrowedActionId,
+    tempId: 'temp-borrowed',
+    date: '2025-04-04',
+    type: 'P',
+    name: 'Borrowed quick log',
+    cost: '  ',
+    thc: null,
+    grams: '',
+    borrowed: 1,
+    postTax: false,
+  }],
+  consumptions: [{
+    eventId: borrowedEventId,
+    date: '2025-04-04',
+    time: '12:00:00',
+    productId: 'temp-borrowed',
+    uses: 0.5,
+    isFinished: false,
+  }],
+});
+const borrowedResponse = post(borrowedRuntime, borrowedPayload);
+assert.equal(borrowedResponse.acknowledgedPurchases[0].status, 'committed');
+assert.equal(borrowedResponse.acknowledgedConsumptions[0].status, 'committed');
+const borrowedId = borrowedResponse.productIdMap['temp-borrowed'];
+assert.match(borrowedId, /^\*P\d+B$/);
+const borrowedProduct = productRow(borrowedRuntime, borrowedId);
+assert.equal(borrowedProduct[headerIndex(PURCHASE_HEADERS, 'Pre-tax cost')], '');
+assert.equal(borrowedProduct[headerIndex(PURCHASE_HEADERS, 'THC%')], '');
+assert.equal(borrowedProduct[headerIndex(PURCHASE_HEADERS, 'Grams')], '');
+assert.equal(borrowedProduct[headerIndex(PURCHASE_HEADERS, 'Final cost')], '');
+assert.equal(borrowedProduct[headerIndex(PURCHASE_HEADERS, 'Finished')], 0);
+assert.equal(
+  populatedDataRows(borrowedRuntime, 'ConsumptionEvents').at(-1)[headerIndex(EVENT_HEADERS, 'Legacy Product ID')],
+  borrowedId,
+);
+const borrowedRetry = post(borrowedRuntime, borrowedPayload);
+assert.equal(borrowedRetry.acknowledgedPurchases[0].status, 'duplicate');
+assert.deepEqual(borrowedRetry.acknowledgedConsumptions, [{ eventId: borrowedEventId, status: 'duplicate' }]);
+assert.equal(populatedDataRows(borrowedRuntime, 'Purchases').length, 3);
+const borrowedReuseResponse = post(borrowedRuntime, v2Payload(52, {
+  consumptions: [{
+    eventId: deterministicUuid(93003),
+    date: '2025-04-05',
+    time: '12:00:00',
+    productId: borrowedId,
+    uses: 0.25,
+    isFinished: false,
+  }],
+}));
+assert.deepEqual(borrowedReuseResponse.acknowledgedConsumptions, [{
+  eventId: deterministicUuid(93003), status: 'committed',
+}]);
+assert.equal(productRow(borrowedRuntime, borrowedId)[headerIndex(PURCHASE_HEADERS, 'Finished')], 0);
 
 // Parse/API/environment/schema failures occur before the lock and never write.
 const rejectionRuntime = buildRuntime();

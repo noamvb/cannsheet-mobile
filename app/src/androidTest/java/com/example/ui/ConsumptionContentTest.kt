@@ -6,12 +6,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
 import com.example.data.Product
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -45,6 +48,7 @@ class ConsumptionContentTest {
                         loggedProductId = productId
                         loggedQuantity = quantity
                     },
+                    onLogBorrowed = { _, _, _, _, _ -> },
                     onFinishWithoutConsumption = {},
                 )
             }
@@ -78,6 +82,7 @@ class ConsumptionContentTest {
                     },
                     onIncludeUnopenedChange = {},
                     onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
                     onFinishWithoutConsumption = {},
                 )
             }
@@ -107,6 +112,7 @@ class ConsumptionContentTest {
                     onQuantityChange = {},
                     onIncludeUnopenedChange = {},
                     onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
                     onFinishWithoutConsumption = { finishedProductId = it },
                 )
             }
@@ -144,6 +150,7 @@ class ConsumptionContentTest {
                     onQuantityChange = {},
                     onIncludeUnopenedChange = {},
                     onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
                     onFinishWithoutConsumption = {},
                 )
             }
@@ -171,6 +178,7 @@ class ConsumptionContentTest {
                     onQuantityChange = {},
                     onIncludeUnopenedChange = {},
                     onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
                     onFinishWithoutConsumption = { finishedProductId = it },
                 )
             }
@@ -183,6 +191,121 @@ class ConsumptionContentTest {
 
         composeRule.runOnIdle {
             assertEquals(null, finishedProductId)
+        }
+    }
+
+    @Test
+    fun borrowedProductDialogOpensAndCancels() {
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = emptyList(),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(quantityText = "1"),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Log a borrowed product") and hasClickAction())
+            .performScrollTo()
+            .performClick()
+
+        composeRule.onNode(hasText("Product name") and hasSetTextAction()).assertIsDisplayed()
+        composeRule.onNode(hasText("Product type") and hasSetTextAction()).assertIsDisplayed()
+        composeRule.onNode(hasText("Purchase numbers can remain unknown when logging a borrowed product."))
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Cancel") and hasClickAction()).performClick()
+        composeRule.onNode(hasText("Product name") and hasSetTextAction()).assertDoesNotExist()
+    }
+
+    @Test
+    fun borrowedProductDialogRequiresNameAndType() {
+        var callbackCount = 0
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = emptyList(),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(quantityText = "1"),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> callbackCount++ },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Log a borrowed product") and hasClickAction())
+            .performScrollTo()
+            .performClick()
+        composeRule.onNode(hasText("Log borrowed product") and hasClickAction()).performClick()
+
+        composeRule.onNode(hasText("Enter both a product name and product type.")).assertIsDisplayed()
+        composeRule.runOnIdle { assertEquals(0, callbackCount) }
+    }
+
+    @Test
+    fun borrowedProductLogUsesCurrentFormQuantityAndDateTime() {
+        var loggedDate: String? = null
+        var loggedTime: String? = null
+        var loggedType: String? = null
+        var loggedName: String? = null
+        var loggedUses: Double? = null
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = emptyList(),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(quantityText = "0.75"),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { date, time, type, name, uses ->
+                        loggedDate = date
+                        loggedTime = time
+                        loggedType = type
+                        loggedName = name
+                        loggedUses = uses
+                    },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Log a borrowed product") and hasClickAction())
+            .performScrollTo()
+            .performClick()
+        composeRule.onNode(hasText("Product name") and hasSetTextAction()).performTextInput("Blue Dream")
+        composeRule.onNode(hasText("Product type") and hasSetTextAction()).performTextInput("Flower")
+        val expectedBeforeSubmit = currentSubmissionDateTime()
+        composeRule.onNode(hasText("Log borrowed product") and hasClickAction()).performClick()
+
+        composeRule.runOnIdle {
+            val expectedAfterSubmit = currentSubmissionDateTime()
+            assertEquals("Blue Dream", loggedName)
+            assertEquals("Flower", loggedType)
+            assertEquals(0.75, loggedUses ?: 0.0, 0.0)
+            assertTrue(
+                (loggedDate == expectedBeforeSubmit.date && loggedTime == expectedBeforeSubmit.time) ||
+                    (loggedDate == expectedAfterSubmit.date && loggedTime == expectedAfterSubmit.time),
+            )
         }
     }
 }
