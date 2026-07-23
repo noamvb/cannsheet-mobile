@@ -14,8 +14,9 @@ class CannsheetRepository(private val database: AppDatabase) {
     val pendingActionCount: Flow<Int> = combine(
         dao.getPendingPurchasesCount(),
         dao.getPendingConsumptionsCount(),
-    ) { purchases, consumptions ->
-        purchases + consumptions
+        dao.getPendingFinishActionsCount(),
+    ) { purchases, consumptions, finishes ->
+        purchases + consumptions + finishes
     }
 
     suspend fun refreshProducts(
@@ -56,9 +57,15 @@ class CannsheetRepository(private val database: AppDatabase) {
         )
     }
 
+    suspend fun addFinishAction(action: FinishAction) {
+        dao.recordFinishAction(action)
+    }
+
     suspend fun getPendingPurchases(): List<PurchaseAction> = dao.getPendingPurchases()
 
     suspend fun getPendingConsumptions(): List<ConsumptionAction> = dao.getPendingConsumptions()
+
+    suspend fun getPendingFinishActions(): List<FinishAction> = dao.getPendingFinishActions()
 
     suspend fun getOrCreateSyncRequestId(): String = database.withTransaction {
         dao.getSyncRequestState()?.requestId ?: UUID.randomUUID().toString().also { requestId ->
@@ -79,6 +86,11 @@ class CannsheetRepository(private val database: AppDatabase) {
                     newProductId = remap.legacyProductId,
                     productUuid = remap.productUuid,
                 )
+                dao.remapPendingFinishActions(
+                    oldProductId = remap.tempId,
+                    newProductId = remap.legacyProductId,
+                    productUuid = remap.productUuid,
+                )
                 dao.remapProductInteraction(remap.tempId, remap.legacyProductId)
                 dao.deleteProduct(remap.tempId)
             }
@@ -88,7 +100,14 @@ class CannsheetRepository(private val database: AppDatabase) {
             if (plan.acknowledgedConsumptionEventIds.isNotEmpty()) {
                 dao.deleteConsumptionsByEventIds(plan.acknowledgedConsumptionEventIds.toList())
             }
-            if (dao.getPendingPurchasesCountNow() == 0 && dao.getPendingConsumptionsCountNow() == 0) {
+            if (plan.acknowledgedFinishActionIds.isNotEmpty()) {
+                dao.deleteFinishActionsByActionIds(plan.acknowledgedFinishActionIds.toList())
+            }
+            if (
+                dao.getPendingPurchasesCountNow() == 0 &&
+                dao.getPendingConsumptionsCountNow() == 0 &&
+                dao.getPendingFinishActionsCountNow() == 0
+            ) {
                 dao.clearSyncRequestState()
             }
         }

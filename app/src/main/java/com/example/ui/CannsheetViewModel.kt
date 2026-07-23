@@ -10,6 +10,7 @@ import com.example.data.AnalyticsRepository
 import com.example.data.CannsheetRepository
 import com.example.data.ConsumptionAction
 import com.example.data.ConsumptionPreferencesRepository
+import com.example.data.FinishAction
 import com.example.data.GasApiService
 import com.example.data.GasProductResponse
 import com.example.data.HistoryFilters
@@ -20,6 +21,7 @@ import com.example.data.ProductStatus
 import com.example.data.PurchaseAction
 import com.example.data.QueuedSyncSnapshot
 import com.example.data.SyncConsumption
+import com.example.data.SyncFinishAction
 import com.example.data.SyncPayload
 import com.example.data.SyncPurchase
 import com.example.data.SyncResponse
@@ -65,6 +67,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         AppDatabase.MIGRATION_3_4,
         AppDatabase.MIGRATION_4_5,
         AppDatabase.MIGRATION_5_6,
+        AppDatabase.MIGRATION_6_7,
     ).build()
 
     private val repository = CannsheetRepository(db)
@@ -153,6 +156,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private var countdownJob: Job? = null
     private var pendingPurchaseAction: (() -> Unit)? = null
     private var pendingConsumptionAction: (() -> Unit)? = null
+    private var pendingFinishAction: (() -> Unit)? = null
     private val syncMutex = Mutex()
 
     init {
@@ -266,6 +270,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         countdownJob?.cancel()
         pendingConsumptionAction = null
+        pendingFinishAction = null
         pendingPurchaseAction = {
             addPurchase(date, type, name, cost, thc, grams, borrowed, postTax)
         }
@@ -281,8 +286,30 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         countdownJob?.cancel()
         pendingPurchaseAction = null
+        pendingFinishAction = null
         pendingConsumptionAction = {
             addConsumption(date, time, productId, uses, isFinished)
+        }
+        startCountdown()
+    }
+
+    fun queueFinishProduct(productId: String) {
+        val product = allProducts.value.firstOrNull { it.id == productId }
+        if (product == null || !product.productStatus.isSelectable) {
+            _syncStatus.value = "This product can no longer be finished"
+            return
+        }
+        val submissionDateTime = currentSubmissionDateTime()
+        countdownJob?.cancel()
+        pendingPurchaseAction = null
+        pendingConsumptionAction = null
+        pendingFinishAction = {
+            addFinishProduct(
+                date = submissionDateTime.date,
+                time = submissionDateTime.time,
+                productId = product.id,
+                productUuid = product.productUuid,
+            )
         }
         startCountdown()
     }
@@ -296,8 +323,10 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             _pendingCountdown.value = 0
             pendingPurchaseAction?.invoke()
             pendingConsumptionAction?.invoke()
+            pendingFinishAction?.invoke()
             pendingPurchaseAction = null
             pendingConsumptionAction = null
+            pendingFinishAction = null
         }
     }
 
@@ -306,6 +335,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _pendingCountdown.value = 0
         pendingPurchaseAction = null
         pendingConsumptionAction = null
+        pendingFinishAction = null
         _syncStatus.value = "Action cancelled"
     }
 
@@ -314,8 +344,10 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _pendingCountdown.value = 0
         pendingPurchaseAction?.invoke()
         pendingConsumptionAction?.invoke()
+        pendingFinishAction?.invoke()
         pendingPurchaseAction = null
         pendingConsumptionAction = null
+        pendingFinishAction = null
     }
 
     fun addPurchase(
@@ -373,6 +405,30 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private fun addFinishProduct(
+        date: String,
+        time: String,
+        productId: String,
+        productUuid: String?,
+    ) {
+        viewModelScope.launch {
+            repository.addFinishAction(
+                FinishAction(
+                    actionId = UUID.randomUUID().toString(),
+                    date = date,
+                    time = time,
+                    productId = productId,
+                    productUuid = productUuid,
+                ),
+            )
+            if (_consumptionFormState.value.selectedProductId == productId) {
+                clearConsumptionSelection()
+            }
+            _syncStatus.value = "Product marked finished offline"
+            syncQueue()
+        }
+    }
+
     fun syncQueue() {
         val url = _gasUrl.value
         if (url.isBlank()) {
@@ -386,7 +442,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 try {
                     val pendingPurchases = repository.getPendingPurchases()
                     val pendingConsumptions = repository.getPendingConsumptions()
-                    if (pendingPurchases.isEmpty() && pendingConsumptions.isEmpty()) {
+                    val pendingFinishActions = repository.getPendingFinishActions()
+                    if (
+                        pendingPurchases.isEmpty() &&
+                        pendingConsumptions.isEmpty() &&
+                        pendingFinishActions.isEmpty()
+                    ) {
                         _syncStatus.value = "Nothing to sync"
                         return@withLock
                     }
@@ -396,6 +457,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     val snapshot = QueuedSyncSnapshot(
                         purchaseActionIds = pendingPurchases.mapTo(linkedSetOf(), PurchaseAction::actionId),
                         consumptionEventIds = pendingConsumptions.mapTo(linkedSetOf(), ConsumptionAction::eventId),
+                        finishActionIds = pendingFinishActions.mapTo(linkedSetOf(), FinishAction::actionId),
                         purchaseActionIdByTempId = pendingPurchases.associate { it.tempId to it.actionId },
                     )
                     val requestId = repository.getOrCreateSyncRequestId()
@@ -425,6 +487,15 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                             productUuid = action.productUuid,
                         )
                     }
+                    val finishActions = pendingFinishActions.map { action ->
+                        SyncFinishAction(
+                            actionId = action.actionId,
+                            date = action.date,
+                            time = action.time,
+                            productId = action.productId,
+                            productUuid = action.productUuid,
+                        )
+                    }
 
                     val rawString = apiService.syncData(
                         url,
@@ -433,6 +504,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                             environment = BuildConfig.APP_ENVIRONMENT,
                             purchases = purchases,
                             consumptions = consumptions,
+                            finishActions = finishActions,
                         ),
                     ).string()
                     if (rawString.trimStart().startsWith("<")) {
@@ -460,14 +532,18 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     }
 
                     _syncStatus.value = when {
+                        plan.finishCapabilityMissing ->
+                            "Sync failed: backend update required for finish actions"
                         plan.hasRejections ->
-                            "Sync partial: ${plan.rejectedPurchaseCount + plan.rejectedConsumptionCount} item(s) need attention"
+                            "Sync partial: ${plan.rejectedPurchaseCount + plan.rejectedConsumptionCount + plan.rejectedFinishActionCount} item(s) need attention"
                         plan.hasAcknowledgements -> "Sync successful"
                         else -> "Sync completed without acknowledgements"
                     }
                     if (plan.hasAcknowledgements) {
-                        fetchProducts()
                         analyticsCoordinator.markStale()
+                        if (!plan.finishCapabilityMissing) {
+                            fetchProducts()
+                        }
                     }
                 } catch (error: Exception) {
                     // No queue rows are removed on network, parsing, or request failure.

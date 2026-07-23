@@ -34,6 +34,7 @@ data class SyncPayload(
     val environment: String,
     val purchases: List<SyncPurchase>,
     val consumptions: List<SyncConsumption>,
+    val finishActions: List<SyncFinishAction> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -61,6 +62,15 @@ data class SyncConsumption(
     val isFinished: Boolean,
     val productUuid: String? = null,
     val weightCode: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SyncFinishAction(
+    val actionId: String,
+    val date: String,
+    val time: String,
+    val productId: String,
+    val productUuid: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -93,6 +103,19 @@ data class RejectedConsumption(
 )
 
 @JsonClass(generateAdapter = true)
+data class AcknowledgedFinishAction(
+    val actionId: String,
+    val status: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class RejectedFinishAction(
+    val actionId: String? = null,
+    val errorCode: String,
+    val message: String,
+)
+
+@JsonClass(generateAdapter = true)
 data class SyncResponse(
     val success: Boolean,
     val message: String? = null,
@@ -106,6 +129,8 @@ data class SyncResponse(
     val rejectedPurchases: List<RejectedPurchase> = emptyList(),
     val acknowledgedConsumptions: List<AcknowledgedConsumption> = emptyList(),
     val rejectedConsumptions: List<RejectedConsumption> = emptyList(),
+    val acknowledgedFinishActions: List<AcknowledgedFinishAction>? = null,
+    val rejectedFinishActions: List<RejectedFinishAction>? = null,
 )
 
 internal fun environmentMatches(expected: String, actual: String?): Boolean = actual == expected

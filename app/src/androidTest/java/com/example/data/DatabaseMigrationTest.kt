@@ -254,6 +254,45 @@ class DatabaseMigrationTest {
         version6.close()
     }
 
+    @Test
+    fun migrationFrom6To7PreservesExistingDataAndAddsFinishQueue() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version6 = factory.create(configuration(6, object : SupportSQLiteOpenHelper.Callback(6) {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)")
+                db.execSQL("INSERT INTO products VALUES ('p1', 'Keep me')")
+            }
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }))
+        version6.writableDatabase
+        version6.close()
+
+        val version7 = factory.create(configuration(7, object : SupportSQLiteOpenHelper.Callback(7) {
+            override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                AppDatabase.MIGRATION_6_7.migrate(db)
+            }
+        }))
+        val migrated = version7.writableDatabase
+
+        migrated.query("SELECT name FROM products WHERE id = 'p1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Keep me", cursor.getString(0))
+        }
+        migrated.execSQL(
+            "INSERT INTO finish_actions " +
+                "(actionId, date, time, productId, productUuid) VALUES " +
+                "('finish-1', '2026-07-22', '12:34', 'p1', NULL)",
+        )
+        migrated.query("SELECT productId FROM finish_actions WHERE actionId = 'finish-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("p1", cursor.getString(0))
+        }
+        version7.close()
+    }
+
     private fun configuration(
         version: Int,
         callback: SupportSQLiteOpenHelper.Callback,
