@@ -36,6 +36,10 @@ On macOS or Linux:
 
 The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Android creates and uses the normal local debug signing key automatically.
 
+## Development workflow
+
+Changes are proposed through focused pull requests targeting `main`. Each pull request runs Android unit tests, the backend analytics test, and a debug APK build. See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch, review, testing, and merge workflow.
+
 ## Backend
 
 The app uses the same Google Apps Script deployment as the original Cannsheet installation. The current endpoint is the default in `app/src/main/java/com/example/ui/CannsheetViewModel.kt` and can also be changed from the app's Settings screen for the current session.
