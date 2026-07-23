@@ -111,6 +111,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         onQuantityChange = viewModel::updateConsumptionQuantity,
         onIncludeUnopenedChange = viewModel::setIncludeUnopened,
         onLog = viewModel::queueConsumption,
+        onLogBorrowed = viewModel::queueBorrowedConsumption,
         onFinishWithoutConsumption = viewModel::queueFinishProduct,
     )
 }
@@ -127,6 +128,7 @@ fun ConsumptionContent(
     onQuantityChange: (String) -> Unit,
     onIncludeUnopenedChange: (Boolean) -> Unit,
     onLog: (String, String, String, Double, Boolean) -> Unit,
+    onLogBorrowed: (date: String, time: String, type: String, name: String, uses: Double) -> Unit,
     onFinishWithoutConsumption: (String) -> Unit,
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
@@ -139,6 +141,10 @@ fun ConsumptionContent(
     var customMinute by rememberSaveable { mutableIntStateOf(Calendar.getInstance().get(Calendar.MINUTE)) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
+    var showBorrowedProductDialog by rememberSaveable { mutableStateOf(false) }
+    var borrowedProductName by rememberSaveable { mutableStateOf("") }
+    var borrowedProductType by rememberSaveable { mutableStateOf("") }
+    var borrowedProductValidationMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var showFinishWithoutConsumptionConfirmation by rememberSaveable { mutableStateOf(false) }
     var validationMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
@@ -253,6 +259,93 @@ fun ConsumptionContent(
         )
     }
 
+    if (showBorrowedProductDialog) {
+        AlertDialog(
+            onDismissRequest = { showBorrowedProductDialog = false },
+            title = { Text("Log a borrowed product") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "Purchase numbers can remain unknown when logging a borrowed product.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedTextField(
+                        value = borrowedProductName,
+                        onValueChange = {
+                            borrowedProductName = it
+                            borrowedProductValidationMessage = null
+                        },
+                        label = { Text("Product name") },
+                        singleLine = true,
+                        isError = borrowedProductValidationMessage != null && borrowedProductName.isBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = borrowedProductType,
+                        onValueChange = {
+                            borrowedProductType = it
+                            borrowedProductValidationMessage = null
+                        },
+                        label = { Text("Product type") },
+                        singleLine = true,
+                        isError = borrowedProductValidationMessage != null && borrowedProductType.isBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    borrowedProductValidationMessage?.let { message ->
+                        Text(
+                            message,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val quantity = formState.quantityText.toDoubleOrNull()
+                        when {
+                            borrowedProductName.isBlank() || borrowedProductType.isBlank() -> {
+                                borrowedProductValidationMessage =
+                                    "Enter both a product name and product type."
+                            }
+                            quantity == null || !quantity.isFinite() || quantity <= 0.0 -> {
+                                borrowedProductValidationMessage = "Enter a positive quantity."
+                            }
+                            else -> {
+                                val submittedAt = if (adjustDateTime) {
+                                    SubmissionDateTime(
+                                        date = pickerDateToWire(customDateMillis),
+                                        time = timeToWire(customHour, customMinute),
+                                    )
+                                } else {
+                                    currentSubmissionDateTime()
+                                }
+                                onLogBorrowed(
+                                    submittedAt.date,
+                                    submittedAt.time,
+                                    borrowedProductType.trim(),
+                                    borrowedProductName.trim(),
+                                    quantity,
+                                )
+                                borrowedProductName = ""
+                                borrowedProductType = ""
+                                borrowedProductValidationMessage = null
+                                showBorrowedProductDialog = false
+                                isFinished = false
+                                adjustDateTime = false
+                                validationMessage = null
+                            }
+                        }
+                    },
+                ) { Text("Log borrowed product") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBorrowedProductDialog = false }) { Text("Cancel") }
+            },
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -294,6 +387,18 @@ fun ConsumptionContent(
                     product = selectedProduct,
                     onClick = { showProductPicker = true },
                 )
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = {
+                        borrowedProductValidationMessage = null
+                        showBorrowedProductDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Log a borrowed product")
+                }
             }
 
             item {

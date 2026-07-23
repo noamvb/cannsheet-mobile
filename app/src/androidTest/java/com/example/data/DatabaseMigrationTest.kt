@@ -293,6 +293,140 @@ class DatabaseMigrationTest {
         version7.close()
     }
 
+    @Test
+    fun migrationFrom7To8PreservesPurchasesAndAllowsUnknownBorrowedNumbers() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version7 = factory.create(configuration(7, object : SupportSQLiteOpenHelper.Callback(7) {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE purchase_actions (
+                        tempId TEXT NOT NULL PRIMARY KEY,
+                        actionId TEXT NOT NULL,
+                        date TEXT NOT NULL,
+                        type TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        cost REAL NOT NULL,
+                        thc REAL NOT NULL,
+                        grams REAL NOT NULL,
+                        borrowed INTEGER NOT NULL,
+                        postTax INTEGER NOT NULL,
+                        productUuid TEXT
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX index_purchase_actions_actionId " +
+                        "ON purchase_actions (actionId)",
+                )
+                db.execSQL(
+                    """
+                    INSERT INTO purchase_actions (
+                        tempId,
+                        actionId,
+                        date,
+                        type,
+                        name,
+                        cost,
+                        thc,
+                        grams,
+                        borrowed,
+                        postTax,
+                        productUuid
+                    ) VALUES (
+                        'temp-existing',
+                        'action-existing',
+                        '2026-07-22',
+                        'F',
+                        'Existing product',
+                        12.5,
+                        0.21,
+                        3.5,
+                        0,
+                        1,
+                        'existing-uuid'
+                    )
+                    """.trimIndent(),
+                )
+            }
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }))
+        version7.writableDatabase
+        version7.close()
+
+        val version8 = factory.create(configuration(8, object : SupportSQLiteOpenHelper.Callback(8) {
+            override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                AppDatabase.MIGRATION_7_8.migrate(db)
+            }
+        }))
+        val migrated = version8.writableDatabase
+
+        migrated.query(
+            "SELECT actionId, cost, thc, grams, productUuid " +
+                "FROM purchase_actions WHERE tempId = 'temp-existing'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("action-existing", cursor.getString(0))
+            assertEquals(12.5, cursor.getDouble(1), 0.0)
+            assertEquals(0.21, cursor.getDouble(2), 0.0)
+            assertEquals(3.5, cursor.getDouble(3), 0.0)
+            assertEquals("existing-uuid", cursor.getString(4))
+        }
+
+        migrated.execSQL(
+            """
+            INSERT INTO purchase_actions (
+                tempId,
+                actionId,
+                date,
+                type,
+                name,
+                cost,
+                thc,
+                grams,
+                borrowed,
+                postTax,
+                productUuid
+            ) VALUES (
+                'temp-borrowed',
+                'action-borrowed',
+                '2026-07-22',
+                'F',
+                'Borrowed product',
+                NULL,
+                NULL,
+                NULL,
+                1,
+                0,
+                NULL
+            )
+            """.trimIndent(),
+        )
+        migrated.query(
+            "SELECT cost, thc, grams FROM purchase_actions WHERE tempId = 'temp-borrowed'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue(cursor.isNull(0))
+            assertTrue(cursor.isNull(1))
+            assertTrue(cursor.isNull(2))
+        }
+        migrated.query("PRAGMA index_list('purchase_actions')").use { cursor ->
+            val nameIndex = cursor.getColumnIndexOrThrow("name")
+            val uniqueIndex = cursor.getColumnIndexOrThrow("unique")
+            var foundUniqueActionIndex = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(nameIndex) == "index_purchase_actions_actionId") {
+                    foundUniqueActionIndex = cursor.getInt(uniqueIndex) == 1
+                }
+            }
+            assertTrue(foundUniqueActionIndex)
+        }
+        version8.close()
+    }
+
     private fun configuration(
         version: Int,
         callback: SupportSQLiteOpenHelper.Callback,

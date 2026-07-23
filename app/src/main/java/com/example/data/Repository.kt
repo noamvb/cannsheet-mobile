@@ -57,6 +57,40 @@ class CannsheetRepository(private val database: AppDatabase) {
         )
     }
 
+    suspend fun addBorrowedConsumption(
+        purchase: PurchaseAction,
+        consumption: ConsumptionAction,
+        loggedAtEpochMillis: Long = System.currentTimeMillis(),
+    ) {
+        require(purchase.borrowed == 1) { "Borrowed consumption requires a borrowed purchase" }
+        require(consumption.productId == purchase.tempId) {
+            "Borrowed purchase and consumption must use the same temporary product ID"
+        }
+
+        database.withTransaction {
+            dao.insertPurchase(purchase)
+            dao.insertProducts(
+                listOf(
+                    Product(
+                        id = purchase.tempId,
+                        name = purchase.name,
+                        type = purchase.type,
+                        status = ProductStatus.UNOPENED.code,
+                        productUuid = purchase.productUuid,
+                    ),
+                ),
+            )
+            dao.recordConsumption(
+                action = consumption,
+                interaction = ProductInteraction(
+                    productId = consumption.productId,
+                    lastLoggedAtEpochMillis = loggedAtEpochMillis,
+                    lastQuantity = consumption.uses,
+                ),
+            )
+        }
+    }
+
     suspend fun addFinishAction(action: FinishAction) {
         dao.recordFinishAction(action)
     }

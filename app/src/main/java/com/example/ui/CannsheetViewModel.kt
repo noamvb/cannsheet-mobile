@@ -68,6 +68,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         AppDatabase.MIGRATION_4_5,
         AppDatabase.MIGRATION_5_6,
         AppDatabase.MIGRATION_6_7,
+        AppDatabase.MIGRATION_7_8,
     ).build()
 
     private val repository = CannsheetRepository(db)
@@ -156,6 +157,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private var countdownJob: Job? = null
     private var pendingPurchaseAction: (() -> Unit)? = null
     private var pendingConsumptionAction: (() -> Unit)? = null
+    private var pendingBorrowedConsumptionAction: (() -> Unit)? = null
     private var pendingFinishAction: (() -> Unit)? = null
     private val syncMutex = Mutex()
 
@@ -270,6 +272,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         countdownJob?.cancel()
         pendingConsumptionAction = null
+        pendingBorrowedConsumptionAction = null
         pendingFinishAction = null
         pendingPurchaseAction = {
             addPurchase(date, type, name, cost, thc, grams, borrowed, postTax)
@@ -286,9 +289,33 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     ) {
         countdownJob?.cancel()
         pendingPurchaseAction = null
+        pendingBorrowedConsumptionAction = null
         pendingFinishAction = null
         pendingConsumptionAction = {
             addConsumption(date, time, productId, uses, isFinished)
+        }
+        startCountdown()
+    }
+
+    fun queueBorrowedConsumption(
+        date: String,
+        time: String,
+        type: String,
+        name: String,
+        uses: Double,
+    ) {
+        countdownJob?.cancel()
+        pendingPurchaseAction = null
+        pendingConsumptionAction = null
+        pendingFinishAction = null
+        pendingBorrowedConsumptionAction = {
+            addBorrowedConsumption(
+                date = date,
+                time = time,
+                type = type.trim(),
+                name = name.trim(),
+                uses = uses,
+            )
         }
         startCountdown()
     }
@@ -303,6 +330,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         countdownJob?.cancel()
         pendingPurchaseAction = null
         pendingConsumptionAction = null
+        pendingBorrowedConsumptionAction = null
         pendingFinishAction = {
             addFinishProduct(
                 date = submissionDateTime.date,
@@ -323,9 +351,11 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             _pendingCountdown.value = 0
             pendingPurchaseAction?.invoke()
             pendingConsumptionAction?.invoke()
+            pendingBorrowedConsumptionAction?.invoke()
             pendingFinishAction?.invoke()
             pendingPurchaseAction = null
             pendingConsumptionAction = null
+            pendingBorrowedConsumptionAction = null
             pendingFinishAction = null
         }
     }
@@ -335,6 +365,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _pendingCountdown.value = 0
         pendingPurchaseAction = null
         pendingConsumptionAction = null
+        pendingBorrowedConsumptionAction = null
         pendingFinishAction = null
         _syncStatus.value = "Action cancelled"
     }
@@ -344,9 +375,11 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _pendingCountdown.value = 0
         pendingPurchaseAction?.invoke()
         pendingConsumptionAction?.invoke()
+        pendingBorrowedConsumptionAction?.invoke()
         pendingFinishAction?.invoke()
         pendingPurchaseAction = null
         pendingConsumptionAction = null
+        pendingBorrowedConsumptionAction = null
         pendingFinishAction = null
     }
 
@@ -401,6 +434,49 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 clearConsumptionSelection()
             }
             _syncStatus.value = "Consumption saved offline"
+            syncQueue()
+        }
+    }
+
+    private fun addBorrowedConsumption(
+        date: String,
+        time: String,
+        type: String,
+        name: String,
+        uses: Double,
+    ) {
+        viewModelScope.launch {
+            val tempId = "temp_${UUID.randomUUID()}"
+            val purchase = PurchaseAction(
+                tempId = tempId,
+                actionId = UUID.randomUUID().toString(),
+                date = date,
+                type = type,
+                name = name,
+                cost = null,
+                thc = null,
+                grams = null,
+                borrowed = 1,
+                postTax = false,
+            )
+            val consumption = ConsumptionAction(
+                eventId = UUID.randomUUID().toString(),
+                date = date,
+                time = time,
+                productId = tempId,
+                uses = uses,
+                isFinished = false,
+            )
+            repository.addBorrowedConsumption(
+                purchase = purchase,
+                consumption = consumption,
+                loggedAtEpochMillis = System.currentTimeMillis(),
+            )
+            _consumptionFormState.value = ConsumptionFormState(
+                selectedProductId = tempId,
+                quantityText = formatQuantity(uses),
+            )
+            _syncStatus.value = "Borrowed consumption saved offline"
             syncQueue()
         }
     }

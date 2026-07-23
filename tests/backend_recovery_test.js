@@ -1102,6 +1102,66 @@ exercisePendingFault(FAULTS.LEDGER, 31);
   assertReconciliationClean(runtime);
 }
 
+// The recoverable planned-append path preserves omitted borrowed purchase
+// values as empty cells, links its same-request consumption, and retries
+// without another product or event row.
+{
+  const runtime = buildRuntime({
+    initialRecent: null,
+    initialQuantity: null,
+  });
+  const actionId = deterministicUuid(72501);
+  const eventId = deterministicUuid(72502);
+  const requestPayload = {
+    apiVersion: 2,
+    requestId: deterministicUuid(72503),
+    environment: 'SANDBOX',
+    purchases: [{
+      actionId,
+      tempId: 'temp-recoverable-borrowed',
+      date: '2025-06-03',
+      type: 'P',
+      name: 'Recoverable borrowed product',
+      cost: null,
+      thc: ' ',
+      grams: '',
+      borrowed: true,
+      postTax: false,
+    }],
+    consumptions: [{
+      eventId,
+      date: '2025-06-03',
+      time: '10:00:00',
+      productId: 'temp-recoverable-borrowed',
+      uses: 0.75,
+      isFinished: false,
+    }],
+  };
+  const committed = post(runtime, requestPayload);
+  assert.equal(committed.acknowledgedPurchases[0].status, 'committed');
+  assert.deepEqual(committed.acknowledgedConsumptions, [{ eventId, status: 'committed' }]);
+  const borrowedId = committed.productIdMap['temp-recoverable-borrowed'];
+  assert.match(borrowedId, /^\*P\d+B$/);
+  const borrowedProduct = productEntry(runtime, borrowedId);
+  assert.equal(cell(runtime, 'Purchases', borrowedProduct, 'Pre-tax cost'), '');
+  assert.equal(cell(runtime, 'Purchases', borrowedProduct, 'THC%'), '');
+  assert.equal(cell(runtime, 'Purchases', borrowedProduct, 'Grams'), '');
+  assert.equal(cell(runtime, 'Purchases', borrowedProduct, 'Final cost'), '');
+  assert.equal(productState(runtime, borrowedId).status, 0);
+  assert.equal(
+    cell(runtime, 'ConsumptionEvents', entryBy(runtime, 'ConsumptionEvents', 'Event UUID', eventId), 'Legacy Product ID'),
+    borrowedId,
+  );
+  assertCounts(runtime, { responses: 1, events: 1, ledgers: 1, journals: 1 });
+
+  const retry = post(runtime, requestPayload);
+  assert.equal(retry.acknowledgedPurchases[0].status, 'duplicate');
+  assert.deepEqual(retry.acknowledgedConsumptions, [{ eventId, status: 'duplicate' }]);
+  assert.equal(dataEntries(runtime, 'Purchases').length, 2);
+  assertCounts(runtime, { responses: 1, events: 1, ledgers: 1, journals: 1 });
+  assertReconciliationClean(runtime);
+}
+
 // Equal timestamps retain the quantity from the earlier physical canonical row.
 {
   const timestamp = new Date('2025-05-09T12:00:00-04:00');
