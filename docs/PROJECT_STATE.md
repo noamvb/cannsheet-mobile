@@ -4,13 +4,13 @@ Last updated: 2026-07-23
 
 ## Repository state
 
-- Branch: `docs/shared-codex-context`
-- Base/tracking reference at inspection: `origin/release/v1.2.10`
-- Working tree at initial inspection: clean
-- Current working tree: uncommitted shared-context documentation changes are
-  expected; no application or backend behavior changes are part of this task.
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.10`,
-  version code `13`
+- Canonical branch: `main`
+- Released source commit and tag: `45fce56`
+  (`v1.2.11`)
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.11`,
+  version code `14`
+- The public signed release is available from
+  `noamvb/cannsheet-mobile-releases` under tag `v1.2.11`.
 
 ## Project summary
 
@@ -66,24 +66,38 @@ or device verification.
 
 ## Current validation status
 
-At the start of the shared-context bootstrap, the branch was clean at commit
-`f6f98ae` (`Release Cannsheet Mobile 1.2.10`). Validation results for the
-documentation changes are recorded in `docs/HANDOFF.md`, which is updated last.
+The shared-context system reached `main` through PR #6. GitHub Actions run
+`30064613210` completed successfully after running the backend analytics test,
+Android unit tests, and debug APK build.
 
-The pull-request workflow runs:
+Release metadata reached `main` through PR #7. GitHub Actions run `30065008648`
+completed successfully with the same pull-request validation. Tag `v1.2.11`
+then triggered release run `30065340691`, which completed successfully after
+running unit tests and lint, validating the tag and required secrets, building
+and verifying the signed APK, generating its checksum, and publishing the
+APK-only release.
 
-- `node tests/backend_analytics_test.js`
-- `./gradlew --no-daemon testDebugUnitTest assembleDebug`
+Independent public-artifact verification established:
 
-The tag-triggered release workflow also runs `lintDebug`, validates release
-secrets, builds a signed APK, verifies it, and publishes it. Release operations
-must not be run without explicit authorization.
+- asset `Cannsheet-Mobile-1.2.11.apk`;
+- SHA-256
+  `8064dca240f358a2e8f0b7d318a6357630517b3fdd29296753780c3cecf9aaec`;
+- package `com.noamv.cannsheet.mobile`;
+- version code `14` and version name `1.2.11`; and
+- signing-certificate SHA-256
+  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
+
+The local backend analytics test passed. The local Gradle command did not start
+because this worktree had no configured Android SDK location; the corresponding
+GitHub Actions checks completed successfully in their configured SDK
+environment. Android instrumentation and device installation tests were not
+run.
 
 ## Current priorities
 
-No product roadmap priority can be verified from the repository. The immediate
-branch purpose is the focused shared-context bootstrap described in
-`docs/HANDOFF.md`.
+No product roadmap priority can be verified from the repository. The
+shared-context bootstrap and release `1.2.11` are complete; no next product task
+is established by repository evidence.
 
 ## Unresolved questions
 
@@ -91,7 +105,7 @@ branch purpose is the focused shared-context bootstrap described in
 - Do the connected production sheets currently match the contracts and
   reconciliation expectations in the checked-in backend reports?
 - Which supported Android versions/devices have been manually exercised for
-  release `1.2.10`?
+  release `1.2.11`?
 
 These require external or device evidence and should not be answered from this
 document alone.
