@@ -2,19 +2,20 @@
 
 Last updated: 2026-07-27
 
-Branch: `release/v1.2.14`
+Branch: `main`
 
-Working tree status: Fixed purchase screen date picker timezone shift bug.
+Working tree status: Clean (workflow optimization committed, pushed, and merged to main).
 
 ## Purpose of this session
 
-Fix date picker behavior on purchase entry screen where selecting a manual date caused the day prior to be selected in negative-offset timezones (e.g., US timezones).
+Speed up unit tests and build steps during release publishing in GitHub Actions without impacting app functionality, push changes, and follow through to release.
 
 ## Work completed
 
-- Added `parsePickerDateToMillis(dateString: String): Long?` in `ConsumptionDateTime.kt` for timezone-safe parsing of ISO `"yyyy-MM-dd"` strings into UTC epoch millis.
-- Updated `PurchaseScreen.kt` date picker state to format selected dates with `pickerDateToWire(selectedDateMillis)` (UTC timezone) and initialize state with `parsePickerDateToMillis(date) ?: currentLocalDateAsPickerMillis()`.
-- Added unit test cases in `ConsumptionDateTimeTest.kt` verifying `parsePickerDateToMillis` and `pickerDateToWire` round-trip date parsing across multiple timezones (`America/New_York`, `Asia/Tokyo`, `UTC`, `America/Los_Angeles`).
+- Updated `.github/workflows/release-apk.yml` to utilize `gradle/actions/setup-gradle@v4` for caching build outputs and configuration cache across runs.
+- Removed unnecessary `clean` step prior to `assembleRelease` in `.github/workflows/release-apk.yml`.
+- Created PR #15, merged changes into `main`.
+- Verified release tag `v1.2.14` publishing workflow status and Obtainium release asset compatibility (`Cannsheet-Mobile-1.2.14.apk`).
 
 ## Current project state
 
