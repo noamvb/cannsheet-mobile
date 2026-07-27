@@ -6,82 +6,62 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Card Shadow -->
+    <!-- Translucent Sheet Card Backdrop -->
     <path
-        android:fillColor="#30000000"
-        android:pathData="M32,29h44a8,8 0 0 1 8,8v48a8,8 0 0 1 -8,8h-44a8,8 0 0 1 -8,-8v-48a8,8 0 0 1 8,-8z" />
+        android:fillColor="#25FFFFFF"
+        android:strokeColor="#50FFFFFF"
+        android:strokeWidth="1.2"
+        android:pathData="M30,24h48a6,6 0 0 1 6,6v48a6,6 0 0 1 -6,6h-48a6,6 0 0 1 -6,-6v-48a6,6 0 0 1 6,-6z" />
 
-    <!-- Sheet / Card Container -->
+    <!-- Sheet Header Accent Line -->
     <path
-        android:fillColor="#F4FBF7"
-        android:strokeColor="#C8E6C9"
+        android:strokeColor="#00E676"
+        android:strokeWidth="2.5"
+        android:pathData="M24,36h60" />
+
+    <!-- Spreadsheet Column Lines -->
+    <path
+        android:strokeColor="#30FFFFFF"
         android:strokeWidth="1"
-        android:pathData="M30,26h48a8,8 0 0 1 8,8v48a8,8 0 0 1 -8,8h-48a8,8 0 0 1 -8,-8v-48a8,8 0 0 1 8,-8z" />
+        android:pathData="M44,36v48 M64,36v48" />
 
-    <!-- Sheet Header Bar -->
-    <path android:pathData="M30,26h48a8,8 0 0 1 8,8v6h-64v-6a8,8 0 0 1 8,-8z">
-        <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="30.0"
-                android:startY="26.0"
-                android:endX="86.0"
-                android:endY="40.0"
-                android:type="linear">
-                <item android:color="#1B5E20" android:offset="0.0" />
-                <item android:color="#2E7D32" android:offset="1.0" />
-            </gradient>
-        </aapt:attr>
-    </path>
-
-    <!-- Spreadsheet Column Dots in Header -->
-    <path android:fillColor="#A5D6A7" android:pathData="M36,33a1.5,1.5 0 1 1 0,-3a1.5,1.5 0 1 1 0,3z" />
-    <path android:fillColor="#A5D6A7" android:pathData="M42,33a1.5,1.5 0 1 1 0,-3a1.5,1.5 0 1 1 0,3z" />
-    <path android:fillColor="#A5D6A7" android:pathData="M48,33a1.5,1.5 0 1 1 0,-3a1.5,1.5 0 1 1 0,3z" />
-
-    <!-- Sheet Grid Lines -->
-    <path
-        android:strokeColor="#E0E0E0"
-        android:strokeWidth="0.8"
-        android:pathData="M30,50h56 M30,62h56 M30,74h56 M48,40v48 M66,40v48" />
-
-    <!-- Botanical Leaf Emblem Overlay -->
     <!-- Central Leaf Blade -->
     <path
         android:fillColor="#4CAF50"
-        android:pathData="M54,34 C48,44 48,60 54,74 C60,60 60,44 54,34 Z" />
+        android:pathData="M54,26 C47,38 47,56 54,70 C61,56 61,38 54,26 Z" />
 
     <!-- Left Upper Leaflet -->
     <path
-        android:fillColor="#388E3C"
-        android:pathData="M54,46 C42,40 34,46 34,46 C34,46 42,56 54,54 Z" />
+        android:fillColor="#2E7D32"
+        android:pathData="M54,40 C41,34 32,40 32,40 C32,40 40,51 54,48 Z" />
 
     <!-- Right Upper Leaflet -->
     <path
         android:fillColor="#66BB6A"
-        android:pathData="M54,46 C66,40 74,46 74,46 C74,46 66,56 54,54 Z" />
+        android:pathData="M54,40 C67,34 76,40 76,40 C76,40 68,51 54,48 Z" />
 
     <!-- Left Lower Leaflet -->
     <path
-        android:fillColor="#2E7D32"
-        android:pathData="M54,56 C44,52 38,58 38,58 C38,58 46,64 54,62 Z" />
+        android:fillColor="#1B5E20"
+        android:pathData="M54,50 C43,46 37,52 37,52 C37,52 44,60 54,57 Z" />
 
     <!-- Right Lower Leaflet -->
     <path
         android:fillColor="#43A047"
-        android:pathData="M54,56 C64,52 70,58 70,58 C70,58 62,64 54,62 Z" />
+        android:pathData="M54,50 C65,46 71,52 71,52 C71,52 64,60 54,57 Z" />
 
     <!-- Leaf Stem -->
     <path
         android:strokeColor="#1B5E20"
-        android:strokeWidth="2"
+        android:strokeWidth="2.5"
         android:strokeLineCap="round"
-        android:pathData="M54,72v7" />
+        android:pathData="M54,68v9" />
 
     <!-- Leaf Center Vein Highlight -->
     <path
-        android:strokeColor="#81C784"
+        android:strokeColor="#A5D6A7"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
-        android:pathData="M54,38v32" />
+        android:pathData="M54,30v36" />
 
 </vector>

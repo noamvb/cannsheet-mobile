@@ -5,48 +5,55 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Card Base Outline / Shape -->
+    <!-- Outer Sheet / Ledger Outline -->
     <path
-        android:fillColor="#000000"
-        android:pathData="M30,26h48a8,8 0 0 1 8,8v48a8,8 0 0 1 -8,8h-48a8,8 0 0 1 -8,-8v-48a8,8 0 0 1 8,-8z" />
-
-    <!-- Transparent Cutout / Grid Header Line in Card -->
-    <path
-        android:strokeColor="#00000000"
+        android:strokeColor="#000000"
+        android:strokeWidth="3.2"
         android:fillColor="#00000000"
-        android:pathData="M30,38h56" />
+        android:pathData="M32,24h44a6,6 0 0 1 6,6v48a6,6 0 0 1 -6,6h-44a6,6 0 0 1 -6,-6v-48a6,6 0 0 1 6,-6z" />
 
-    <!-- Botanical Leaf Emblem Silhouette (solid shape overlay) -->
-    <!-- Central Leaf Blade -->
+    <!-- Sheet Header Line -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="2.5"
+        android:pathData="M26,36h56" />
+
+    <!-- Spreadsheet Column Lines -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="1.8"
+        android:pathData="M44,36v48 M64,36v48" />
+
+    <!-- Botanical Leaf Center Blade -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,30 C47,42 47,60 54,75 C61,60 61,42 54,30 Z" />
+        android:pathData="M54,26 C47,38 47,56 54,70 C61,56 61,38 54,26 Z" />
 
     <!-- Left Upper Leaflet -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,44 C40,38 31,44 31,44 C31,44 40,56 54,53 Z" />
+        android:pathData="M54,40 C41,34 32,40 32,40 C32,40 40,51 54,48 Z" />
 
     <!-- Right Upper Leaflet -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,44 C68,38 77,44 77,44 C77,44 68,56 54,53 Z" />
+        android:pathData="M54,40 C67,34 76,40 76,40 C76,40 68,51 54,48 Z" />
 
     <!-- Left Lower Leaflet -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,54 C43,50 36,56 36,56 C36,56 44,64 54,61 Z" />
+        android:pathData="M54,50 C43,46 37,52 37,52 C37,52 44,60 54,57 Z" />
 
     <!-- Right Lower Leaflet -->
     <path
         android:fillColor="#000000"
-        android:pathData="M54,54 C65,50 72,56 72,56 C72,56 64,64 54,61 Z" />
+        android:pathData="M54,50 C65,46 71,52 71,52 C71,52 64,60 54,57 Z" />
 
     <!-- Stem -->
     <path
         android:strokeColor="#000000"
-        android:strokeWidth="2.5"
+        android:strokeWidth="3"
         android:strokeLineCap="round"
-        android:pathData="M54,72v8" />
+        android:pathData="M54,68v9" />
 
 </vector>

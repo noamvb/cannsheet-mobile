@@ -2,20 +2,19 @@
 
 Last updated: 2026-07-27
 
-Branch: `release/v1.2.12`
+Branch: `release/v1.2.13`
 
-Working tree status: Release v1.2.12 with adaptive and themed icon assets.
+Working tree status: Release v1.2.13 with transparent themed icon fix and webp fallback cleanup.
 
 ## Purpose of this session
 
-Design and implement a custom adaptive app icon for Cannsheet Mobile with Android 13+ Material You themed icon support (`<monochrome>`), bump release metadata to `v1.2.12`, publish the release to GitHub, and verify Obtainium availability.
+Fix Android 13+ Material You themed icon rendering by replacing opaque monochrome card fills with transparent cutouts, removing legacy static webp mipmap fallbacks, bumping release metadata to `v1.2.13`, and publishing signed release APK for Obtainium updates.
 
 ## Work completed
 
-- Created custom vector assets for launcher background (`ic_launcher_background.xml`), foreground (`ic_launcher_foreground.xml`), and monochrome (`ic_launcher_monochrome.xml`).
-- Configured `ic_launcher.xml` and `ic_launcher_round.xml` to include `<monochrome android:drawable="@drawable/ic_launcher_monochrome" />`.
-- Increased `versionCode` from `14` to `15` and `versionName` from `1.2.11` to `1.2.12` in `app/build.gradle.kts`.
-- Verified build and unit tests with `gradlew testDebugUnitTest assembleDebug` and `node tests/backend_analytics_test.js`.
+- Fixed `ic_launcher_monochrome.xml` vector paths so positive space (emblem and outlines) uses `#000000` and negative space is transparent (`#00000000`), allowing device theme colors to render cleanly.
+- Removed legacy `ic_launcher*.webp` files from all `mipmap-*` folders to force adaptive XML launcher icon usage on all modern launchers.
+- Increased `versionCode` to `16` and `versionName` to `1.2.13` in `app/build.gradle.kts`.
 
 ## Current project state
 
