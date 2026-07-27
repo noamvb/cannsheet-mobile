@@ -49,6 +49,8 @@ documents, not in this file.
   current when their subject matter changes.
 - Keep vendor adapters such as `GEMINI.md` concise. They should point agents to
   the canonical shared-context documents instead of duplicating project facts.
+- For Android adaptive icons, keep `<monochrome>` drawables (`ic_launcher_monochrome.xml`) transparent (`#00000000`) except for emblem/symbol paths (`#000000`) so Android 13+ Material You themed icon tinting renders cleanly without solid background blobs.
+
 
 ## Change and release rules
 
