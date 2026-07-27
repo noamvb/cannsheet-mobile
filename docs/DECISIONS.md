@@ -28,3 +28,15 @@ historical rationale.
 - Related files: `AGENTS.md`, `docs/PROJECT_STATE.md`,
   `docs/ARCHITECTURE.md`, `docs/HANDOFF.md`, `GEMINI.md`,
   `.agents/skills/project-handoff/SKILL.md`
+
+## ADR-002: Android Adaptive and Themed Launcher Icon Conventions
+
+- Status: Accepted
+- Date: 2026-07-27
+- Context: Android 8.0+ (API 26) uses adaptive icons (`mipmap-anydpi-v26/ic_launcher.xml`), and Android 13+ (API 33) supports Material You themed launcher icons (`<monochrome>`).
+- Decision:
+  1. `<monochrome>` drawables (`ic_launcher_monochrome.xml`) must contain solid vector shapes (`#000000`) only for positive space (emblem graphics and outlines). Surrounding background canvas and card interiors must be transparent (`#00000000`). Never draw solid background cards in monochrome vectors, as device launchers tint all non-transparent pixels, turning solid boxes into solid dark blobs.
+  2. Remove legacy `.webp` bitmap launcher assets from density folders (`mipmap-hdpi`, `mipmap-xxhdpi`, etc.) so modern launchers consistently use `mipmap-anydpi-v26` adaptive XML drawables.
+- Rationale: Ensures crisp, correct theme tinting across all launchers (Pixel, Samsung One UI) and prevents fallback to stale bitmap assets.
+- Related files: `app/src/main/res/drawable/ic_launcher_monochrome.xml`, `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`, `AGENTS.md`
+
