@@ -19,11 +19,7 @@ Design and implement a custom adaptive app icon for Cannsheet Mobile with Androi
 
 ## Current project state
 
-`main` contains the cross-agent context system and Cannsheet Mobile release
-metadata for version name `1.2.11`, version code `14`. Source tag `v1.2.11`
-points to `45fce56`, the release merge commit. The public release contains one
-APK and its checksum attachment; GitHub also displays its automatic source-code
-archives.
+`main` contains the adaptive & themed app icon features and Cannsheet Mobile release metadata for version name `1.2.12`, version code `15`. Source tag `v1.2.12` points to `8fae89147e1ea0e6b1b9d4a80365b8aac8a8e487`, the release commit. The public signed release is published on `noamvb/cannsheet-mobile-releases` for Obtainium updates.
 
 No application behavior, dependencies, Room schemas, backend code, production
 endpoint, application ID, environment ID, signing configuration, or live
@@ -33,28 +29,16 @@ service was changed during the release work.
 
 The following completed successfully:
 
-- `git diff --check`
 - `node tests/backend_analytics_test.js`
   - Result: `backend analytics tests passed`.
-- Context PR workflow run `30064613210`
-  - Backend analytics test, Android unit tests, and debug APK build passed.
-- Release PR workflow run `30065008648`
-  - Backend analytics test, Android unit tests, and debug APK build passed.
-- Release workflow run `30065340691`
-  - Tag/version check, unit tests, lint, secret presence checks, signed release
-    build, APK signature verification, checksum generation, and publication
-    passed.
-- Independent public-asset verification
-  - APK: `Cannsheet-Mobile-1.2.11.apk`
-  - SHA-256:
-    `8064dca240f358a2e8f0b7d318a6357630517b3fdd29296753780c3cecf9aaec`
-  - The downloaded APK hash matched both the checksum attachment and the digest
-    displayed by GitHub.
-  - `apksigner verify --verbose --print-certs` reported `Verifies`, one signer,
-    and the expected certificate SHA-256:
-    `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
-  - `aapt dump badging` reported package `com.noamv.cannsheet.mobile`, version
-    code `14`, and version name `1.2.11`.
+- `.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug`
+  - Result: `BUILD SUCCESSFUL`.
+- Release PR #9 merged to `main`.
+- Tag `v1.2.12` release workflow run `30293812075`
+  - Unit tests, lint, signed release build, APK verification, and GitHub Release publication to `noamvb/cannsheet-mobile-releases` passed.
+- Independent public-asset verification:
+  - Release URL: `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.12`
+  - Assets: `Cannsheet-Mobile-1.2.12.apk`, `Cannsheet-Mobile-1.2.12.apk.sha256`.
 
 ## Validation not performed
 

@@ -70,28 +70,16 @@ The shared-context system reached `main` through PR #6. GitHub Actions run
 `30064613210` completed successfully after running the backend analytics test,
 Android unit tests, and debug APK build.
 
-Release metadata reached `main` through PR #7. GitHub Actions run `30065008648`
-completed successfully with the same pull-request validation. Tag `v1.2.11`
-then triggered release run `30065340691`, which completed successfully after
-running unit tests and lint, validating the tag and required secrets, building
-and verifying the signed APK, generating its checksum, and publishing the
-APK-only release.
+Release metadata reached `main` through PR #9. Tag `v1.2.12` triggered release run `30293812075`, which completed successfully after running unit tests and lint, validating the tag and required secrets, building and verifying the signed APK, generating its checksum, and publishing the APK-only release.
 
 Independent public-artifact verification established:
 
-- asset `Cannsheet-Mobile-1.2.11.apk`;
-- SHA-256
-  `8064dca240f358a2e8f0b7d318a6357630517b3fdd29296753780c3cecf9aaec`;
+- asset `Cannsheet-Mobile-1.2.12.apk`;
 - package `com.noamv.cannsheet.mobile`;
-- version code `14` and version name `1.2.11`; and
-- signing-certificate SHA-256
-  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
+- version code `15` and version name `1.2.12`; and
+- public release live at `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.12`.
 
-The local backend analytics test passed. The local Gradle command did not start
-because this worktree had no configured Android SDK location; the corresponding
-GitHub Actions checks completed successfully in their configured SDK
-environment. Android instrumentation and device installation tests were not
-run.
+The local backend analytics test passed. Local Gradle unit tests and debug assemble passed (`testDebugUnitTest assembleDebug`).
 
 ## Current priorities
 
