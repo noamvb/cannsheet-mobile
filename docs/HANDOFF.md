@@ -2,65 +2,47 @@
 
 Last updated: 2026-07-27
 
-Branch: `release/v1.2.13`
+Branch: `release/v1.2.14`
 
-Working tree status: Release v1.2.13 with transparent themed icon fix and webp fallback cleanup.
+Working tree status: Fixed purchase screen date picker timezone shift bug.
 
 ## Purpose of this session
 
-Fix Android 13+ Material You themed icon rendering by replacing opaque monochrome card fills with transparent cutouts, removing legacy static webp mipmap fallbacks, bumping release metadata to `v1.2.13`, and publishing signed release APK for Obtainium updates.
+Fix date picker behavior on purchase entry screen where selecting a manual date caused the day prior to be selected in negative-offset timezones (e.g., US timezones).
 
 ## Work completed
 
-- Fixed `ic_launcher_monochrome.xml` vector paths so positive space (emblem and outlines) uses `#000000` and negative space is transparent (`#00000000`), allowing device theme colors to render cleanly.
-- Removed legacy `ic_launcher*.webp` files from all `mipmap-*` folders to force adaptive XML launcher icon usage on all modern launchers.
-- Increased `versionCode` to `16` and `versionName` to `1.2.13` in `app/build.gradle.kts`.
+- Added `parsePickerDateToMillis(dateString: String): Long?` in `ConsumptionDateTime.kt` for timezone-safe parsing of ISO `"yyyy-MM-dd"` strings into UTC epoch millis.
+- Updated `PurchaseScreen.kt` date picker state to format selected dates with `pickerDateToWire(selectedDateMillis)` (UTC timezone) and initialize state with `parsePickerDateToMillis(date) ?: currentLocalDateAsPickerMillis()`.
+- Added unit test cases in `ConsumptionDateTimeTest.kt` verifying `parsePickerDateToMillis` and `pickerDateToWire` round-trip date parsing across multiple timezones (`America/New_York`, `Asia/Tokyo`, `UTC`, `America/Los_Angeles`).
 
 ## Current project state
 
-`main` contains the adaptive & themed app icon features and Cannsheet Mobile release metadata for version name `1.2.12`, version code `15`. Source tag `v1.2.12` points to `8fae89147e1ea0e6b1b9d4a80365b8aac8a8e487`, the release commit. The public signed release is published on `noamvb/cannsheet-mobile-releases` for Obtainium updates.
-
-No application behavior, dependencies, Room schemas, backend code, production
-endpoint, application ID, environment ID, signing configuration, or live
-service was changed during the release work.
+`PurchaseScreen` and `ConsumptionScreen` both use consistent UTC date picker conversion helpers (`pickerDateToWire`, `currentLocalDateAsPickerMillis`, `parsePickerDateToMillis`) preventing timezone offset shifts when picking dates.
 
 ## Validation performed
 
 The following completed successfully:
 
-- `node tests/backend_analytics_test.js`
-  - Result: `backend analytics tests passed`.
-- `.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug`
-  - Result: `BUILD SUCCESSFUL`.
-- Release PR #9 merged to `main`.
-- Tag `v1.2.12` release workflow run `30293812075`
-  - Unit tests, lint, signed release build, APK verification, and GitHub Release publication to `noamvb/cannsheet-mobile-releases` passed.
-- Independent public-asset verification:
-  - Release URL: `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.12`
-  - Assets: `Cannsheet-Mobile-1.2.12.apk`, `Cannsheet-Mobile-1.2.12.apk.sha256`.
+- `.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug` (passed, all 28 unit test tasks executed/up-to-date)
+- `.\gradlew.bat --no-daemon lintDebug` (passed)
+- Node backend contract & integration suites:
+  - `node tests/backend_contract_test.js`
+  - `node tests/backend_analytics_test.js`
+  - `node tests/backend_recovery_test.js`
+  - `node tests/backend_spreadsheet_test.js`
+  - `node tests/fake_sheets_batch_update_test.js`
+  - `node tests/sandbox_performance_fixture_test.js`
+  - `node tests/sandbox_provisioning_test.js`
 
 ## Validation not performed
 
-- The local
-  `.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug` command did not
-  start because this worktree had no configured Android SDK location. The
-  corresponding configured GitHub Actions checks passed.
-- Android instrumentation tests and installation on a physical device or
-  emulator were not performed.
-- Live Apps Script, trigger, spreadsheet-schema, and production-data state were
-  not changed or revalidated during this release.
-
-## Remaining work
-
-No required shared-context or `1.2.11` release work remains after this final
-documentation update is merged to `main`. Deleting merged remote branches is
-optional and was intentionally not performed.
+- Android instrumentation tests on a physical device or emulator were not performed.
+- Live Apps Script deployment and production spreadsheet state were not modified or revalidated.
 
 ## Recommended next action
 
-Start the next task from updated `main`. Read `AGENTS.md`,
-`docs/PROJECT_STATE.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, and this
-file before substantial work. Gemini CLI should begin with `GEMINI.md`.
+Merge or submit pull request with the purchase date picker fix.
 
 ## Risks, assumptions, and unresolved questions
 

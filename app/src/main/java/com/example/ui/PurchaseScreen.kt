@@ -23,7 +23,7 @@ import java.util.Locale
 fun PurchaseScreen(viewModel: CannsheetViewModel) {
     val context = LocalContext.current
 
-    val today = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val today = remember { currentSubmissionDateTime().date }
     var date by remember { mutableStateOf(today) }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -39,13 +39,16 @@ fun PurchaseScreen(viewModel: CannsheetViewModel) {
     val categories = listOf("P", "E", "J", "F", "S", "K")
 
     if (showDatePicker) {
-        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = System.currentTimeMillis())
+        val initialMillis = remember(date) {
+            parsePickerDateToMillis(date) ?: currentLocalDateAsPickerMillis()
+        }
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date(it))
+                        date = pickerDateToWire(it)
                     }
                     showDatePicker = false
                 }) {
@@ -228,7 +231,7 @@ fun PurchaseScreen(viewModel: CannsheetViewModel) {
                         postTax = postTax
                     )
                     // Reset
-                    date = ""
+                    date = today
                     type = ""
                     name = ""
                     cost = ""

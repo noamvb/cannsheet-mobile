@@ -5,11 +5,11 @@ Last updated: 2026-07-27
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and tag: `v1.2.13`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.13`,
-  version code `16`
+- Released source commit and tag: `v1.2.14`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.14`,
+  version code `17`
 - The public signed release is available from
-  `noamvb/cannsheet-mobile-releases` under tag `v1.2.13`.
+  `noamvb/cannsheet-mobile-releases` under tag `v1.2.14`.
 
 ## Project summary
 
@@ -25,6 +25,7 @@ Repository code and tests show:
 - Custom adaptive app icon with dark emerald background grid, botanical/sheet emblem, and Android 13+ Material You monochrome themed icon support (`ic_launcher_monochrome.xml`).
 - Compose screens for logging consumption and purchases, viewing Insights and
   History, and changing settings.
+- Purchase screen date picker UTC date formatting (`pickerDateToWire`, `parsePickerDateToMillis`) preventing one-day date shifts in negative-offset timezones.
 - Personal and borrowed-product consumption logging.
 - Standalone product-finish actions.
 - A user-visible cancellation countdown before queued actions are submitted.
@@ -79,7 +80,7 @@ Independent public-artifact verification established:
 - version code `15` and version name `1.2.12`; and
 - public release live at `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.12`.
 
-The local backend analytics test passed. Local Gradle unit tests and debug assemble passed (`testDebugUnitTest assembleDebug`).
+The local backend test suites (`backend_contract_test.js`, `backend_analytics_test.js`, `backend_recovery_test.js`, `backend_spreadsheet_test.js`, `fake_sheets_batch_update_test.js`, `sandbox_performance_fixture_test.js`, `sandbox_provisioning_test.js`) passed. Local Gradle unit tests, debug assemble, and lint passed (`.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug` and `lintDebug`).
 
 ## Current priorities
 
