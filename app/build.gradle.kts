@@ -35,8 +35,8 @@ android {
     applicationId = "com.noamv.cannsheet.mobile"
     minSdk = 24
     targetSdk = 36
-    versionCode = 15
-    versionName = "1.2.12"
+    versionCode = 16
+    versionName = "1.2.13"
 
     buildConfigField("String", "GAS_URL", buildConfigString(productionGasUrl))
     buildConfigField("String", "APP_ENVIRONMENT", buildConfigString("PRODUCTION"))

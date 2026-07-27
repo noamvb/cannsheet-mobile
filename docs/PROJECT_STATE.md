@@ -5,11 +5,11 @@ Last updated: 2026-07-27
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and tag: `v1.2.12`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.12`,
-  version code `15`
+- Released source commit and tag: `v1.2.13`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.13`,
+  version code `16`
 - The public signed release is available from
-  `noamvb/cannsheet-mobile-releases` under tag `v1.2.12`.
+  `noamvb/cannsheet-mobile-releases` under tag `v1.2.13`.
 
 ## Project summary
 
