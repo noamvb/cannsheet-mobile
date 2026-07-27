@@ -1,33 +1,21 @@
 # Latest handoff
 
-Last updated: 2026-07-23
+Last updated: 2026-07-27
 
-Branch: `codex/v1.2.11-release-handoff`
+Branch: `release/v1.2.12`
 
-Working tree status: Clean after the handoff commit; this branch differs from
-the released `main` commit only in `docs/PROJECT_STATE.md` and this file.
+Working tree status: Release v1.2.12 with adaptive and themed icon assets.
 
 ## Purpose of this session
 
-Land the reviewed cross-agent context system on `main`, publish Cannsheet Mobile
-`1.2.11`, verify the public APK independently, and record the resulting
-repository state for the next coding agent or session.
+Design and implement a custom adaptive app icon for Cannsheet Mobile with Android 13+ Material You themed icon support (`<monochrome>`), bump release metadata to `v1.2.12`, publish the release to GitHub, and verify Obtainium availability.
 
 ## Work completed
 
-- Recreated the seven-file cross-agent context change from `main` because PR #5
-  had targeted the historical `release/v1.2.10` branch.
-- Merged the corrected context PR #6 into `main` at `b9cd104`.
-- Increased `versionCode` from `13` to `14` and `versionName` from `1.2.10` to
-  `1.2.11` in `app/build.gradle.kts`.
-- Merged release PR #7 into `main` at `45fce56`.
-- Created annotated tag `v1.2.11` on that exact `main` commit and pushed it.
-- Monitored tag-triggered release run `30065340691` to successful completion.
-- Verified the public release at
-  `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.11`.
-- Updated `docs/PROJECT_STATE.md` and this latest-state handoff after all release
-  validation completed. No ADR was added because the release introduced no new
-  durable architectural decision.
+- Created custom vector assets for launcher background (`ic_launcher_background.xml`), foreground (`ic_launcher_foreground.xml`), and monochrome (`ic_launcher_monochrome.xml`).
+- Configured `ic_launcher.xml` and `ic_launcher_round.xml` to include `<monochrome android:drawable="@drawable/ic_launcher_monochrome" />`.
+- Increased `versionCode` from `14` to `15` and `versionName` from `1.2.11` to `1.2.12` in `app/build.gradle.kts`.
+- Verified build and unit tests with `gradlew testDebugUnitTest assembleDebug` and `node tests/backend_analytics_test.js`.
 
 ## Current project state
 
