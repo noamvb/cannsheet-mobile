@@ -39,6 +39,23 @@ class ConsumptionDateTimeTest {
         assertEquals("04:09", timeToWire(4, 9))
     }
 
+    @Test
+    fun parsePickerDateToMillisParsesUtcDateAndRoundTripsAcrossTimeZones() {
+        listOf("America/New_York", "Asia/Tokyo", "UTC", "America/Los_Angeles").forEach { timeZoneId ->
+            withDefaultTimeZone(timeZoneId) {
+                val millis = parsePickerDateToMillis("2026-07-27")
+                org.junit.Assert.assertNotNull(millis)
+                assertEquals("2026-07-27", pickerDateToWire(millis!!))
+            }
+        }
+    }
+
+    @Test
+    fun parsePickerDateToMillisReturnsNullForInvalidDate() {
+        org.junit.Assert.assertNull(parsePickerDateToMillis("invalid-date"))
+        org.junit.Assert.assertNull(parsePickerDateToMillis(""))
+    }
+
     private inline fun withDefaultTimeZone(id: String, block: () -> Unit) {
         val previous = TimeZone.getDefault()
         try {

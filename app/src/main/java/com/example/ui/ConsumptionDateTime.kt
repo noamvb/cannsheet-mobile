@@ -21,6 +21,12 @@ fun pickerDateToWire(selectedDateMillis: Long): String =
         timeZone = TimeZone.getTimeZone("UTC")
     }.format(Date(selectedDateMillis))
 
+fun parsePickerDateToMillis(dateString: String): Long? = runCatching {
+    SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }.parse(dateString)?.time
+}.getOrNull()
+
 fun currentLocalDateAsPickerMillis(nowEpochMillis: Long = System.currentTimeMillis()): Long {
     val localDate = Calendar.getInstance().apply { timeInMillis = nowEpochMillis }
     return Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
