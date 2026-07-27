@@ -1,16 +1,15 @@
 # Project state
 
-Last updated: 2026-07-23
+Last updated: 2026-07-27
 
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and tag: `45fce56`
-  (`v1.2.11`)
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.11`,
-  version code `14`
+- Released source commit and tag: `v1.2.12`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.12`,
+  version code `15`
 - The public signed release is available from
-  `noamvb/cannsheet-mobile-releases` under tag `v1.2.11`.
+  `noamvb/cannsheet-mobile-releases` under tag `v1.2.12`.
 
 ## Project summary
 
@@ -23,6 +22,7 @@ Script web app whose checked-in source reads and writes Google Sheets.
 
 Repository code and tests show:
 
+- Custom adaptive app icon with dark emerald background grid, botanical/sheet emblem, and Android 13+ Material You monochrome themed icon support (`ic_launcher_monochrome.xml`).
 - Compose screens for logging consumption and purchases, viewing Insights and
   History, and changing settings.
 - Personal and borrowed-product consumption logging.
