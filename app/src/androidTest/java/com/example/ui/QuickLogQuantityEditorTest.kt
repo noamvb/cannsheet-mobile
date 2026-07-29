@@ -23,10 +23,14 @@ class QuickLogQuantityEditorTest {
 
         composeRule.setContent {
             MaterialTheme {
-                QuickLogQuantityEditor(
-                    quantityPresets = listOf(0.5, 1.0, 2.0),
-                    onSave = { savedPresets = it },
-                )
+                androidx.compose.foundation.layout.Column(
+                    modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                ) {
+                    QuickLogQuantityEditor(
+                        quantityPresets = listOf(0.5, 1.0, 2.0),
+                        onSave = { savedPresets = it },
+                    )
+                }
             }
         }
 
@@ -58,10 +62,14 @@ class QuickLogQuantityEditorTest {
     fun stopsAddingAtTenPresets() {
         composeRule.setContent {
             MaterialTheme {
-                QuickLogQuantityEditor(
-                    quantityPresets = (1..10).map { it.toDouble() },
-                    onSave = {},
-                )
+                androidx.compose.foundation.layout.Column(
+                    modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                ) {
+                    QuickLogQuantityEditor(
+                        quantityPresets = (1..10).map { it.toDouble() },
+                        onSave = {},
+                    )
+                }
             }
         }
 
