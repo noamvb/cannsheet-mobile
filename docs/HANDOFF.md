@@ -57,7 +57,8 @@ Implement a focused overhaul of GitHub Actions validation and release workflows 
 
 ## Recommended next action
 
-1. Commit the changes to `ci/tiered-validation-release-gate`.
+1. Push commit `207d455` and tag `v1.2.15` to trigger the updated validation and release pipeline.
+2. Verify live workflow execution on GitHub Actions.
 2. Push branch to `origin/ci/tiered-validation-release-gate`.
 3. Open a draft pull request against `main` for PR validation testing.
 
