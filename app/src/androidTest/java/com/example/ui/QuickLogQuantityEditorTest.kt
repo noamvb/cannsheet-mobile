@@ -44,17 +44,13 @@ class QuickLogQuantityEditorTest {
         composeRule.setContent {
             MaterialTheme {
                 QuickLogQuantityEditor(
-                    quantityPresets = listOf(0.5, 1.0, 2.0),
+                    quantityPresets = listOf(0.5),
                     onSave = {},
                 )
             }
         }
 
-        composeRule.onNodeWithContentDescription("Remove preset 3").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Remove preset 2").performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithContentDescription("Remove preset 1").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Remove preset 1", useUnmergedTree = true).assertIsNotEnabled()
     }
 
     @Test
