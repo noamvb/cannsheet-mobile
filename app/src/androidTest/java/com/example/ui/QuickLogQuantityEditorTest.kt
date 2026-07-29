@@ -1,6 +1,10 @@
 package com.example.ui
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onLast
@@ -23,8 +27,8 @@ class QuickLogQuantityEditorTest {
 
         composeRule.setContent {
             MaterialTheme {
-                androidx.compose.foundation.layout.Column(
-                    modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
                 ) {
                     QuickLogQuantityEditor(
                         quantityPresets = listOf(0.5, 1.0, 2.0),
@@ -62,8 +66,8 @@ class QuickLogQuantityEditorTest {
     fun stopsAddingAtTenPresets() {
         composeRule.setContent {
             MaterialTheme {
-                androidx.compose.foundation.layout.Column(
-                    modifier = androidx.compose.ui.Modifier.verticalScroll(androidx.compose.foundation.rememberScrollState())
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState())
                 ) {
                     QuickLogQuantityEditor(
                         quantityPresets = (1..10).map { it.toDouble() },
