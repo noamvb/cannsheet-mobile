@@ -3,7 +3,7 @@ package com.example.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -32,7 +32,7 @@ class QuickLogQuantityEditorTest {
 
         composeRule.onNodeWithText("Add preset").performClick()
         composeRule.waitForIdle()
-        composeRule.onNode(hasSetTextAction() and hasText("Preset 4")).performTextInput("4")
+        composeRule.onAllNodes(hasSetTextAction()).onLast().performTextInput("4")
         composeRule.onNodeWithText("Save quantity presets").performClick()
 
         composeRule.runOnIdle {
