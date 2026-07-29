@@ -15,6 +15,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import java.net.URI
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -166,6 +167,7 @@ internal fun QuickLogQuantityEditor(
                 enabled = presetInputs.size >
                     ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS,
                 modifier = Modifier.semantics {
+                    contentDescription = "Remove preset ${index + 1}"
                     if (presetInputs.size <= ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS) {
                         disabled()
                     }
@@ -173,7 +175,7 @@ internal fun QuickLogQuantityEditor(
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Remove preset ${index + 1}",
+                    contentDescription = null,
                 )
             }
         }
