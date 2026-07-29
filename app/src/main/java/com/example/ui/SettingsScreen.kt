@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
@@ -151,7 +152,9 @@ internal fun QuickLogQuantityEditor(
                     presetsSaved = false
                 },
                 label = { Text("Preset ${index + 1}") },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(QuickLogQuantityEditorTestTags.presetInput(index + 1)),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 isError = presetErrors[index] != null,
@@ -166,12 +169,17 @@ internal fun QuickLogQuantityEditor(
                 },
                 enabled = presetInputs.size >
                     ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS,
-                modifier = Modifier.semantics {
-                    contentDescription = "Remove preset ${index + 1}"
-                    if (presetInputs.size <= ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS) {
-                        disabled()
-                    }
-                },
+                modifier = Modifier
+                    .testTag(QuickLogQuantityEditorTestTags.removePreset(index + 1))
+                    .semantics {
+                        contentDescription = "Remove preset ${index + 1}"
+                        if (
+                            presetInputs.size <=
+                            ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS
+                        ) {
+                            disabled()
+                        }
+                    },
             ) {
                 Icon(
                     imageVector = Icons.Default.Delete,
@@ -190,7 +198,9 @@ internal fun QuickLogQuantityEditor(
             presetInputs = presetInputs + ""
             presetsSaved = false
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(QuickLogQuantityEditorTestTags.ADD_PRESET),
         enabled = presetInputs.size <
             ConsumptionPreferencesRepository.MAX_QUANTITY_PRESETS,
     ) {
@@ -208,7 +218,9 @@ internal fun QuickLogQuantityEditor(
             presetsSaved = true
             focusManager.clearFocus()
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(QuickLogQuantityEditorTestTags.SAVE_PRESETS),
         enabled = presetsAreValid
     ) {
         Text("Save quantity presets")
@@ -221,6 +233,15 @@ internal fun QuickLogQuantityEditor(
             style = MaterialTheme.typography.bodyMedium
         )
     }
+}
+
+internal object QuickLogQuantityEditorTestTags {
+    const val ADD_PRESET = "quick-log-add-preset"
+    const val SAVE_PRESETS = "quick-log-save-presets"
+
+    fun presetInput(position: Int) = "quick-log-preset-input-$position"
+
+    fun removePreset(position: Int) = "quick-log-remove-preset-$position"
 }
 
 internal fun endpointDiagnostic(url: String): String = runCatching {

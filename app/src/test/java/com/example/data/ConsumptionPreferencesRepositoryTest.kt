@@ -15,7 +15,7 @@ class ConsumptionPreferencesRepositoryTest {
     }
 
     @Test
-    fun validatesOneToTenPositiveFiniteDistinctPresets() {
+    fun acceptsMinimumCommonAndMaximumPresetCounts() {
         assertTrue(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(1.0)))
         assertTrue(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(0.25, 1.0, 3.0)))
         assertTrue(
@@ -23,12 +23,20 @@ class ConsumptionPreferencesRepositoryTest {
                 (1..10).map { it.toDouble() }
             )
         )
+    }
+
+    @Test
+    fun rejectsPresetCountsOutsideOneToTen() {
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(emptyList()))
         assertFalse(
             ConsumptionPreferencesRepository.isValidQuantityPresets(
                 (1..11).map { it.toDouble() }
             )
         )
+    }
+
+    @Test
+    fun rejectsDuplicateNonPositiveAndNonFinitePresets() {
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(1.0, 1.0, 2.0)))
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(0.0, 1.0, 2.0)))
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(Double.NaN, 1.0, 2.0)))

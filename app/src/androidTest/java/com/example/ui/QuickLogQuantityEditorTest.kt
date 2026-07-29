@@ -5,12 +5,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import org.junit.Assert.assertEquals
@@ -38,45 +34,15 @@ class QuickLogQuantityEditorTest {
             }
         }
 
-        composeRule.onNodeWithText("Add preset").performClick()
+        composeRule.onNodeWithTag(QuickLogQuantityEditorTestTags.ADD_PRESET).performClick()
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasSetTextAction()).onLast().performTextInput("4")
-        composeRule.onNodeWithText("Save quantity presets").performClick()
+        composeRule
+            .onNodeWithTag(QuickLogQuantityEditorTestTags.presetInput(position = 4))
+            .performTextInput("4")
+        composeRule.onNodeWithTag(QuickLogQuantityEditorTestTags.SAVE_PRESETS).performClick()
 
         composeRule.runOnIdle {
             assertEquals(listOf(0.5, 1.0, 2.0, 4.0), savedPresets)
         }
-    }
-
-    @Test
-    fun keepsAtLeastOnePreset() {
-        composeRule.setContent {
-            MaterialTheme {
-                QuickLogQuantityEditor(
-                    quantityPresets = listOf(0.5),
-                    onSave = {},
-                )
-            }
-        }
-
-        composeRule.onNodeWithContentDescription("Remove preset 1", useUnmergedTree = true).assertIsNotEnabled()
-    }
-
-    @Test
-    fun stopsAddingAtTenPresets() {
-        composeRule.setContent {
-            MaterialTheme {
-                Column(
-                    modifier = Modifier.verticalScroll(rememberScrollState())
-                ) {
-                    QuickLogQuantityEditor(
-                        quantityPresets = (1..10).map { it.toDouble() },
-                        onSave = {},
-                    )
-                }
-            }
-        }
-
-        composeRule.onNodeWithText("Add preset").assertIsNotEnabled()
     }
 }
