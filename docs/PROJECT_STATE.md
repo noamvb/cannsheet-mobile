@@ -73,7 +73,9 @@ The uncommitted backend milestone adds:
 - disabled-first production provisioning and sandbox provisioning that validates
   environment, spreadsheet, form, and Config identity before any mutation; and
 - focused fake-runtime, regression, scale, recovery, and provisioning tests,
-  registered in backend-only CI.
+  registered in backend-only CI; and
+- canonical-time parsing for version-2 consumption, finish, and correction
+  wall-clock values, independent of the execution host's timezone.
 
 Android persistence, queueing, History editing UI, and network integration are
 not part of this milestone and remain pending behind the backend PR and sandbox
@@ -118,6 +120,15 @@ production-marked spreadsheet before rejecting it. The implementation was
 changed to perform the complete target guard first, and a snapshot/no-write
 regression was added. The verifier's second pass found the repaired backend
 milestone ready.
+
+Pull request
+[PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) is open. Its first
+GitHub Actions run passed classification, Android static validation, and the API
+24 emulator, but the backend job exposed a host-timezone-dependent retry bug.
+The same failure was reproduced locally under `TZ=UTC`. The backend now parses
+wall-clock input explicitly in `America/New_York`, and the fake runtime and
+affected assertions cover both UTC and New York hosts. A follow-up CI run is
+pending.
 
 Not yet performed:
 

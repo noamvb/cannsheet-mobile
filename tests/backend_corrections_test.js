@@ -180,6 +180,17 @@ function get(runtime, parameters) {
   }));
 }
 
+function withHostTimeZone(timeZone, callback) {
+  const previous = process.env.TZ;
+  process.env.TZ = timeZone;
+  try {
+    return callback();
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+}
+
 function correction(actionOrdinal, operation, overrides = {}) {
   const replace = operation === 'REPLACE';
   return Object.assign({
@@ -326,8 +337,24 @@ function assertCorrectionProjection(runtime) {
 
   const sameRequestRetry = post(runtime, firstPayload);
   assert.equal(
+    sameRequestRetry.success,
+    true,
+    JSON.stringify(sameRequestRetry),
+  );
+  assert.equal(
+    Array.isArray(sameRequestRetry.acknowledgedConsumptionCorrections),
+    true,
+    JSON.stringify(sameRequestRetry),
+  );
+  assert.equal(
+    sameRequestRetry.acknowledgedConsumptionCorrections.length,
+    1,
+    JSON.stringify(sameRequestRetry),
+  );
+  assert.equal(
     sameRequestRetry.acknowledgedConsumptionCorrections[0].status,
-    'duplicate'
+    'duplicate',
+    JSON.stringify(sameRequestRetry),
   );
   assert.equal(dataRows(runtime, 'ConsumptionEventCorrections').length, 1);
 
@@ -380,6 +407,68 @@ function assertCorrectionProjection(runtime) {
     from: '2026-07-01', to: '2026-07-20',
   });
 }
+
+// Correction timestamps are canonical New York wall-clock values, independent
+// of the Node host timezone. Both commit and exact same-request retry must
+// therefore resolve to one durable revision with a matching acknowledgement.
+[
+  { hostTimeZone: 'UTC', ordinal: 90 },
+  { hostTimeZone: 'America/New_York', ordinal: 91 },
+].forEach(testCase => withHostTimeZone(testCase.hostTimeZone, () => {
+  const runtime = buildRuntime();
+  const action = correction(testCase.ordinal, 'REPLACE', {
+    reason: `host timezone ${testCase.hostTimeZone}`,
+  });
+  const request = payload(testCase.ordinal, [action]);
+  const committed = post(runtime, request);
+  assert.deepEqual(
+    committed.acknowledgedConsumptionCorrections,
+    [{
+      actionId: action.actionId,
+      targetEventId: EVENT_ID,
+      revision: 1,
+      status: 'committed',
+    }],
+    JSON.stringify(committed),
+  );
+  assert.equal(
+    runtime.audit.services.some(entry => (
+      entry.service === 'Utilities'
+      && entry.method === 'parseDate'
+      && entry.timeZone === 'America/New_York'
+      && entry.format === 'yyyy-MM-dd HH:mm:ss'
+    )),
+    true,
+    `missing canonical Utilities.parseDate call for ${testCase.hostTimeZone}`,
+  );
+
+  const retry = post(runtime, request);
+  assert.equal(retry.success, true, JSON.stringify(retry));
+  assert.deepEqual(
+    retry.acknowledgedConsumptionCorrections,
+    [{
+      actionId: action.actionId,
+      targetEventId: EVENT_ID,
+      revision: 1,
+      status: 'duplicate',
+    }],
+    JSON.stringify(retry),
+  );
+  assert.equal(dataRows(runtime, 'ConsumptionEventCorrections').length, 1);
+
+  const history = get(runtime, {
+    resource: 'history',
+    analyticsVersion: 2,
+    environment: 'SANDBOX',
+    limit: 10,
+  });
+  assert.equal(history.success, true, JSON.stringify(history));
+  assert.equal(
+    history.events[0].occurredAtEpochMillis,
+    Date.parse('2026-07-11T15:30:00.000Z'),
+    JSON.stringify(history),
+  );
+}));
 
 // Revisions form a linear append-only chain. VOID removes the effective row and
 // RESTORE returns the immutable original snapshot.

@@ -1447,6 +1447,63 @@ function formatDateInTimeZone(dateValue, timeZone, format) {
     .replace(/SSS/g, String(date.getMilliseconds()).padStart(3, '0'));
 }
 
+function parseDateInTimeZone(dateText, timeZone, format) {
+  const tokenPatterns = {
+    yyyy: '(\\d{4})',
+    MM: '(\\d{2})',
+    dd: '(\\d{2})',
+    HH: '(\\d{2})',
+    mm: '(\\d{2})',
+    ss: '(\\d{2})',
+    SSS: '(\\d{3})',
+  };
+  const tokens = [];
+  const tokenMatcher = /(yyyy|SSS|MM|dd|HH|mm|ss)/g;
+  const patternText = String(format);
+  let pattern = '^';
+  let cursor = 0;
+  let tokenMatch;
+  while ((tokenMatch = tokenMatcher.exec(patternText)) !== null) {
+    pattern += patternText
+      .slice(cursor, tokenMatch.index)
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    pattern += tokenPatterns[tokenMatch[0]];
+    tokens.push(tokenMatch[0]);
+    cursor = tokenMatch.index + tokenMatch[0].length;
+  }
+  pattern += patternText.slice(cursor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  pattern += '$';
+
+  const match = new RegExp(pattern).exec(String(dateText));
+  if (!match) {
+    throw new Error(
+      `Utilities.parseDate could not parse "${dateText}" with "${format}"`,
+    );
+  }
+  const parts = {
+    year: 1970,
+    month: 1,
+    day: 1,
+    hour: 0,
+    minute: 0,
+    second: 0,
+    millisecond: 0,
+  };
+  const fields = {
+    yyyy: 'year',
+    MM: 'month',
+    dd: 'day',
+    HH: 'hour',
+    mm: 'minute',
+    ss: 'second',
+    SSS: 'millisecond',
+  };
+  tokens.forEach((token, index) => {
+    parts[fields[token]] = Number(match[index + 1]);
+  });
+  return localDateTimeToDate(parts, timeZone);
+}
+
 function normalizeSheetSeed(value) {
   if (Array.isArray(value)) return { rows: value, options: {} };
   if (!value || typeof value !== 'object') return { rows: [], options: {} };
@@ -1543,6 +1600,30 @@ function createAppsScriptRuntime(options = {}) {
         const value = formatDateInTimeZone(date, timeZone, format);
         audit.record('services', { service: 'Utilities', method: 'formatDate', timeZone, format, value });
         return value;
+      },
+      parseDate(dateText, timeZone, format) {
+        try {
+          const value = parseDateInTimeZone(dateText, timeZone, format);
+          audit.record('services', {
+            service: 'Utilities',
+            method: 'parseDate',
+            dateText: String(dateText),
+            timeZone,
+            format,
+            value: value.toISOString(),
+          });
+          return value;
+        } catch (error) {
+          audit.record('services', {
+            service: 'Utilities',
+            method: 'parseDate',
+            dateText: String(dateText),
+            timeZone,
+            format,
+            error: String(error && error.message || error),
+          });
+          throw error;
+        }
       },
     },
     PropertiesService: {

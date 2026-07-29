@@ -63,6 +63,9 @@ flowchart LR
 2. After confirmation, the action is written to a Room queue with a stable
    action/event UUID. Consumption and finish transactions also update local
    product state.
+   Version-2 date/time strings represent wall-clock values in
+   `CANN.TIME_ZONE`; the backend parses them explicitly in that zone so the
+   stored instant cannot change with the Apps Script host or test-runner zone.
 3. Synchronization snapshots the pending queues and uses a persisted request ID.
 4. The snapshot is posted to Apps Script.
 5. The client checks the response environment and request identity.

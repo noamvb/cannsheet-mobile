@@ -8668,9 +8668,33 @@ function formatDate_(date) { return Utilities.formatDate(new Date(date), CANN.TI
 function formatTime_(date) { return Utilities.formatDate(new Date(date), CANN.TIME_ZONE, 'HH:mm:ss'); }
 
 function parseClientDateTime_(dateText, timeText) {
-  const combined = text_(dateText) + (text_(timeText) ? 'T' + text_(timeText) : 'T00:00:00');
-  const parsed = new Date(combined);
-  return isNaN(parsed.getTime()) ? new Date() : parsed;
+  const date = text_(dateText);
+  const suppliedTime = text_(timeText);
+  const time = suppliedTime || '00:00:00';
+  const format = time.length === 5
+    ? 'yyyy-MM-dd HH:mm'
+    : 'yyyy-MM-dd HH:mm:ss';
+  const combined = date + ' ' + time;
+  if (
+    !isClientDate_(date) ||
+    (suppliedTime && !isClientTime_(suppliedTime))
+  ) {
+    return new Date();
+  }
+  try {
+    const parsed = Utilities.parseDate(combined, CANN.TIME_ZONE, format);
+    if (
+      !parsed ||
+      isNaN(parsed.getTime()) ||
+      Utilities.formatDate(parsed, CANN.TIME_ZONE, format) !== combined
+    ) {
+      return new Date();
+    }
+    return parsed;
+  } catch (error) {
+    // Preserve the deployed fallback for invalid client date/time input.
+    return new Date();
+  }
 }
 
 function isClientDate_(value) {
