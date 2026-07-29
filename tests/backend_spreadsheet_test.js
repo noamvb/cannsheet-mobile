@@ -259,7 +259,7 @@ assert.equal(normalProduct[headerIndex(PURCHASE_HEADERS, 'Uses')], 3);
 assert.equal(normalProduct[headerIndex(PURCHASE_HEADERS, 'Finished')], 0);
 assert.equal(
   Number(normalProduct[headerIndex(PURCHASE_HEADERS, 'Most recent use')]),
-  Date.parse('2025-04-01T10:30:00'),
+  Date.parse('2025-04-01T10:30:00-04:00'),
 );
 
 const eventDataReads = dataReads(normalRuntime, 'ConsumptionEvents');
@@ -736,7 +736,7 @@ assert.equal(configValue(migrationRuntime, 'INTERACTION_SUMMARY_VERSION'), 1);
 // The migration cases above separately prove that a canonical zero quantity is
 // a real projected value, not an absent summary.
 const postProjectionPurchases = purchaseRecords();
-const preservedTimestamp = new Date(2025, 4, 3, 12, 0, 0);
+const preservedTimestamp = new Date('2025-05-03T12:00:00-04:00');
 postProjectionPurchases[0]['Most recent use'] = preservedTimestamp;
 postProjectionPurchases[0]['Last quantity'] = 1.25;
 const postProjectionRuntime = buildRuntime({
@@ -787,7 +787,7 @@ projectedProductRow = postProjectedConsumption(3, '2025-05-04', '12:00:00', 0.25
 assert.equal(projectedProductRow[headerIndex(PURCHASE_HEADERS, 'Uses')], 18.25);
 assert.equal(
   Number(projectedProductRow[headerIndex(PURCHASE_HEADERS, 'Most recent use')]),
-  new Date(2025, 4, 4, 12, 0, 0).getTime(),
+  Date.parse('2025-05-04T12:00:00-04:00'),
 );
 assert.equal(projectedProductRow[headerIndex(PURCHASE_HEADERS, 'Last quantity')], 0.25);
 
@@ -796,7 +796,7 @@ const latestProjectionGet = get(postProjectionRuntime);
 assert.equal(latestProjectionGet.products[0].lastQuantity, 0.25);
 assert.equal(
   latestProjectionGet.products[0].lastLoggedAtEpochMillis,
-  new Date(2025, 4, 4, 12, 0, 0).getTime(),
+  Date.parse('2025-05-04T12:00:00-04:00'),
 );
 assert.equal(dataReads(postProjectionRuntime, 'ConsumptionEvents').length, 0);
 

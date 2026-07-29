@@ -210,6 +210,20 @@ function buildConfigRows(options = {}) {
       'Purchases interaction-summary version',
     ]);
   }
+  if (options.correctionSchemaVersion !== undefined) {
+    rows.push([
+      'CONSUMPTION_CORRECTION_SCHEMA_VERSION',
+      options.correctionSchemaVersion,
+      'Append-only consumption correction schema version',
+    ]);
+  }
+  if (options.correctionWritesEnabled !== undefined) {
+    rows.push([
+      'CONSUMPTION_CORRECTION_WRITES_ENABLED',
+      options.correctionWritesEnabled,
+      'Whether new consumption correction writes are accepted',
+    ]);
+  }
   if (options.recoverableSyncApplyVersion !== undefined) {
     rows.push([
       'RECOVERABLE_SYNC_APPLY_VERSION',
@@ -1246,9 +1260,12 @@ class FakeScriptLock {
   constructor(runtime) {
     this.runtime = runtime;
     this.locked = false;
+    this.beforeTryLockHooks = [];
   }
 
   tryLock(timeoutMs) {
+    const beforeTryLock = this.beforeTryLockHooks.shift();
+    if (beforeTryLock) beforeTryLock();
     const acquired = !this.locked;
     if (acquired) this.locked = true;
     this.runtime.audit.record('locks', { operation: 'tryLock', timeoutMs: Number(timeoutMs), acquired });
@@ -1275,6 +1292,13 @@ class FakeScriptLock {
 
   forceHeld(value = true) {
     this.locked = !!value;
+  }
+
+  beforeNextTryLock(callback) {
+    if (typeof callback !== 'function') {
+      throw new Error('beforeNextTryLock requires a callback');
+    }
+    this.beforeTryLockHooks.push(callback);
   }
 }
 
@@ -1433,6 +1457,63 @@ function formatDateInTimeZone(dateValue, timeZone, format) {
     .replace(/SSS/g, String(date.getMilliseconds()).padStart(3, '0'));
 }
 
+function parseDateInTimeZone(dateText, timeZone, format) {
+  const tokenPatterns = {
+    yyyy: '(\\d{4})',
+    MM: '(\\d{2})',
+    dd: '(\\d{2})',
+    HH: '(\\d{2})',
+    mm: '(\\d{2})',
+    ss: '(\\d{2})',
+    SSS: '(\\d{3})',
+  };
+  const tokens = [];
+  const tokenMatcher = /(yyyy|SSS|MM|dd|HH|mm|ss)/g;
+  const patternText = String(format);
+  let pattern = '^';
+  let cursor = 0;
+  let tokenMatch;
+  while ((tokenMatch = tokenMatcher.exec(patternText)) !== null) {
+    pattern += patternText
+      .slice(cursor, tokenMatch.index)
+      .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    pattern += tokenPatterns[tokenMatch[0]];
+    tokens.push(tokenMatch[0]);
+    cursor = tokenMatch.index + tokenMatch[0].length;
+  }
+  pattern += patternText.slice(cursor).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  pattern += '$';
+
+  const match = new RegExp(pattern).exec(String(dateText));
+  if (!match) {
+    throw new Error(
+      `Utilities.parseDate could not parse "${dateText}" with "${format}"`,
+    );
+  }
+  const parts = {
+    year: 1970,
+    month: 1,
+    day: 1,
+    hour: 0,
+    minute: 0,
+    second: 0,
+    millisecond: 0,
+  };
+  const fields = {
+    yyyy: 'year',
+    MM: 'month',
+    dd: 'day',
+    HH: 'hour',
+    mm: 'minute',
+    ss: 'second',
+    SSS: 'millisecond',
+  };
+  tokens.forEach((token, index) => {
+    parts[fields[token]] = Number(match[index + 1]);
+  });
+  return localDateTimeToDate(parts, timeZone);
+}
+
 function normalizeSheetSeed(value) {
   if (Array.isArray(value)) return { rows: value, options: {} };
   if (!value || typeof value !== 'object') return { rows: [], options: {} };
@@ -1529,6 +1610,30 @@ function createAppsScriptRuntime(options = {}) {
         const value = formatDateInTimeZone(date, timeZone, format);
         audit.record('services', { service: 'Utilities', method: 'formatDate', timeZone, format, value });
         return value;
+      },
+      parseDate(dateText, timeZone, format) {
+        try {
+          const value = parseDateInTimeZone(dateText, timeZone, format);
+          audit.record('services', {
+            service: 'Utilities',
+            method: 'parseDate',
+            dateText: String(dateText),
+            timeZone,
+            format,
+            value: value.toISOString(),
+          });
+          return value;
+        } catch (error) {
+          audit.record('services', {
+            service: 'Utilities',
+            method: 'parseDate',
+            dateText: String(dateText),
+            timeZone,
+            format,
+            error: String(error && error.message || error),
+          });
+          throw error;
+        }
       },
     },
     PropertiesService: {

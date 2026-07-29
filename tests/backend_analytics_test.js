@@ -558,7 +558,7 @@ function assertNoMutation(runtime) {
 {
   const runtime = buildRuntime();
   const cases = [
-    [history(runtime, { analyticsVersion: 2 }), 'UNSUPPORTED_ANALYTICS_VERSION'],
+    [history(runtime, { analyticsVersion: 3 }), 'UNSUPPORTED_ANALYTICS_VERSION'],
     [history(runtime, { limit: 0 }), 'INVALID_QUERY'],
     [history(runtime, { limit: 201 }), 'INVALID_QUERY'],
     [history(runtime, { limit: '1.5' }), 'INVALID_QUERY'],

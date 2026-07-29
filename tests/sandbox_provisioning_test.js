@@ -22,13 +22,83 @@ const EVENT_HEADERS = [
   'Legacy Product ID', 'Uses', 'Weight Code', 'Finished', 'Source',
   'Request UUID', 'Legacy Source Sheet', 'Legacy Source Row',
 ];
+const CORRECTION_HEADERS = [
+  'Correction UUID', 'Target Event UUID', 'Supersedes Correction UUID',
+  'Revision', 'Operation', 'Replacement Timestamp',
+  'Replacement Local Date', 'Replacement Local Time',
+  'Replacement Product UUID', 'Replacement Legacy Product ID',
+  'Replacement Uses', 'Replacement Weight Code', 'Replacement Finished',
+  'Reopen Product', 'Reason', 'Request UUID', 'Source', 'Created At',
+];
 const LEDGER_HEADERS = [
   'Request UUID', 'API Version', 'Received At', 'Purchase Count',
   'Consumption Count', 'Result', 'Duration Ms', 'Error Code',
 ];
+const APPLY_JOURNAL_HEADERS = [
+  'Apply UUID', 'Kind', 'API Version', 'Request UUID', 'State',
+  'Core Committed At', 'Completed At', 'Finalization JSON', 'Response JSON',
+];
 const REPORT_HEADERS = [
   'Type', 'Source Sheet', 'Source Row', 'Product ID', 'Detail', 'Recorded At',
 ];
+
+// A sandbox-bound script can still be pointed at the wrong spreadsheet. An
+// existing production marker must stop provisioning before any mutation.
+{
+  const protectedRuntime = createAppsScriptRuntime({
+    environment: 'SANDBOX',
+    spreadsheetId: 'production-marked-sheet',
+    formId: 'production-marked-form',
+    sheets: {
+      Purchases: { rows: [['Sentinel'], ['must remain untouched']] },
+      Config: {
+        rows: buildConfigRows({
+          environment: 'PRODUCTION',
+          schemaVersion: 2,
+        }),
+      },
+    },
+    form: {
+      destinationId: 'production-marked-sheet',
+      items: [{ title: 'Sentinel question', type: 'MULTIPLE_CHOICE' }],
+    },
+  });
+  protectedRuntime.loadSource(fs.readFileSync('backend_additions.gs', 'utf8'), {
+    filename: 'backend_additions.gs',
+  });
+  const protectedApi = protectedRuntime.loadSource(
+    fs.readFileSync('sandbox_provisioning.gs', 'utf8'),
+    { filename: 'sandbox_provisioning.gs', exports: ['provisionSandbox'] },
+  );
+  protectedRuntime.resetAudit();
+  const before = protectedRuntime.snapshot();
+  const beforeSheetNames = Object.keys(before.spreadsheet.sheets).sort();
+  const beforeConfigRows = protectedRuntime.peekSheet('Config').snapshot().rows;
+
+  assert.throws(
+    () => protectedApi.provisionSandbox(),
+    /SANDBOX_GUARD: Config ENVIRONMENT mismatch/,
+  );
+
+  const after = protectedRuntime.snapshot();
+  assert.deepEqual(after, before, 'a production marker must leave all state unchanged');
+  assert.deepEqual(
+    Object.keys(after.spreadsheet.sheets).sort(),
+    beforeSheetNames,
+    'a production marker must not create correction or core sheets',
+  );
+  assert.deepEqual(
+    protectedRuntime.peekSheet('Config').snapshot().rows,
+    beforeConfigRows,
+    'a production marker must not add or change Config keys',
+  );
+  assert.equal(protectedRuntime.peekSheet('ConsumptionEventCorrections'), null);
+  assert.equal(protectedRuntime.audit.writes.length, 0, 'guard failure must not write cells');
+  assert.equal(protectedRuntime.audit.structural.length, 0, 'guard failure must not change sheet structure');
+  assert.equal(protectedRuntime.audit.batches.length, 0, 'guard failure must not batch-write cells');
+  assert.equal(protectedRuntime.audit.form.length, 0, 'guard failure must not alter form state');
+  assert.equal(protectedRuntime.lock.locked, false, 'guard failure must release the script lock');
+}
 
 const runtime = createAppsScriptRuntime({
   environment: 'SANDBOX',
@@ -39,11 +109,14 @@ const runtime = createAppsScriptRuntime({
     'Form Responses 1': { rows: [RESPONSE_HEADERS, ['stale response']] },
     ConsumptionEvents: { rows: [EVENT_HEADERS, ['stale event']] },
     SyncLedger: { rows: [LEDGER_HEADERS, ['stale ledger']] },
+    SyncApplyJournal: { rows: [APPLY_JOURNAL_HEADERS] },
     Config: {
       rows: buildConfigRows({
         environment: 'SANDBOX',
         schemaVersion: 2,
         interactionSummaryVersion: 0,
+        correctionSchemaVersion: 0,
+        correctionWritesEnabled: false,
       }),
     },
     MigrationReport: { rows: [REPORT_HEADERS, ['stale report']] },
@@ -68,17 +141,18 @@ const api = runtime.loadSource(fs.readFileSync('sandbox_provisioning.gs', 'utf8'
   filename: 'sandbox_provisioning.gs',
   exports: [
     'SANDBOX_FIXTURE',
+    'provisionSandbox',
     'resetSandboxData',
     'sandboxMetrics_',
   ],
 });
 runtime.resetAudit();
 
-const metrics = JSON.parse(JSON.stringify(api.resetSandboxData()));
-assert.deepEqual(metrics, {
+const expectedMetrics = {
   purchases: 6,
   responses: 5,
   events: 5,
+  correctionRows: 0,
   uniqueEvents: 5,
   unresolved: 0,
   ledgerRows: 0,
@@ -87,7 +161,49 @@ assert.deepEqual(metrics, {
   active: 3,
   finished: 2,
   unopened: 1,
-});
+};
+const provisionMetrics = JSON.parse(JSON.stringify(api.provisionSandbox()));
+assert.deepEqual(provisionMetrics, expectedMetrics);
+
+const correctionRows = runtime.peekSheet('ConsumptionEventCorrections').snapshot().rows;
+assert.deepEqual(
+  correctionRows,
+  [CORRECTION_HEADERS],
+  'provision must create the empty correction sheet with its exact header contract',
+);
+const configValues = Object.fromEntries(
+  runtime.peekSheet('Config').snapshot().rows.slice(1).map(row => [row[0], row[1]]),
+);
+assert.equal(configValues.CONSUMPTION_CORRECTION_SCHEMA_VERSION, 1);
+assert.equal(configValues.CONSUMPTION_CORRECTION_WRITES_ENABLED, true);
+const seededJournalRows = runtime.peekSheet('SyncApplyJournal').snapshot().rows;
+assert.equal(seededJournalRows.length, 2);
+assert.equal(
+  seededJournalRows[1][APPLY_JOURNAL_HEADERS.indexOf('State')],
+  'COMPLETE',
+);
+assert.deepEqual(
+  JSON.parse(
+    seededJournalRows[1][
+      APPLY_JOURNAL_HEADERS.indexOf('Finalization JSON')
+    ],
+  ).eventIds,
+  runtime.peekSheet('ConsumptionEvents').snapshot().rows
+    .slice(1)
+    .map(row => row[0]),
+  'seeded events need durable finish provenance for safe Reopen testing',
+);
+
+runtime.peekSheet('ConsumptionEventCorrections')
+  .getRange(2, 1, 1, CORRECTION_HEADERS.length)
+  .setValues([new Array(CORRECTION_HEADERS.length).fill('stale correction')]);
+const metrics = JSON.parse(JSON.stringify(api.resetSandboxData()));
+assert.deepEqual(metrics, expectedMetrics, 'reset must clear stale correction rows');
+assert.deepEqual(
+  runtime.peekSheet('ConsumptionEventCorrections').snapshot().rows,
+  [CORRECTION_HEADERS],
+  'reset must leave no correction fixture rows',
+);
 assert.equal(deletedFormResponses, 1);
 assert.equal(runtime.lock.locked, false, 'reset must release the script lock');
 

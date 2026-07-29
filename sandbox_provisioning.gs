@@ -18,7 +18,7 @@ const SANDBOX_FIXTURE = Object.freeze({
   ])
 });
 
-function sandboxGuard_() {
+function sandboxTargetGuard_(allowUnmarkedConfig) {
   if (environment_() !== 'SANDBOX') throw new Error('SANDBOX_GUARD: ENVIRONMENT must be SANDBOX');
   const configured = spreadsheet_();
   const active = SpreadsheetApp.getActiveSpreadsheet();
@@ -29,27 +29,35 @@ function sandboxGuard_() {
   const formId = requiredScriptProperty_('FORM_ID');
   const form = FormApp.openById(formId);
   if (form.getDestinationId() !== configured.getId()) throw new Error('SANDBOX_GUARD: Form destination mismatch');
-  assertConfigEnvironment_(configured);
+  const marker = text_(configValue_(configured, 'ENVIRONMENT', ''));
+  if (marker !== 'SANDBOX' && !(allowUnmarkedConfig && !marker)) {
+    throw new Error('SANDBOX_GUARD: Config ENVIRONMENT mismatch');
+  }
   return { ss: configured, form: form };
+}
+
+function sandboxGuard_() {
+  return sandboxTargetGuard_(false);
 }
 
 function provisionSandbox() {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
   try {
-    const ss = spreadsheet_();
-    if (environment_() !== 'SANDBOX' || SpreadsheetApp.getActive().getId() !== ss.getId()) {
-      throw new Error('SANDBOX_GUARD: refusing to provision this project');
-    }
+    // This complete identity and environment check is deliberately read-only.
+    // It must run before schema creation because a misconfigured sandbox
+    // project may otherwise alter the production spreadsheet before rejecting
+    // its existing PRODUCTION marker.
+    const guarded = sandboxTargetGuard_(true);
+    const ss = guarded.ss;
     let purchases = ss.getSheetByName(CANN.SHEETS.PURCHASES);
     if (!purchases) purchases = ss.insertSheet(CANN.SHEETS.PURCHASES);
     ensureHeaders_(purchases, CANN.PURCHASE_HEADERS);
     ensureCoreSchema_(ss);
+    ensureSandboxCorrectionSchema_(ss);
     const config = requiredSheet_(ss, CANN.SHEETS.CONFIG);
     const marker = configValue_(ss, 'ENVIRONMENT', '');
-    if (marker && marker !== 'SANDBOX') throw new Error('SANDBOX_GUARD: Config ENVIRONMENT mismatch');
     if (!marker) config.getRange(config.getLastRow() + 1, 1, 1, 3).setValues([['ENVIRONMENT', 'SANDBOX', 'Runtime environment marker']]);
-    sandboxGuard_();
     seedSandboxFixture_(ss);
     applySheetSafety_(ss);
     updateFormAndDescriptionLocked_(ss);
@@ -65,6 +73,7 @@ function resetSandboxData() {
   try {
     const guarded = sandboxGuard_();
     guarded.form.deleteAllResponses();
+    ensureSandboxCorrectionSchema_(guarded.ss);
     seedSandboxFixture_(guarded.ss);
     applySheetSafety_(guarded.ss);
     updateFormAndDescriptionLocked_(guarded.ss);
@@ -74,11 +83,40 @@ function resetSandboxData() {
   }
 }
 
+function ensureSandboxCorrectionSchema_(ss) {
+  ensureConfigKey_(
+    ss,
+    CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+    0,
+    'Append-only consumption correction schema version'
+  );
+  ensureConfigKey_(
+    ss,
+    CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+    false,
+    'Whether new consumption correction writes are accepted'
+  );
+  ensureSheet_(ss, CANN.SHEETS.CORRECTIONS, CANN.CORRECTION_HEADERS);
+  setConfigValue_(
+    ss,
+    CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+    CANN.CONSUMPTION_CORRECTION_VERSION,
+    'Append-only consumption correction schema version'
+  );
+  setConfigValue_(
+    ss,
+    CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+    true,
+    'Whether new consumption correction writes are accepted'
+  );
+}
+
 function seedSandboxFixture_(ss) {
   [
     CANN.SHEETS.PURCHASES,
     CANN.SHEETS.RESPONSES,
     CANN.SHEETS.EVENTS,
+    CANN.SHEETS.CORRECTIONS,
     CANN.SHEETS.LEDGER,
     CANN.SHEETS.MIGRATION_REPORT,
     CANN.SHEETS.APPLY_JOURNAL
@@ -117,6 +155,23 @@ function seedSandboxFixture_(ss) {
     index + 2
   ]));
   requiredSheet_(ss, CANN.SHEETS.EVENTS).getRange(2, 1, eventRows.length, CANN.EVENT_HEADERS.length).setValues(eventRows);
+  requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL)
+    .getRange(2, 1, 1, CANN.APPLY_JOURNAL_HEADERS.length)
+    .setValues([[
+      '50000000-0000-4000-8000-000000000001',
+      'SANDBOX_SEED',
+      CANN.API_VERSION,
+      SANDBOX_FIXTURE.requestId,
+      'COMPLETE',
+      '2026-01-13 20:15',
+      '2026-01-13 20:15',
+      JSON.stringify({
+        eventIds: SANDBOX_FIXTURE.events.map(event => event[0]),
+        correctionActions: [],
+        finishActions: []
+      }),
+      JSON.stringify({ seeded: true })
+    ]]);
   const responseSheet = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
   const headers = headerMap_(responseSheet);
   requireHeaders_(headers, ['Timestamp', 'Product', 'Uses']);
@@ -154,10 +209,13 @@ function clearSandboxDataRows_(sheet) {
 function sandboxMetrics_(ss) {
   const purchases = readDataRows_(requiredSheet_(ss, CANN.SHEETS.PURCHASES));
   const events = readDataRows_(requiredSheet_(ss, CANN.SHEETS.EVENTS));
+  const corrections = readDataRows_(
+    requiredSheet_(ss, CANN.SHEETS.CORRECTIONS)
+  );
   const uses = events.reduce((sum, row) => sum + finiteNumberOr_(row[6], 0), 0);
   const statuses = purchases.reduce((out, row) => { const value = String(row[7]); out[value] = (out[value] || 0) + 1; return out; }, {});
-  const result = { purchases: purchases.length, responses: Math.max(0, requiredSheet_(ss, CANN.SHEETS.RESPONSES).getLastRow() - 1), events: events.length, uniqueEvents: new Set(events.map(row => row[0])).size, unresolved: 0, ledgerRows: 0, migrationRows: 0, totalUses: uses, active: statuses['0'] || 0, finished: statuses['1'] || 0, unopened: statuses['2'] || 0 };
-  if (JSON.stringify(result) !== JSON.stringify({ purchases: 6, responses: 5, events: 5, uniqueEvents: 5, unresolved: 0, ledgerRows: 0, migrationRows: 0, totalUses: 5.25, active: 3, finished: 2, unopened: 1 })) throw new Error('SANDBOX_FIXTURE_MISMATCH: ' + JSON.stringify(result));
+  const result = { purchases: purchases.length, responses: Math.max(0, requiredSheet_(ss, CANN.SHEETS.RESPONSES).getLastRow() - 1), events: events.length, correctionRows: corrections.length, uniqueEvents: new Set(events.map(row => row[0])).size, unresolved: 0, ledgerRows: 0, migrationRows: 0, totalUses: uses, active: statuses['0'] || 0, finished: statuses['1'] || 0, unopened: statuses['2'] || 0 };
+  if (JSON.stringify(result) !== JSON.stringify({ purchases: 6, responses: 5, events: 5, correctionRows: 0, uniqueEvents: 5, unresolved: 0, ledgerRows: 0, migrationRows: 0, totalUses: 5.25, active: 3, finished: 2, unopened: 1 })) throw new Error('SANDBOX_FIXTURE_MISMATCH: ' + JSON.stringify(result));
   if (CANN.PURCHASE_HEADERS.indexOf('Last quantity') >= 0) {
     const reconciliation = reconcileInteractionSummary_(ss);
     if (reconciliation.differences.length) {

@@ -5,12 +5,16 @@ Last updated: 2026-07-29
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/quick-log-test-hardening`
-- Released source commit and tag: `v1.2.15`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.15`,
-  version code `18`
+- Current working branch: `codex/history-corrections-backend`
+- Branch base, `origin/main`, and released source tag `v1.2.16`:
+  `7ee3f3a6995475c25addc712259cc44f8530b7a0`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
+  version code `19`
 - The public signed release is published to
-  `noamvb/cannsheet-mobile-releases` under tag `v1.2.15`.
+  `noamvb/cannsheet-mobile-releases` under tag
+  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
+- The current working tree contains a locally verified, uncommitted backend
+  correction milestone. It has not been pushed, deployed, or released.
 
 ## Project summary
 
@@ -54,6 +58,31 @@ Repository code and tests show:
 These statements describe checked-in implementation, not a fresh live-service
 or device verification.
 
+## Current branch implementation
+
+The backend milestone in PR #19 adds:
+
+- an append-only `ConsumptionEventCorrections` schema and the `REPLACE`, `VOID`,
+  and `RESTORE` correction protocol;
+- stable correction IDs, expected-head conflict checks, exact duplicate
+  acknowledgement, content-conflict rejection, and safe product-reopen checks;
+- correction-aware effective events for both legacy and current
+  Insights/History reads, including audit metadata and correction-aware stale
+  cursors;
+- durable journal, recovery, and reconciliation coverage for correction writes;
+- disabled-first production provisioning and sandbox provisioning that validates
+  environment, spreadsheet, form, and Config identity before any mutation; and
+- focused fake-runtime, regression, scale, recovery, and provisioning tests,
+  registered in backend-only CI; and
+- canonical-time parsing for version-2 consumption, finish, and correction
+  wall-clock values, independent of the execution host's timezone;
+- strict rejection of nonexistent correction replacement wall times; and
+- lock-held refresh of the independently controlled correction write gate.
+
+Android persistence, queueing, History editing UI, and network integration are
+not part of this milestone and remain pending behind the backend PR and sandbox
+verification gates.
+
 ## Partial areas and known limitations
 
 - `app/src/main/res/xml/backup_rules.xml` and
@@ -70,54 +99,70 @@ or device verification.
 - Backend behavior is concentrated in the large `backend_additions.gs` file and
   covered by fake-runtime tests. Live Apps Script and spreadsheet behavior still
   requires separate validation.
+- The checked-in Android client cannot yet create or queue consumption
+  corrections. No user-facing correction control exists in the current APK.
+- The correction schema has not been provisioned in a live sandbox or
+  production workbook, and correction writes have not been enabled in
+  production.
 
 ## Current validation status
 
-Release `1.2.15` passed the full GitHub Actions main matrix and signed
-publication workflow. The current focused branch hardens the quick-log preset
-tests and makes instrumentation-test compilation part of the static Android CI
-job.
+The current backend milestone passed:
 
-Verification completed:
-- `git diff --check` passed cleanly.
-- Path classification logic tested across 10 representative file sets (docs-only, backend-only, full Android, push to main, fallback).
-- Exact-SHA confirmation logic tested across 14 scenarios (success, non-push, wrong SHA, missing jobs, skipped jobs, cancellation, invalid output).
-- Local backend test suites passed:
-  - `node tests/backend_contract_test.js`
-  - `node tests/backend_analytics_test.js`
-  - `node tests/backend_recovery_test.js`
-  - `node tests/backend_spreadsheet_test.js`
-  - `node tests/fake_sheets_batch_update_test.js`
-  - `node tests/sandbox_performance_fixture_test.js`
-  - `node tests/sandbox_provisioning_test.js`
-  - `PYTHONPATH=. python -m unittest discover -s tests -p "test_backend_sync_benchmark.py"`
-- Local Gradle static validation passed:
-  - `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug` (passed)
-  - Gradle configuration cache reuse verified (`Reusing configuration cache`).
-- Current quick-log test hardening validation:
-  - `.\gradlew.bat --no-daemon --console=plain compileDebugAndroidTestKotlin`
-    passed.
-  - `.\gradlew.bat --no-daemon --console=plain testDebugUnitTest assembleDebug`
-    passed.
-  - `.\gradlew.bat --no-daemon --console=plain lintDebug` passed.
-  - Focused `ConsumptionPreferencesRepositoryTest` passed after separating
-    minimum/maximum and invalid-value cases.
-  - No local Android device or emulator was connected, so the remaining
-    Compose smoke test requires the pull-request API 24 runner.
+- all eight checked-in Node backend suites, including the new
+  `backend_corrections_test.js`;
+- correction scale coverage with 3,600 events and 600 corrections;
+- both Apps Script syntax checks through `node --check`;
+- 13 Python backend benchmark tests; and
+- `git diff --check origin/main`.
+
+An independent read-only verifier reviewed the complete diff. Its first pass
+found that sandbox provisioning could mutate a wrongly targeted
+production-marked spreadsheet before rejecting it. The implementation was
+changed to perform the complete target guard first, and a snapshot/no-write
+regression was added. The verifier's second pass found the repaired backend
+milestone ready.
+
+Pull request
+[PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) is open. Its first
+GitHub Actions run passed classification, Android static validation, and the API
+24 emulator, but the backend job exposed a host-timezone-dependent retry bug.
+The same failure was reproduced locally under `TZ=UTC`. The backend now parses
+wall-clock input explicitly in `America/New_York`, and the fake runtime and
+affected assertions cover both UTC and New York hosts. Follow-up run
+`30498099177` passed classification/security, backend validation, Android static
+validation, the API 24 emulator, and required aggregate validation for exact
+commit `05c4b58e89b2451f54a566e244f1761c578ca68a`.
+
+Required review then found stale pre-lock correction capability and nonexistent
+spring-forward replacement-time edge cases. Safety-repair commit `a39e199`
+rereads the capability under the script lock and rejects invalid canonical wall
+times without changing consumption history. Focused deterministic regressions
+passed; required checks and resolved review conversations remain the merge gate.
+
+Not yet performed:
+
+- a real Apps Script deployment or live sandbox workbook verification;
+- production provisioning, reconciliation, write enablement, or deployment;
+- Android implementation, Gradle validation, emulator/device validation; or
+- signed APK preparation or publication for this feature.
 
 ## Current priorities
 
-Complete the focused quick-log test-hardening pull request and verify its API 24
-Compose smoke test in GitHub Actions. No separate product roadmap priority can
-be verified from the repository.
+After user approval, commit and open the focused backend pull request, then pass
+backend CI and review. Merge and live sandbox rollout remain separate approval
+gates. Android implementation begins only after the backend contract is merged
+and verified in the sandbox.
 
 ## Unresolved questions
 
 - What is the current live Apps Script deployment version and trigger state?
 - Do the connected production sheets currently match the contracts and
   reconciliation expectations in the checked-in backend reports?
-- Which supported physical Android devices have been manually exercised for
-  release `1.2.15`?
+- Can the sandbox web app and workbook be reached with the current deployment
+  credentials for end-to-end correction verification?
+- Which supported physical Android device will be used for the final correction
+  workflow check?
 
 These require external or device evidence and should not be answered from this
 document alone.
@@ -130,7 +175,9 @@ document alone.
 - `app/src/androidTest`
 - `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`
 - `tests`
+- `tests/backend_corrections_test.js`
 - `backend_additions.gs`
+- `sandbox_provisioning.gs`
 - `app/build.gradle.kts`
 - `.github/workflows`
 - `BACKEND_ANALYTICS_REPORT.md`

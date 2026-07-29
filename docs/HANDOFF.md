@@ -2,247 +2,258 @@
 
 Last updated: 2026-07-29
 
-Branch: `codex/quick-log-test-hardening`
+Branch: `codex/history-corrections-backend`
 
-Repository position: `HEAD`, `origin/main`, and peeled tag `v1.2.15` all point
-to source commit `e19dfbe4a908ce4ec152380e6ecb053a2e6e3f8a`.
+Repository position:
 
-Working tree status: six modified tracked files for the focused quick-log
-test-hardening change, plus 11 pre-existing untracked `job_*.txt` GitHub Actions
-log downloads. Nothing was staged when this handoff was refreshed.
+- the latest safety-repair implementation commit is
+  `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`;
+- GitHub Actions validated the prior implementation-plus-handoff head
+  `05c4b58e89b2451f54a566e244f1761c578ca68a`;
+- the initial backend milestone is
+  `870e99215506c36802c2430dfa9bd0449d414286`;
+- `origin/main` remains
+  `7ee3f3a6995475c25addc712259cc44f8530b7a0`, tagged `v1.2.16`; and
+- [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) targets `main`.
+
+Working tree status: clean after the implementation and this handoff refresh are
+committed and pushed to PR #19. Nothing has been merged, deployed, provisioned,
+enabled, or released.
 
 ## Purpose of this session
 
-Finish and independently verify the Cannsheet Mobile `1.2.15` release after a
-long sequence of GitHub Actions failures, then preserve the exact failure
-lessons and a safer validation/tagging sequence so future releases do not use
-`main` and a release tag as a trial-and-error test loop. Implement the focused
-test and CI hardening that prevents the same failure pattern.
+Implement the backend milestone for user-editable consumption History while
+preserving auditability, offline retry safety, effective analytics, and strict
+sandbox/production isolation. Take the focused backend pull request through its
+approved merge, then stop at the separate live-sandbox approval gate.
+
+## Product outcome
+
+The intended user-facing feature will let a person correct, void, or restore a
+mistaken consumption entry from History. This branch implements only the server
+contract and safety foundation. The current Android APK has no correction UI or
+local correction queue yet.
 
 ## Work completed
 
-- GitHub Actions main validation run
-  [30467643070](https://github.com/noamvb/cannsheet-mobile/actions/runs/30467643070)
-  completed successfully for exact source SHA `e19dfbe`:
-  - repository classification and security scan passed;
-  - all checked-in backend tests passed;
-  - Android unit tests, lint, and debug APK assembly passed;
-  - instrumentation tests passed on API 24 and API 36;
-  - required job `Cannsheet Android PR validation` passed.
-- Signed release run
-  [30467644284](https://github.com/noamvb/cannsheet-mobile/actions/runs/30467644284)
-  completed successfully:
-  - exact-SHA main validation proof passed;
-  - unit tests, lint, and signed release assembly passed;
-  - signing, package, version, and monotonic version-code checks passed;
-  - the public APK and checksum were published and post-publication checks
-    passed.
-- Public release
-  [v1.2.15](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.15)
-  is the latest Cannsheet Mobile release.
-- The repetitive failure sequence was traced to
-  `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`, not
-  to the production release build:
-  - instrumentation-test compilation was not part of the faster static Android
-    job, so missing Compose test imports (`onAllNodes`, then
-    `verticalScroll`) were found only after an emulator had started;
-  - selectors sometimes targeted the existing third text field instead of the
-    newly added fourth field, producing `42.0` instead of separate `2.0` and
-    `4.0` values;
-  - the disabled remove-button assertion initially used the wrong merged versus
-    unmerged Compose semantics view;
-  - dynamically added UI nodes were queried before Compose had settled;
-  - lower controls were off-screen on the smaller API 24 emulator viewport.
-- The final passing test uses a scrollable test container, waits for Compose to
-  become idle after adding a preset, and now targets stable test tags rather
-  than the final editable node or visible button text.
-- The follow-up hardening is implemented on
-  `codex/quick-log-test-hardening`:
-  - `QuickLogQuantityEditor` exposes stable tags for preset inputs, remove
-    buttons, Add, and Save;
-  - the Compose suite keeps one user-level add-and-save smoke test;
-  - duplicate minimum/maximum UI assertions were removed because the same rules
-    are covered more quickly by JVM tests;
-  - the JVM preset-validation test was split into clear valid-count,
-    invalid-count, and invalid-value cases;
-  - `android-static` now runs `compileDebugAndroidTestKotlin` before emulator
-    jobs, catching missing instrumentation-test imports early.
+- Added append-only `ConsumptionEventCorrections` support with:
+  - `REPLACE`, `VOID`, and `RESTORE` operations;
+  - stable correction/action UUIDs;
+  - expected-head conflict detection;
+  - exact duplicate acknowledgement and different-content conflict rejection;
+  - immutable replacement validation; and
+  - safe product-reopen checks.
+- Integrated corrections with:
+  - mixed version-2 sync requests and exact acknowledgements;
+  - the durable apply journal and recovery/finalization path;
+  - reconciliation;
+  - product projections;
+  - legacy and current Insights/History reads;
+  - History audit metadata; and
+  - correction-aware stale-cursor detection.
+- Added additive rollout helpers:
+  - production schema provisioning starts with correction writes disabled;
+  - reconciliation is required before enabling writes;
+  - sandbox provisioning enables the schema only after its target guard passes.
+- Registered the focused correction suite in backend-only CI and classified
+  `sandbox_provisioning.gs` as backend code.
+- Added fake-runtime support and regression, scale, recovery, capability-gate,
+  lifecycle, cursor, audit, duplicate, and conflict coverage.
+- Made version-2 consumption, finish, and correction wall-clock parsing explicit
+  in `CANN.TIME_ZONE`, independent of the Apps Script or test host timezone.
+- Updated architecture, project-state, decision, contributor, and handoff
+  documentation.
 
-## Required prevention checklist
+## Independent safety review
 
-Use this order for future Android UI changes and releases:
+The first read-only verification pass found one defect: `provisionSandbox()`
+could create schema before checking an existing production Config marker.
 
-1. Develop and review the change on a focused pull-request branch. Do not fix
-   new test failures by repeatedly pushing experimental commits directly to
-   `main`.
-2. Before merging, run the fast local checks:
+The repaired implementation now performs all environment, configured/active/
+bound spreadsheet, form destination, and existing Config checks before its first
+mutation. A production-marker regression compares full before/after snapshots
+and proves zero cell writes, structural changes, batch writes, or form changes.
+The second independent verification pass found the backend milestone ready.
+Required GitHub review then identified two additional P1 edge cases: a request
+could retain a stale correction-write gate while waiting for the script lock,
+and a nonexistent New York spring-forward wall time could be stored with a
+different normalized timestamp. The repair rereads mutable rollout state under
+the acquired lock and strictly rejects nonexistent correction replacement
+times. Deterministic regressions cover both cases, including the intentional
+idempotent `SyncLedger` audit row for a rejected request.
 
-   ```powershell
-   $env:JAVA_HOME = 'C:\Program Files\Android\Android Studio\jbr'
-   .\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug
-   .\gradlew.bat --no-daemon compileDebugAndroidTestKotlin
-   ```
+## Pull request CI diagnosis and repair
 
-   The second command is important: it catches missing instrumentation-test
-   imports without waiting for an emulator.
-3. When an emulator is available, run the affected instrumentation test class
-   before the full suite:
+PR #19's first run, `30496452018`, passed classification, Android static
+validation, and API 24 emulator validation. Backend validation failed in the new
+same-request correction retry.
 
-   ```powershell
-   .\gradlew.bat --no-daemon connectedDebugAndroidTest `
-     -Pandroid.testInstrumentationRunnerArguments.class=com.example.ui.QuickLogQuantityEditorTest
-   ```
+A Terra/high read-only audit reproduced the failure locally with `TZ=UTC`.
+`parseClientDateTime_()` used host-local `new Date()` for the app's zone-less
+wall-clock value. An Eastern host stored 11:30 as 15:30Z; a UTC host stored it as
+11:30Z. Reading the persisted row in canonical New York time then rejected the
+retry with `INTERNAL_ERROR` because its local time no longer matched.
 
-4. For changes to Compose instrumentation tests, manually dispatch
-   `Cannsheet PR checks` on the feature branch before merge. A manual dispatch
-   runs both API 24 and API 36, while an ordinary Android pull request currently
-   runs API 24.
-5. After merge, push the source commit to `main` and wait for the exact
-   push-to-main run to finish. Confirm that API 24, API 36, Android static,
-   backend, and `Cannsheet Android PR validation` are all successful.
-6. Only after that exact `main` SHA is green should a release tag be created
-   and pushed. Push the tag once. Do not use release tags or no-op “kick”
-   commits to probe whether tests pass, and never move a tag that already
-   produced a public artifact.
+The production repair uses Apps Script `Utilities.parseDate()` with
+`CANN.TIME_ZONE` and a timezone round-trip check. The fake runtime now models
+that API. Correction commit/retry, recovery, and spreadsheet expectations are
+timezone-stable, and the complete backend matrix passes with both UTC and New
+York host zones.
 
-For Compose tests specifically:
+Follow-up GitHub Actions run `30498099177` passed all required jobs for the
+prior exact head `05c4b58e89b2451f54a566e244f1761c578ca68a`:
 
-- Prefer stable `Modifier.testTag(...)` contracts for editable fields and
-  buttons instead of relying on text-field order, `onLast()`, or translated
-  visible text.
-- Call `waitForIdle()` after clicks that add, remove, or otherwise replace
-  semantics nodes.
-- Inspect the actual merged and unmerged semantics trees before choosing a
-  selector; do not guess which tree exposes a node.
-- Put long test content in a scrollable or appropriately sized container so
-  controls remain reachable on the API 24 boundary device.
-- Treat a compile error differently from a runtime assertion failure. Fix and
-  locally compile the entire instrumentation source set before triggering
-  another emulator matrix.
+- Classify changes and scan repository;
+- Backend validation;
+- Android static validation;
+- Emulator API 24; and
+- Cannsheet Android PR validation.
 
-## Implemented CI and test hardening
-
-1. `.github/workflows/android-pr-checks.yml` now runs
-   `compileDebugAndroidTestKotlin` in `android-static`.
-2. `QuickLogQuantityEditorTest` uses stable test tags and contains one focused
-   add-and-save smoke test.
-3. Fast JVM tests retain the 1-to-10, positive, finite, and distinct-value
-   coverage with clearer failure names.
-4. API 24 pull-request coverage and API 24/API 36 main/manual-dispatch coverage
-   remain unchanged.
+Safety-repair commit `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`
+adds the lock-interleaving and DST-gap regressions. The focused correction suite
+passed under UTC and New York host zones; the final required PR checks remain the
+authoritative merge gate for that head.
 
 ## Files changed by this task
 
 - `.github/workflows/android-pr-checks.yml`
-- `app/src/main/java/com/example/ui/SettingsScreen.kt`
-- `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`
-- `app/src/test/java/com/example/data/ConsumptionPreferencesRepositoryTest.kt`
+- `AGENTS.md`
+- `backend_additions.gs`
+- `sandbox_provisioning.gs`
+- `tests/backend_analytics_test.js`
+- `tests/backend_corrections_test.js`
+- `tests/backend_recovery_test.js`
+- `tests/backend_spreadsheet_test.js`
+- `tests/fake_apps_script_runtime.js`
+- `tests/sandbox_provisioning_test.js`
+- `docs/ARCHITECTURE.md`
+- `docs/DECISIONS.md`
 - `docs/PROJECT_STATE.md`
 - `docs/HANDOFF.md`
 
-No version, signing, endpoint, package, application ID, environment, Room,
-backend, Apps Script, or Google Sheets contract was changed.
-
-## Current project and release state
-
-- Source version: `versionName` `1.2.15`, `versionCode` `18`
-- Previous public version code: `17` in `1.2.14`
-- Application ID: `com.noamv.cannsheet.mobile`
-- Public APK:
-  `Cannsheet-Mobile-1.2.15.apk`
-- Public checksum:
-  `c5eadf90c52a5a1637283c569bb32d34f6f84cbf33b86321815d57baaf8c89e3`
-- APK signing verification: APK Signature Scheme v2 passed with one signer;
-  signer SHA-256 is
-  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
-- The public release has exactly one custom `.apk` asset and its `.sha256`
-  file; GitHub also displays its automatic source archives.
+No Android source, version, endpoint, application ID, namespace/package,
+signing, credential, secret, tag, or release file was changed.
 
 ## Validation performed
 
-Passing live GitHub evidence:
+All eight Node backend suites passed:
 
-- Main validation run `30467643070`: success for SHA `e19dfbe`, including API
-  24 and API 36 instrumentation tests.
-- Release run `30467644284`: success for SHA `e19dfbe`, including signed build,
-  publication, and post-publication verification.
+```powershell
+node tests/backend_analytics_test.js
+node tests/backend_contract_test.js
+node tests/backend_corrections_test.js
+node tests/backend_recovery_test.js
+node tests/backend_spreadsheet_test.js
+node tests/fake_sheets_batch_update_test.js
+node tests/sandbox_performance_fixture_test.js
+node tests/sandbox_provisioning_test.js
+```
 
-Passing independent public-artifact checks performed after publication:
+The correction scale case passed with 3,600 events and 600 corrections. The
+complete eight-suite matrix passed twice:
 
-- downloaded APK SHA-256 matched the published `.sha256` file;
-- `aapt dump badging` reported package
-  `com.noamv.cannsheet.mobile`, `versionCode='18'`, and
-  `versionName='1.2.15'`;
-- the previous public `1.2.14` APK reported `versionCode='17'`;
-- `apksigner verify --verbose --print-certs` passed using v2 signing and the
-  expected signer fingerprint.
+```powershell
+$env:TZ='UTC'
+Get-ChildItem tests -Filter '*_test.js' | Sort-Object Name |
+  ForEach-Object { node $_.FullName }
 
-Documentation-task safety checks:
+$env:TZ='America/New_York'
+Get-ChildItem tests -Filter '*_test.js' | Sort-Object Name |
+  ForEach-Object { node $_.FullName }
+```
 
-- pre-edit `git diff --check` passed;
-- the staged-file list was empty;
-- the 11 untracked CI logs were inspected separately because ordinary
-  `git diff` excludes them;
-- a focused scan found no private-key headers, common token/key formats, or
-  personal Windows home paths in those untracked logs.
+The pre-fix source from exact commit `870e992` fails the UTC correction retry
+with the expected diagnostic:
 
-Current hardening checks:
+```text
+INTERNAL_ERROR: Correction replacement local date/time does not match its timestamp
+```
 
-- `.\gradlew.bat --no-daemon --console=plain compileDebugAndroidTestKotlin`
-  passed (`BUILD SUCCESSFUL`).
-- `.\gradlew.bat --no-daemon --console=plain testDebugUnitTest assembleDebug`
-  passed (`BUILD SUCCESSFUL`).
-- `.\gradlew.bat --no-daemon --console=plain lintDebug` passed
-  (`BUILD SUCCESSFUL`).
-- Focused
-  `ConsumptionPreferencesRepositoryTest` passed after the boundary-test split.
-- `git diff --check` passed.
+Both Apps Script syntax checks passed:
+
+```powershell
+Get-Content -Raw backend_additions.gs | node --check
+Get-Content -Raw sandbox_provisioning.gs | node --check
+```
+
+The bundled Python runtime passed 13 benchmark tests:
+
+```powershell
+C:\Users\noamv\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe `
+  -m unittest discover -s tests -p 'test_backend_sync_benchmark.py'
+```
+
+Diff whitespace validation passed:
+
+```powershell
+git -c core.fsmonitor=false diff --check origin/main
+```
+
+The independent verifier reran the complete Node matrix, both syntax checks,
+the Python benchmark, and diff validation after the sandbox-safety repair. A
+separate CI-audit agent reproduced and reviewed the timezone failure, and
+separate Sol/xhigh and Terra/high agents implemented and tested its production
+and test repairs.
 
 ## Validation not performed
 
-- The remaining Compose add-and-save smoke test was not run locally because
-  `adb devices -l` reported no connected Android device or emulator. It must be
-  verified by the pull-request API 24 emulator job.
-- No physical-device installation, Obtainium upgrade, or manual UI acceptance
-  test was performed.
-- No live Apps Script deployment, trigger, spreadsheet schema, or production
-  data behavior was tested.
+- No Apps Script source has been deployed.
+- No live sandbox spreadsheet, trigger, web app, or reconciliation has been
+  exercised.
+- Production has not been provisioned, reconciled, enabled, or deployed.
+- Android code has not been changed, so Gradle, emulator, and device checks for
+  the eventual UI are pending.
+- No signed APK has been built or published for this feature.
 
-## Remaining work
+## Current external state
 
-- Commit and push the focused hardening branch, open its pull request, and wait
-  for `Cannsheet Android PR validation`.
-- The 11 untracked `job_*.txt` files remain in the worktree as generated
-  diagnostic artifacts. They were not changed or deleted.
+- `v1.2.16` is the current source tag and local version metadata
+  (`versionCode` 19).
+- A read-only public release query on 2026-07-29 confirmed
+  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16)
+  with an APK and checksum.
+- GitHub CLI was reauthenticated through the signed-in in-app browser and now
+  reports active `noamvb` access with repository/workflow scopes.
 
-## Recommended next action
+## Approval gate and next action
 
-Open the focused pull request and verify the remaining Compose smoke test on its
-API 24 runner. Before any future release tag, manually dispatch the full API
-24/API 36 matrix on this branch or wait for both boundary jobs on the exact
-post-merge `main` SHA.
+The user approved the initial commit, push, PR, and squash merge. Merge only
+after the exact safety-repair head passes required checks and all required review
+conversations are resolved. After merge, do not deploy to the live sandbox
+without its separate approval and target-identity verification.
 
-## Risks, assumptions, and unresolved questions
+Android implementation starts only after the backend contract is merged and
+verified in the sandbox.
 
-- The stable input tags use the user-visible one-based preset position. That is
-  appropriate because saved order is part of the feature contract, but a future
-  drag-to-reorder feature would need a stable row identity instead.
-- GitHub displays a non-fatal KSP annotation in the successful workflows. The
-  jobs and Gradle builds completed successfully, but the annotation may confuse
-  future reviewers unless the underlying tool issue is separately investigated.
-- The hardening branch begins at released source SHA `e19dfbe`; it is not
-  deployed or released until its focused pull request is merged and a later
-  explicitly approved release is published.
+## Remaining delivery sequence
 
-## Relevant files
+1. Backend PR, CI, review, and approved merge.
+2. Approved live sandbox provisioning and backend contract verification.
+3. Android Room migration, correction queue, network DTOs, repository logic,
+   ViewModel state, and History edit/void/restore UI.
+4. JVM, migration, Compose, CI, emulator, and physical-device verification
+   against the sandbox.
+5. Approved production disabled-first provisioning, reconciliation, deployment,
+   and write enablement.
+6. Approved version bump, focused release PR, tag, signed APK publication, and
+   independent public-artifact verification.
 
-- `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`
-- `app/src/main/java/com/example/ui/SettingsScreen.kt`
-- `.github/workflows/android-pr-checks.yml`
-- `.github/workflows/release-apk.yml`
-- `app/build.gradle.kts`
-- `docs/PROJECT_STATE.md`
-- `docs/DECISIONS.md`
-- `docs/HANDOFF.md`
-- `AGENTS.md`
-- `CONTRIBUTING.md`
+## Risks and unresolved questions
+
+- Live Apps Script, spreadsheet schema, trigger, and deployment identity are
+  not established by local tests.
+- Version-2 app times are New York wall-clock values. Tests and future code must
+  use the canonical timezone explicitly rather than inherit the machine's zone.
+- The user confirmed that ordinary app entries will continue arriving during
+  this work. Treat production as continuously changing: never rely on a saved
+  row count or long-lived snapshot. Provisioning, reconciliation, and write
+  enablement must each use the script lock and freshly read live state. Ordinary
+  logging must remain available throughout the additive, disabled-first rollout.
+- A correction is data-sensitive. The Android queue must retain a correction
+  until the server returns the exact accepted acknowledgement.
+- Stale correction-head conflicts need plain user-facing recovery rather than
+  silent overwrite.
+- Product reopen remains deliberately conservative; unsafe cases return
+  `REOPEN_NOT_SAFE`.
+- The final device and Android version for physical validation have not been
+  selected.

@@ -306,7 +306,9 @@ function assertCounts(runtime, expected) {
 function eventMillis(requestPayload) {
   const item = requestPayload.consumptions.find(consumption =>
     consumption.eventId === requestPayload.consumptions.at(-1).eventId);
-  return new Date(`${item.date}T${item.time || '00:00:00'}`).getTime();
+  return Date.parse(
+    `${item.date}T${item.time || '00:00:00'}-04:00`,
+  );
 }
 
 function assertNoCoreMutation(runtime) {
@@ -643,7 +645,7 @@ exercisePendingFault(FAULTS.LEDGER, 31);
     uses: 2,
     recentMillis: BASE_RECENT.getTime(),
     lastQuantity: 0.5,
-    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+    finishedMillis: Date.parse('2025-05-10T13:45:00-04:00'),
   });
   const purchasesSheetId = runtime.peekSheet('Purchases').getSheetId();
   const purchaseColumnWrites = runtime.audit.batches
@@ -677,7 +679,7 @@ exercisePendingFault(FAULTS.LEDGER, 31);
     uses: 2,
     recentMillis: BASE_RECENT.getTime(),
     lastQuantity: 0.5,
-    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+    finishedMillis: Date.parse('2025-05-10T13:45:00-04:00'),
   });
 }
 
@@ -803,7 +805,7 @@ exercisePendingFault(FAULTS.LEDGER, 31);
     uses: 0,
     recentMillis: null,
     lastQuantity: '',
-    finishedMillis: new Date('2025-05-10T13:45:00').getTime(),
+    finishedMillis: Date.parse('2025-05-10T13:45:00-04:00'),
   });
 }
 
@@ -819,14 +821,20 @@ exercisePendingFault(FAULTS.LEDGER, 31);
   runtime.context.setSandboxSyncApplyFault(FAULTS.CORE_COMMITTED);
   assertInternalFailure(post(runtime, requestPayload));
   assertCounts(runtime, { responses: 0, events: 0, ledgers: 0, journals: 1 });
-  assert.equal(productState(runtime).finishedMillis, new Date('2025-05-10T13:45:00').getTime());
+  assert.equal(
+    productState(runtime).finishedMillis,
+    Date.parse('2025-05-10T13:45:00-04:00'),
+  );
 
   const retry = post(runtime, requestPayload);
   assert.equal(retry.acknowledgedFinishActions[0].status, 'duplicate');
   assertCounts(runtime, { responses: 0, events: 0, ledgers: 1, journals: 1 });
   assert.equal(productState(runtime).uses, 2);
   assert.equal(productState(runtime).lastQuantity, 0.5);
-  assert.equal(productState(runtime).finishedMillis, new Date('2025-05-10T13:45:00').getTime());
+  assert.equal(
+    productState(runtime).finishedMillis,
+    Date.parse('2025-05-10T13:45:00-04:00'),
+  );
 }
 
 // The no-core shortcut must never jump ahead of a predecessor whose atomic
@@ -1015,7 +1023,7 @@ exercisePendingFault(FAULTS.LEDGER, 31);
   assert.equal(productState(runtime).lastQuantity, 2);
   assert.equal(
     productState(runtime).recentMillis,
-    new Date('2025-05-08T10:00:00').getTime(),
+    Date.parse('2025-05-08T10:00:00-04:00'),
   );
   [eventA, eventB].forEach(eventId => {
     const responseEntry = entryBy(
