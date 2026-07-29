@@ -31,6 +31,7 @@ class QuickLogQuantityEditorTest {
         }
 
         composeRule.onNodeWithText("Add preset").performClick()
+        composeRule.waitForIdle()
         composeRule.onAllNodes(hasSetTextAction()).onLast().performTextInput("4")
         composeRule.onNodeWithText("Save quantity presets").performClick()
 
