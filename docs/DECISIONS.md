@@ -71,5 +71,38 @@ historical rationale.
 - Rationale: Ensures fast developer feedback on narrow PRs, guarantees comprehensive emulator test coverage on `main` before release, prevents unverified code from being published, and protects release signing credentials.
 - Related files: `.github/workflows/android-pr-checks.yml`, `.github/workflows/release-apk.yml`, `gradle.properties`, `docs/PROJECT_STATE.md`, `docs/HANDOFF.md`
 
+## ADR-005: Represent consumption edits as append-only corrections
+
+- Status: Accepted; backend implementation ready for pull-request review,
+  Android integration and live rollout pending
+- Date: 2026-07-29
+- Context: A mistaken consumption entry must be correctable from the app without
+  erasing its history, producing duplicate rows on retry, changing totals
+  differently for old and new clients, or making a partially completed
+  spreadsheet write unrecoverable.
+- Decision:
+  1. Keep `ConsumptionEvents` immutable. Record `REPLACE`, `VOID`, and `RESTORE`
+     operations in an additive `ConsumptionEventCorrections` sheet.
+  2. Give every correction a stable UUID and require the client to name the
+     expected correction-chain head. A retry with identical content is a safe
+     duplicate; reused identity or a stale head is a conflict.
+  3. Resolve the complete linear correction chain into one effective event view
+     for Insights, History, reconciliation, and product projections. Voided
+     events remain auditable but do not contribute to effective totals.
+  4. Include correction state in History cursor consistency checks and the
+     durable apply/recovery journal.
+  5. Gate writes separately from schema provisioning. Provision production with
+     writes disabled, reconcile, and enable only through an explicit rollout
+     action. Sandbox helpers must prove target identity before mutation.
+- Rationale: An append-only revision log preserves evidence and idempotency while
+  allowing the user-facing History screen to behave like editable history.
+- Consequences: The backend and client must carry revision metadata and handle
+  stale-edit conflicts. The Android client must keep a correction queued until
+  an exact accepted acknowledgement arrives. Rollout requires separate sandbox,
+  production-disabled, reconciliation, enablement, and release evidence.
+- Related files: `backend_additions.gs`, `sandbox_provisioning.gs`,
+  `tests/backend_corrections_test.js`,
+  `tests/sandbox_provisioning_test.js`, `docs/ARCHITECTURE.md`
+
 
 

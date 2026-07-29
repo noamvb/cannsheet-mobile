@@ -79,6 +79,37 @@ flowchart LR
 5. History uses cursor pagination and permits a bounded stale-cursor recovery
    rather than mixing incompatible pages.
 
+### Consumption history corrections
+
+The correction protocol keeps the canonical `ConsumptionEvents` rows immutable.
+Each edit is a new row in `ConsumptionEventCorrections` with a stable correction
+UUID, a target event UUID, the expected current correction head, and one of
+three operations:
+
+- `REPLACE` supplies the corrected event snapshot;
+- `VOID` removes the event from effective totals without deleting its audit
+  history; and
+- `RESTORE` makes a voided event effective again.
+
+The backend validates the correction schema/write gate, immutable IDs, target
+existence, the expected chain head, replacement values, and product-reopen
+safety before accepting a correction. Exact duplicate correction UUIDs are
+acknowledged idempotently; reuse of a UUID for different content is rejected.
+
+Analytics and History replay each event's linear correction chain to construct
+one effective view. That same resolver serves legacy and current read contracts
+so older clients do not calculate different totals. History retains lifecycle
+and audit details even when an event is voided. Correction-sheet position is
+part of the History snapshot boundary, so a correction made between pages
+causes a stale-cursor response instead of mixing two versions of history.
+
+Accepted correction writes participate in the same durable apply journal,
+locking, retry, and reconciliation boundaries as other synchronized actions.
+Production rollout is additive and disabled-first: provision the schema,
+reconcile it, then explicitly enable writes. Sandbox provisioning may enable
+the capability only after read-only environment, spreadsheet, form, and Config
+identity checks pass.
+
 ## Persistence and models
 
 Room contains tables for products, purchase actions, consumption actions, finish
@@ -102,6 +133,10 @@ Stable IDs and acknowledgement semantics must be preserved.
 - Apps Script reads and writes the connected Google Sheets workbook. Backend
   changes must account for locking, retries, partial writes, duplicate delivery,
   reconciliation, and trigger behavior.
+- Consumption corrections are append-only. Code must not rewrite or delete the
+  original consumption event to simulate an edit.
+- `CONSUMPTION_CORRECTION_SCHEMA_VERSION` and
+  `CONSUMPTION_CORRECTION_WRITES_ENABLED` are independent rollout gates.
 
 ## State and error handling
 

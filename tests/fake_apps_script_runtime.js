@@ -210,6 +210,20 @@ function buildConfigRows(options = {}) {
       'Purchases interaction-summary version',
     ]);
   }
+  if (options.correctionSchemaVersion !== undefined) {
+    rows.push([
+      'CONSUMPTION_CORRECTION_SCHEMA_VERSION',
+      options.correctionSchemaVersion,
+      'Append-only consumption correction schema version',
+    ]);
+  }
+  if (options.correctionWritesEnabled !== undefined) {
+    rows.push([
+      'CONSUMPTION_CORRECTION_WRITES_ENABLED',
+      options.correctionWritesEnabled,
+      'Whether new consumption correction writes are accepted',
+    ]);
+  }
   if (options.recoverableSyncApplyVersion !== undefined) {
     rows.push([
       'RECOVERABLE_SYNC_APPLY_VERSION',

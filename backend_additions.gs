@@ -13,6 +13,7 @@
 const CANN = Object.freeze({
   API_VERSION: 2,
   ANALYTICS_VERSION: 1,
+  ANALYTICS_VERSIONS: Object.freeze([1, 2]),
   ANALYTICS_DEFAULT_RANGE_DAYS: 180,
   ANALYTICS_MAX_RANGE_DAYS: 3660,
   ANALYTICS_READ_LOCK_TIMEOUT_MS: 5000,
@@ -26,6 +27,11 @@ const CANN = Object.freeze({
   INTERACTION_SUMMARY_VERSION: 1,
   RECOVERABLE_SYNC_APPLY_VERSION: 1,
   RECOVERABLE_SYNC_APPLY_CONFIG_KEY: 'RECOVERABLE_SYNC_APPLY_VERSION',
+  CONSUMPTION_CORRECTION_VERSION: 1,
+  CONSUMPTION_CORRECTION_VERSION_KEY:
+    'CONSUMPTION_CORRECTION_SCHEMA_VERSION',
+  CONSUMPTION_CORRECTION_WRITES_KEY:
+    'CONSUMPTION_CORRECTION_WRITES_ENABLED',
   PENDING_APPLY_KEY: 'PENDING_APPLY_KEY',
   COMPATIBILITY_EVENT_HEADER: 'Cannsheet Event UUID',
   COMPATIBILITY_REQUEST_HEADER: 'Cannsheet Request UUID',
@@ -42,12 +48,14 @@ const CANN = Object.freeze({
   TIME_ZONE: 'America/New_York',
   LOCK_TIMEOUT_MS: 30000,
   MAX_BATCH_SIZE: 100,
+  MAX_CORRECTION_REASON_LENGTH: 200,
   EVENT_TEXT_FINDER_MAX_BATCH: 5,
   FORM_PRODUCT_QUESTION: 'Product',
   SHEETS: Object.freeze({
     PURCHASES: 'Purchases',
     RESPONSES: 'Form Responses 1',
     EVENTS: 'ConsumptionEvents',
+    CORRECTIONS: 'ConsumptionEventCorrections',
     LEDGER: 'SyncLedger',
     APPLY_JOURNAL: 'SyncApplyJournal',
     CONFIG: 'Config',
@@ -64,6 +72,14 @@ const CANN = Object.freeze({
     'Legacy Product ID', 'Uses', 'Weight Code', 'Finished', 'Source',
     'Request UUID', 'Legacy Source Sheet', 'Legacy Source Row'
   ]),
+  CORRECTION_HEADERS: Object.freeze([
+    'Correction UUID', 'Target Event UUID', 'Supersedes Correction UUID',
+    'Revision', 'Operation', 'Replacement Timestamp',
+    'Replacement Local Date', 'Replacement Local Time',
+    'Replacement Product UUID', 'Replacement Legacy Product ID',
+    'Replacement Uses', 'Replacement Weight Code', 'Replacement Finished',
+    'Reopen Product', 'Reason', 'Request UUID', 'Source', 'Created At'
+  ]),
   LEDGER_HEADERS: Object.freeze([
     'Request UUID', 'API Version', 'Received At', 'Purchase Count',
     'Consumption Count', 'Result', 'Duration Ms', 'Error Code'
@@ -78,6 +94,11 @@ const CANN = Object.freeze({
     'Apply UUID', 'Kind', 'API Version', 'Request UUID', 'State',
     'Core Committed At', 'Completed At', 'Finalization JSON', 'Response JSON'
   ]),
+  CORRECTION_OPERATIONS: Object.freeze({
+    REPLACE: 'REPLACE',
+    VOID: 'VOID',
+    RESTORE: 'RESTORE'
+  }),
   STATUS: Object.freeze({ ACTIVE: 0, FINISHED: 1, UNOPENED: 2 })
 });
 
@@ -96,6 +117,15 @@ function doGet(e) {
     const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment);
     assertSupportedSchemaVersion_(runtimeConfig.values);
     const summaryReady = interactionSummaryReady_(runtimeConfig.values);
+    const correctionCapability = consumptionCorrectionCapability_(
+      runtimeConfig.values
+    );
+    if (correctionCapability.version && !summaryReady) {
+      throw new Error(
+        'SCHEMA_MISMATCH: consumption corrections require the ' +
+        'interaction-summary projection'
+      );
+    }
     recordBackendPhase_(timing, 'environmentConfig', environmentConfigStarted);
 
     const purchaseContextStarted = Date.now();
@@ -163,7 +193,13 @@ function doGet(e) {
         return product;
       });
 
-    const response = { products: products, apiVersion: CANN.API_VERSION, environment: environment };
+    const response = {
+      products: products,
+      apiVersion: CANN.API_VERSION,
+      environment: environment,
+      correctionVersion: correctionCapability.version,
+      correctionWritesEnabled: correctionCapability.writesEnabled
+    };
     recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
     addServerTimingFields_(response, timing, environment);
     const responseRoutingStarted = Date.now();
@@ -209,6 +245,7 @@ function handleReadResource_(e) {
   const timing = newBackendTiming_('GET_ANALYTICS');
   let resource = '';
   let environment = '';
+  let requestedAnalyticsVersion = CANN.ANALYTICS_VERSION;
   try {
     const query = analyticsQuery_(e);
     resource = text_(query.values.resource);
@@ -216,14 +253,17 @@ function handleReadResource_(e) {
       throw analyticsError_('UNSUPPORTED_RESOURCE', 'Unsupported analytics resource');
     }
 
+    requestedAnalyticsVersion = validateAnalyticsCommonQuery_(query.values);
     const recognized = resource === 'insights'
       ? ['resource', 'analyticsVersion', 'environment', 'from', 'to', 'scope']
       : [
         'resource', 'analyticsVersion', 'environment', 'from', 'to',
         'productUuid', 'productId', 'type', 'q', 'limit', 'cursor'
       ];
+    if (resource === 'history' && requestedAnalyticsVersion >= 2) {
+      recognized.push('includeAudit');
+    }
     validateAnalyticsParameterNames_(query, recognized);
-    validateAnalyticsCommonQuery_(query.values);
 
     environment = environment_();
     if (query.values.environment !== environment) {
@@ -235,7 +275,8 @@ function handleReadResource_(e) {
 
     const parsed = resource === 'insights'
       ? parseInsightsQuery_(query.values)
-      : parseHistoryQuery_(query.values);
+      : parseHistoryQuery_(query.values, requestedAnalyticsVersion);
+    parsed.analyticsVersion = requestedAnalyticsVersion;
     const cursor = resource === 'history' && parsed.cursor
       ? decodeHistoryCursor_(parsed.cursor)
       : null;
@@ -246,12 +287,22 @@ function handleReadResource_(e) {
     );
     const quality = newAnalyticsQuality_();
     const products = normalizeAnalyticsProducts_(snapshot, quality);
-    const events = normalizeAnalyticsEvents_(snapshot, products, quality);
+    const canonicalEvents = normalizeAnalyticsEvents_(
+      snapshot,
+      products,
+      quality
+    );
+    const correctionResolution = resolveAnalyticsCorrections_(
+      snapshot,
+      products,
+      canonicalEvents
+    );
+    const effectiveEvents = correctionResolution.effectiveEvents;
     const response = resource === 'insights'
       ? buildInsightsResponse_(
         snapshot,
         products,
-        events,
+        effectiveEvents,
         normalizeLedgerRows_(snapshot),
         parsed,
         quality,
@@ -260,7 +311,9 @@ function handleReadResource_(e) {
       : buildHistoryResponse_(
         snapshot,
         products,
-        events,
+        parsed.includeAudit
+          ? correctionResolution.historyEvents
+          : effectiveEvents,
         parsed,
         cursor,
         quality,
@@ -287,7 +340,8 @@ function handleReadResource_(e) {
       environment || undefined,
       code,
       message,
-      timing
+      timing,
+      requestedAnalyticsVersion
     );
     logBackendTiming_(timing, 'error', {
       environment: environment || undefined,
@@ -337,10 +391,15 @@ function validateAnalyticsParameterNames_(query, recognized) {
 }
 
 function validateAnalyticsCommonQuery_(values) {
-  if (values.analyticsVersion !== String(CANN.ANALYTICS_VERSION)) {
+  const version = Number(values.analyticsVersion);
+  if (
+    !Number.isInteger(version) ||
+    CANN.ANALYTICS_VERSIONS.indexOf(version) < 0
+  ) {
     throw analyticsError_(
       'UNSUPPORTED_ANALYTICS_VERSION',
-      'analyticsVersion must be ' + CANN.ANALYTICS_VERSION
+      'analyticsVersion must be one of ' +
+      CANN.ANALYTICS_VERSIONS.join(', ')
     );
   }
   if (values.environment !== 'PRODUCTION' && values.environment !== 'SANDBOX') {
@@ -349,6 +408,7 @@ function validateAnalyticsCommonQuery_(values) {
       'environment must be PRODUCTION or SANDBOX'
     );
   }
+  return version;
 }
 
 function parseInsightsQuery_(values) {
@@ -394,7 +454,7 @@ function parseInsightsQuery_(values) {
   };
 }
 
-function parseHistoryQuery_(values) {
+function parseHistoryQuery_(values, analyticsVersion) {
   const from = text_(values.from);
   const to = text_(values.to);
   const parsedFrom = from ? strictLocalDate_(from) : null;
@@ -446,6 +506,23 @@ function parseHistoryQuery_(values) {
   if (cursor.length > CANN.HISTORY_MAX_CURSOR_LENGTH) {
     throw analyticsError_('INVALID_CURSOR', 'cursor is too long');
   }
+  const includeAuditText = text_(values.includeAudit).toLowerCase();
+  if (
+    includeAuditText &&
+    includeAuditText !== 'true' &&
+    includeAuditText !== 'false'
+  ) {
+    throw analyticsError_(
+      'INVALID_QUERY',
+      'includeAudit must be true or false'
+    );
+  }
+  if (includeAuditText && analyticsVersion < 2) {
+    throw analyticsError_(
+      'INVALID_QUERY',
+      'includeAudit requires analyticsVersion 2'
+    );
+  }
   return {
     from: parsedFrom,
     to: parsedTo,
@@ -455,7 +532,8 @@ function parseHistoryQuery_(values) {
     q: queryText.toLowerCase(),
     qDisplay: queryText,
     limit: limit,
-    cursor: cursor
+    cursor: cursor,
+    includeAudit: includeAuditText === 'true'
   };
 }
 
@@ -468,6 +546,9 @@ function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
     const ss = spreadsheet_();
     const runtimeConfig = readAndAssertRuntimeConfig_(ss, expectedEnvironment);
     assertSupportedSchemaVersion_(runtimeConfig.values);
+    const correctionCapability = consumptionCorrectionCapability_(
+      runtimeConfig.values
+    );
     if (!recoverableSyncApplyReady_(runtimeConfig.values)) {
       throw analyticsError_(
         'SCHEMA_MISMATCH',
@@ -489,8 +570,12 @@ function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
 
     const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
     const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+    const corrections = correctionCapability.version
+      ? requiredSheet_(ss, CANN.SHEETS.CORRECTIONS)
+      : null;
     const purchaseHeaders = headerMap_(purchases);
     const eventHeaders = headerMap_(events);
+    const correctionHeaders = corrections ? headerMap_(corrections) : {};
     requireExactHeaders_(
       purchaseHeaders,
       CANN.PURCHASE_HEADERS,
@@ -501,14 +586,48 @@ function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
       CANN.EVENT_HEADERS,
       CANN.SHEETS.EVENTS
     );
+    if (corrections) {
+      requireExactHeaders_(
+        correctionHeaders,
+        CANN.CORRECTION_HEADERS,
+        CANN.SHEETS.CORRECTIONS
+      );
+    }
 
     const currentPurchaseLastRow = purchases.getLastRow();
     const currentEventLastRow = events.getLastRow();
+    const currentCorrectionLastRow = corrections
+      ? corrections.getLastRow()
+      : 1;
     const purchaseLastRow = cursor ? cursor.purchaseLastRow : currentPurchaseLastRow;
     const eventLastRow = cursor ? cursor.eventLastRow : currentEventLastRow;
     if (
+      cursor &&
+      correctionCapability.version &&
+      cursor.correctionLastRow == null
+    ) {
+      throw analyticsError_(
+        'CURSOR_STALE',
+        'The captured history snapshot predates correction support'
+      );
+    }
+    if (
+      cursor &&
+      correctionCapability.version &&
+      cursor.correctionLastRow !== currentCorrectionLastRow
+    ) {
+      throw analyticsError_(
+        'CURSOR_STALE',
+        'The captured history snapshot changed after a correction'
+      );
+    }
+    const correctionLastRow = cursor && cursor.correctionLastRow != null
+      ? cursor.correctionLastRow
+      : currentCorrectionLastRow;
+    if (
       currentPurchaseLastRow < purchaseLastRow ||
-      currentEventLastRow < eventLastRow
+      currentEventLastRow < eventLastRow ||
+      currentCorrectionLastRow < correctionLastRow
     ) {
       throw analyticsError_(
         'CURSOR_STALE',
@@ -529,19 +648,36 @@ function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
       );
       ledgerLastRow = ledger.getLastRow();
     }
+    const applyEvidence = correctionCapability.version
+      ? recoverableApplyEvidence_(ss)
+      : {
+        eventIds: {},
+        correctionIds: {},
+        finishActionProductIds: {}
+      };
 
     return {
       environment: expectedEnvironment,
       taxRate: finiteNumberOr_(runtimeConfig.values.TAX_RATE, 0.13),
       purchaseHeaders: purchaseHeaders,
       eventHeaders: eventHeaders,
+      correctionHeaders: correctionHeaders,
       ledgerHeaders: ledgerHeaders,
       purchaseRows: readAnalyticsRowsThrough_(purchases, purchaseLastRow),
       eventRows: readAnalyticsRowsThrough_(events, eventLastRow),
+      correctionRows: corrections
+        ? readAnalyticsRowsThrough_(corrections, correctionLastRow)
+        : [],
       ledgerRows: ledger ? readAnalyticsRowsThrough_(ledger, ledgerLastRow) : [],
       purchaseLastRow: purchaseLastRow,
       eventLastRow: eventLastRow,
-      ledgerLastRow: ledgerLastRow
+      correctionLastRow: correctionLastRow,
+      ledgerLastRow: ledgerLastRow,
+      correctionVersion: correctionCapability.version,
+      correctionWritesEnabled: correctionCapability.writesEnabled,
+      finishActionProductIds: applyEvidence.finishActionProductIds,
+      finishProvenanceEventIds: applyEvidence.eventIds,
+      finishProvenanceCorrectionIds: applyEvidence.correctionIds
     };
   } finally {
     lock.releaseLock();
@@ -789,10 +925,518 @@ function normalizeAnalyticsEvents_(snapshot, products, quality) {
       quantity: quantity,
       weightCode: text_(value_(row, headers, 'Weight Code')) || null,
       finished: truthy_(value_(row, headers, 'Finished')),
-      source: source
+      source: source,
+      finishProvenanceKind: 'EVENT',
+      finishProvenanceId: normalizedEventUuid
     });
   });
   return events;
+}
+
+function resolveAnalyticsCorrections_(
+  snapshot,
+  products,
+  canonicalEvents,
+  extraCorrections
+) {
+  const correctionRecords = normalizeAnalyticsCorrectionRows_(
+    snapshot,
+    products
+  ).concat(extraCorrections || []);
+  const canonicalById = {};
+  canonicalEvents.forEach(event => {
+    canonicalById[event.eventUuid] = event;
+  });
+  const recordsById = {};
+  const groupsByTarget = {};
+  const reopenedProducts = {};
+  correctionRecords.forEach(record => {
+    const correctionId = text_(record.correctionId).toLowerCase();
+    const targetEventId = text_(record.targetEventId).toLowerCase();
+    if (!isUuid_(correctionId) || recordsById[correctionId]) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Duplicate or invalid Correction UUID: ' + correctionId
+      );
+    }
+    const original = canonicalById[targetEventId];
+    if (!original) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Correction references an unknown target event: ' + targetEventId
+      );
+    }
+    if (
+      record.operation === CANN.CORRECTION_OPERATIONS.REPLACE &&
+      text_(record.replacement && record.replacement.weightCode) !==
+        text_(original.weightCode)
+    ) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Correction replacement changed immutable weight code'
+      );
+    }
+    recordsById[correctionId] = record;
+    const group = groupsByTarget[targetEventId] ||
+      (groupsByTarget[targetEventId] = []);
+    const expectedRevision = group.length + 1;
+    const expectedHead = group.length
+      ? group[group.length - 1].correctionId
+      : '';
+    if (
+      record.revision !== expectedRevision ||
+      text_(record.supersedesCorrectionId).toLowerCase() !== expectedHead
+    ) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Correction chain is not a complete linear revision sequence for ' +
+        targetEventId
+      );
+    }
+    group.push(record);
+  });
+
+  const effectiveEvents = [];
+  const historyEvents = [];
+  const historyById = {};
+  const stateByTarget = {};
+  canonicalEvents.forEach(original => {
+    const group = groupsByTarget[original.eventUuid] || [];
+    let current = cloneAnalyticsEvent_(original);
+    let pendingReopenBasis = null;
+    const finishDispositions = {};
+    let lifecycleState = 'ORIGINAL';
+    group.forEach(record => {
+      const before = current;
+      if (record.operation === CANN.CORRECTION_OPERATIONS.REPLACE) {
+        current = correctionReplacementEvent_(original, record);
+        lifecycleState = 'CORRECTED';
+      } else if (record.operation === CANN.CORRECTION_OPERATIONS.VOID) {
+        current = null;
+        lifecycleState = 'VOIDED';
+      } else if (record.operation === CANN.CORRECTION_OPERATIONS.RESTORE) {
+        current = cloneAnalyticsEvent_(original);
+        if (current.finished) {
+          current.finishProvenanceKind = 'CORRECTION';
+          current.finishProvenanceId = record.correctionId;
+        }
+        lifecycleState = 'ORIGINAL';
+      } else {
+        throw analyticsError_(
+          'DATA_INTEGRITY_ERROR',
+          'Unsupported correction operation'
+        );
+      }
+      const removesFinish = !!(
+        before &&
+        before.finished &&
+        (
+          !current ||
+          !current.finished ||
+          current.product.productId !== before.product.productId
+        )
+      );
+      if (removesFinish) {
+        finishDispositions[before.product.productId] = {
+          targetEventId: original.eventUuid,
+          correctionId: record.correctionId,
+          reopenProduct: record.reopenProduct,
+          decidedAtEpochMillis: record.createdAtEpochMillis,
+          basisFinishedAtEpochMillis: before.occurredAtEpochMillis
+        };
+        pendingReopenBasis = record.reopenProduct ? null : before;
+      }
+      if (current && current.finished) {
+        delete finishDispositions[current.product.productId];
+        if (
+          pendingReopenBasis &&
+          current.product.productId ===
+            pendingReopenBasis.product.productId
+        ) {
+          pendingReopenBasis = null;
+        }
+      }
+    });
+    const head = group.length ? group[group.length - 1] : null;
+    const auditRevisions = group.map(correctionAuditRevision_);
+    const historyEvent = current
+      ? cloneAnalyticsEvent_(current)
+      : cloneAnalyticsEvent_(original);
+    historyEvent.lifecycleState = lifecycleState;
+    historyEvent.correctionHeadId = head ? head.correctionId : null;
+    historyEvent.revision = head ? head.revision : 0;
+    historyEvent.auditRevisions = auditRevisions;
+    historyEvent.reopenEligible = false;
+    if (current) {
+      current.lifecycleState = lifecycleState;
+      current.correctionHeadId = historyEvent.correctionHeadId;
+      current.revision = historyEvent.revision;
+      current.auditRevisions = auditRevisions;
+      current.reopenEligible = false;
+      effectiveEvents.push(current);
+    }
+    historyEvents.push(historyEvent);
+    historyById[historyEvent.eventUuid] = historyEvent;
+    stateByTarget[original.eventUuid] = {
+      original: original,
+      current: current,
+      lifecycleState: lifecycleState,
+      headId: historyEvent.correctionHeadId,
+      revision: historyEvent.revision,
+      records: group,
+      finishDispositions: finishDispositions,
+      reopenBasis: current && current.finished
+        ? (
+          pendingReopenBasis &&
+          pendingReopenBasis.product.productId !== current.product.productId
+            ? null
+            : current
+        )
+        : pendingReopenBasis,
+      reopenEligible: false
+    };
+  });
+
+  const finishDispositionsByProduct = {};
+  Object.keys(stateByTarget).forEach(targetEventId => {
+    const state = stateByTarget[targetEventId];
+    Object.keys(state.finishDispositions).forEach(productId => {
+      const dispositions = finishDispositionsByProduct[productId] ||
+        (finishDispositionsByProduct[productId] = []);
+      dispositions.push(state.finishDispositions[productId]);
+    });
+  });
+  Object.keys(finishDispositionsByProduct).forEach(productId => {
+    const dispositions = finishDispositionsByProduct[productId];
+    if (
+      !dispositions.length ||
+      dispositions.some(disposition =>
+        disposition.reopenProduct !== true
+      )
+    ) {
+      return;
+    }
+    const latest = dispositions.slice().sort((left, right) =>
+      left.decidedAtEpochMillis - right.decidedAtEpochMillis
+    )[dispositions.length - 1];
+    reopenedProducts[productId] = {
+      correctionId: latest.correctionId,
+      reopenedAtEpochMillis: latest.decidedAtEpochMillis,
+      basisFinishedAtEpochMillis: latest.basisFinishedAtEpochMillis
+    };
+  });
+
+  const finishedCounts = {};
+  effectiveEvents.forEach(event => {
+    if (!event.finished) return;
+    const productId = event.product.productId;
+    finishedCounts[productId] = (finishedCounts[productId] || 0) + 1;
+  });
+  Object.keys(stateByTarget).forEach(targetEventId => {
+    const state = stateByTarget[targetEventId];
+    const basis = state.reopenBasis;
+    if (!basis || !basis.finished) return;
+    const currentFinishedOnBasisProduct = !!(
+      state.current &&
+      state.current.finished &&
+      state.current.product.productId === basis.product.productId
+    );
+    const otherFinishedCount =
+      (finishedCounts[basis.product.productId] || 0) -
+      (currentFinishedOnBasisProduct ? 1 : 0);
+    const retainedFinishElsewhere = (
+      finishDispositionsByProduct[basis.product.productId] || []
+    ).some(disposition =>
+      disposition.targetEventId !== targetEventId &&
+      disposition.reopenProduct !== true
+    );
+    const finishProvenanceProved =
+      (
+        basis.finishProvenanceKind === 'EVENT' &&
+        snapshot.finishProvenanceEventIds &&
+        snapshot.finishProvenanceEventIds[basis.finishProvenanceId]
+      ) ||
+      (
+        basis.finishProvenanceKind === 'CORRECTION' &&
+        snapshot.finishProvenanceCorrectionIds &&
+        snapshot.finishProvenanceCorrectionIds[basis.finishProvenanceId]
+      );
+    const eligible =
+      basis.product.status === 'FINISHED' &&
+      basis.product.purchaseFinishedAtEpochMillis ===
+        basis.occurredAtEpochMillis &&
+      otherFinishedCount === 0 &&
+      !retainedFinishElsewhere &&
+      finishProvenanceProved === true &&
+      !finishActionEvidenceForProduct_(
+        snapshot.finishActionProductIds || {},
+        basis.product
+      );
+    state.reopenEligible = eligible;
+    if (state.current) state.current.reopenEligible = eligible;
+    const historyEvent = historyById[targetEventId];
+    if (historyEvent) historyEvent.reopenEligible = eligible;
+  });
+
+  return {
+    correctionRecords: correctionRecords,
+    recordsById: recordsById,
+    groupsByTarget: groupsByTarget,
+    stateByTarget: stateByTarget,
+    reopenedProducts: reopenedProducts,
+    effectiveEvents: effectiveEvents,
+    historyEvents: historyEvents
+  };
+}
+
+function normalizeAnalyticsCorrectionRows_(snapshot, products) {
+  if (!snapshot.correctionVersion) return [];
+  const records = [];
+  snapshot.correctionRows.forEach(raw => {
+    const row = raw.cells;
+    if (!row.some(cell => cell !== '' && cell != null)) return;
+    const headers = snapshot.correctionHeaders;
+    const correctionId = text_(
+      value_(row, headers, 'Correction UUID')
+    ).toLowerCase();
+    const targetEventId = text_(
+      value_(row, headers, 'Target Event UUID')
+    ).toLowerCase();
+    const supersedesCorrectionId = text_(
+      value_(row, headers, 'Supersedes Correction UUID')
+    ).toLowerCase();
+    const revision = Number(value_(row, headers, 'Revision'));
+    const operation = text_(
+      value_(row, headers, 'Operation')
+    ).toUpperCase();
+    const reason = text_(value_(row, headers, 'Reason'));
+    const requestId = text_(value_(row, headers, 'Request UUID'));
+    const source = text_(value_(row, headers, 'Source'));
+    const createdAtEpochMillis = timestampMillisOrNull_(
+      value_(row, headers, 'Created At')
+    );
+    if (
+      !isUuid_(correctionId) ||
+      !isUuid_(targetEventId) ||
+      (supersedesCorrectionId && !isUuid_(supersedesCorrectionId)) ||
+      !Number.isInteger(revision) ||
+      revision < 1 ||
+      !Object.prototype.hasOwnProperty.call(
+        CANN.CORRECTION_OPERATIONS,
+        operation
+      ) ||
+      reason.length > CANN.MAX_CORRECTION_REASON_LENGTH ||
+      !isUuid_(requestId) ||
+      source !== 'ANDROID_V2' ||
+      createdAtEpochMillis == null
+    ) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        'Correction row has invalid immutable metadata'
+      );
+    }
+    const replacementFields = [
+      'Replacement Timestamp',
+      'Replacement Local Date',
+      'Replacement Local Time',
+      'Replacement Product UUID',
+      'Replacement Legacy Product ID',
+      'Replacement Uses',
+      'Replacement Weight Code',
+      'Replacement Finished'
+    ];
+    const hasReplacementValues = replacementFields.some(name => {
+      const rawValue = value_(row, headers, name);
+      return rawValue !== '' && rawValue != null;
+    });
+    let replacement = null;
+    if (operation === CANN.CORRECTION_OPERATIONS.REPLACE) {
+      replacement = normalizeCorrectionReplacement_(
+        row,
+        headers,
+        products
+      );
+    } else if (hasReplacementValues) {
+      throw analyticsError_(
+        'DATA_INTEGRITY_ERROR',
+        operation + ' correction must not contain replacement values'
+      );
+    }
+    records.push({
+      canonicalRow: raw.canonicalRow,
+      correctionId: correctionId,
+      targetEventId: targetEventId,
+      supersedesCorrectionId: supersedesCorrectionId,
+      revision: revision,
+      operation: operation,
+      replacement: replacement,
+      reopenProduct: truthy_(value_(row, headers, 'Reopen Product')),
+      reason: reason || null,
+      requestId: requestId.toLowerCase(),
+      source: source,
+      createdAtEpochMillis: createdAtEpochMillis
+    });
+  });
+  return records;
+}
+
+function normalizeCorrectionReplacement_(row, headers, products) {
+  const occurredAtEpochMillis = timestampMillisOrNull_(
+    value_(row, headers, 'Replacement Timestamp')
+  );
+  const localDate = text_(value_(
+    row,
+    headers,
+    'Replacement Local Date'
+  ));
+  const localTime = text_(value_(
+    row,
+    headers,
+    'Replacement Local Time'
+  ));
+  const rawProductUuid = text_(value_(
+    row,
+    headers,
+    'Replacement Product UUID'
+  )).toLowerCase();
+  const productId = text_(value_(
+    row,
+    headers,
+    'Replacement Legacy Product ID'
+  ));
+  const quantity = optionalFiniteNumber_(value_(
+    row,
+    headers,
+    'Replacement Uses'
+  ));
+  const finishedRaw = value_(row, headers, 'Replacement Finished');
+  const byUuid = rawProductUuid
+    ? products.byProductUuid[rawProductUuid]
+    : null;
+  const byId = productId ? products.byProductId[productId] : null;
+  if (
+    occurredAtEpochMillis == null ||
+    !strictLocalDate_(localDate) ||
+    !isClientTime_(localTime) ||
+    !isUuid_(rawProductUuid) ||
+    !productId ||
+    !byUuid ||
+    !byId ||
+    byUuid !== byId ||
+    quantity == null ||
+    quantity <= 0 ||
+    (finishedRaw === '' || finishedRaw == null)
+  ) {
+    throw analyticsError_(
+      'DATA_INTEGRITY_ERROR',
+      'REPLACE correction has an invalid replacement snapshot'
+    );
+  }
+  const expectedDate = Utilities.formatDate(
+    new Date(occurredAtEpochMillis),
+    CANN.TIME_ZONE,
+    'yyyy-MM-dd'
+  );
+  const expectedTime = Utilities.formatDate(
+    new Date(occurredAtEpochMillis),
+    CANN.TIME_ZONE,
+    'HH:mm:ss'
+  );
+  const comparableLocalTime = /^\d{2}:\d{2}$/.test(localTime)
+    ? localTime + ':00'
+    : localTime;
+  if (localDate !== expectedDate || comparableLocalTime !== expectedTime) {
+    throw analyticsError_(
+      'DATA_INTEGRITY_ERROR',
+      'Correction replacement local date/time does not match its timestamp'
+    );
+  }
+  return {
+    occurredAtEpochMillis: occurredAtEpochMillis,
+    localDate: localDate,
+    localTime: localTime,
+    product: byUuid,
+    quantity: quantity,
+    weightCode: text_(value_(
+      row,
+      headers,
+      'Replacement Weight Code'
+    )) || null,
+    finished: truthy_(finishedRaw)
+  };
+}
+
+function cloneAnalyticsEvent_(event) {
+  return {
+    canonicalRow: event.canonicalRow,
+    eventUuid: event.eventUuid,
+    occurredAtEpochMillis: event.occurredAtEpochMillis,
+    localDate: event.localDate,
+    localTime: event.localTime,
+    product: event.product,
+    quantity: event.quantity,
+    weightCode: event.weightCode,
+    finished: event.finished,
+    source: event.source,
+    finishProvenanceKind: event.finishProvenanceKind || null,
+    finishProvenanceId: event.finishProvenanceId || null
+  };
+}
+
+function correctionReplacementEvent_(original, record) {
+  const replacement = record.replacement;
+  return {
+    canonicalRow: original.canonicalRow,
+    eventUuid: original.eventUuid,
+    occurredAtEpochMillis: replacement.occurredAtEpochMillis,
+    localDate: replacement.localDate,
+    localTime: replacement.localTime,
+    product: replacement.product,
+    quantity: replacement.quantity,
+    weightCode: replacement.weightCode,
+    finished: replacement.finished,
+    source: original.source,
+    finishProvenanceKind: replacement.finished
+      ? 'CORRECTION'
+      : null,
+    finishProvenanceId: replacement.finished
+      ? record.correctionId
+      : null
+  };
+}
+
+function correctionAuditRevision_(record) {
+  const revision = {
+    correctionId: record.correctionId,
+    supersedesCorrectionId: record.supersedesCorrectionId || null,
+    revision: record.revision,
+    operation: record.operation,
+    reopenProduct: record.reopenProduct,
+    reason: record.reason || null,
+    createdAtEpochMillis: record.createdAtEpochMillis
+  };
+  if (record.replacement) {
+    revision.replacement = {
+      occurredAtEpochMillis: record.replacement.occurredAtEpochMillis,
+      localDate: record.replacement.localDate,
+      localTime: record.replacement.localTime,
+      productUuid: record.replacement.product.productUuid,
+      productId: record.replacement.product.productId,
+      productName: record.replacement.product.name,
+      productType: record.replacement.product.type,
+      quantity: record.replacement.quantity,
+      weightCode: record.replacement.weightCode,
+      finished: record.replacement.finished
+    };
+  }
+  return revision;
+}
+
+function finishActionEvidenceForProduct_(evidence, product) {
+  return !!(
+    evidence[text_(product.productUuid).toLowerCase()] ||
+    evidence[text_(product.productId)]
+  );
 }
 
 function normalizeLedgerRows_(snapshot) {
@@ -1042,11 +1686,18 @@ function analyticsErrorMessage_(error) {
   return message.replace(/^[A-Z_]+:\s*/, '');
 }
 
-function analyticsFailure_(resource, environment, code, message, timing) {
+function analyticsFailure_(
+  resource,
+  environment,
+  code,
+  message,
+  timing,
+  analyticsVersion
+) {
   const response = {
     success: false,
     apiVersion: CANN.API_VERSION,
-    analyticsVersion: CANN.ANALYTICS_VERSION,
+    analyticsVersion: analyticsVersion || CANN.ANALYTICS_VERSION,
     resource: resource || undefined,
     environment: environment,
     errorCode: code,
@@ -1210,9 +1861,11 @@ function buildInsightsResponse_(
   const response = {
     success: true,
     apiVersion: CANN.API_VERSION,
-    analyticsVersion: CANN.ANALYTICS_VERSION,
+    analyticsVersion: query.analyticsVersion,
     resource: 'insights',
     environment: snapshot.environment,
+    correctionVersion: snapshot.correctionVersion,
+    correctionWritesEnabled: snapshot.correctionWritesEnabled,
     timeZone: CANN.TIME_ZONE,
     range: range,
     overview: {
@@ -1249,6 +1902,9 @@ function buildInsightsResponse_(
       dataVersion: analyticsDataVersion_(snapshot, true),
       purchaseRowCount: products.length,
       eventRowCount: events.length,
+      rawEventRowCount: snapshot.eventRows.length,
+      correctionRowCount: snapshot.correctionRows.length,
+      effectiveEventCount: events.length,
       ledgerRowCount: ledgerRows.length
     },
     generatedAtEpochMillis: Date.now(),
@@ -1506,10 +2162,11 @@ function buildHistoryResponse_(
   if (hasMore && pageEvents.length) {
     const last = pageEvents[pageEvents.length - 1];
     nextCursor = encodeHistoryCursor_({
-      v: 1,
+      v: 2,
       resource: 'history',
       eventLastRow: snapshot.eventLastRow,
       purchaseLastRow: snapshot.purchaseLastRow,
+      correctionLastRow: snapshot.correctionLastRow,
       snapshotHash: snapshotHash,
       filterHash: filterHash,
       lastTimestampMillis: last.occurredAtEpochMillis,
@@ -1520,26 +2177,17 @@ function buildHistoryResponse_(
   const response = {
     success: true,
     apiVersion: CANN.API_VERSION,
-    analyticsVersion: CANN.ANALYTICS_VERSION,
+    analyticsVersion: query.analyticsVersion,
     resource: 'history',
     environment: snapshot.environment,
+    correctionVersion: snapshot.correctionVersion,
+    correctionWritesEnabled: snapshot.correctionWritesEnabled,
     timeZone: CANN.TIME_ZONE,
     filters: historyFiltersResponse_(query),
     sort: 'TIMESTAMP_DESC_CANONICAL_ROW_DESC',
-    events: pageEvents.map(event => ({
-      eventUuid: event.eventUuid,
-      occurredAtEpochMillis: event.occurredAtEpochMillis,
-      localDate: event.localDate,
-      localTime: event.localTime,
-      productUuid: event.product.productUuid,
-      productId: event.product.productId,
-      productName: event.product.name,
-      productType: event.product.type,
-      quantity: event.quantity,
-      weightCode: event.weightCode,
-      finished: event.finished,
-      source: event.source
-    })),
+    events: pageEvents.map(event =>
+      historyEventResponse_(event, query)
+    ),
     page: {
       limit: query.limit,
       hasMore: hasMore,
@@ -1549,7 +2197,14 @@ function buildHistoryResponse_(
     sourceRevision: {
       dataVersion: snapshotHash,
       purchaseRowCount: products.length,
-      eventRowCount: events.length
+      eventRowCount: events.filter(
+        event => event.lifecycleState !== 'VOIDED'
+      ).length,
+      rawEventRowCount: snapshot.eventRows.length,
+      correctionRowCount: snapshot.correctionRows.length,
+      effectiveEventCount: events.filter(
+        event => event.lifecycleState !== 'VOIDED'
+      ).length
     },
     generatedAtEpochMillis: Date.now(),
     serverDurationMs: 0
@@ -1585,7 +2240,8 @@ function historyFiltersResponse_(query) {
     productUuid: query.productUuid || null,
     productId: query.productId || null,
     type: query.type || null,
-    q: query.qDisplay || null
+    q: query.qDisplay || null,
+    includeAudit: query.includeAudit === true
   };
 }
 
@@ -1596,7 +2252,8 @@ function historyHasFilters_(query) {
     query.productUuid ||
     query.productId ||
     query.type ||
-    query.q
+    query.q ||
+    query.includeAudit
   );
 }
 
@@ -1607,7 +2264,9 @@ function normalizedFilterHash_(query) {
     productUuid: query.productUuid || null,
     productId: query.productId || null,
     type: query.type || null,
-    q: query.q || null
+    q: query.q || null,
+    includeAudit: query.includeAudit === true,
+    analyticsVersion: query.analyticsVersion
   }));
 }
 
@@ -1633,22 +2292,35 @@ function decodeHistoryCursor_(cursorText) {
       String.fromCharCode((Number(byte) + 256) % 256)
     )).join('');
     const value = JSON.parse(json);
-    const expectedFields = [
+    const expectedFieldsV1 = [
       'v', 'resource', 'eventLastRow', 'purchaseLastRow', 'snapshotHash',
       'filterHash', 'lastTimestampMillis', 'lastCanonicalRow'
     ];
+    const expectedFieldsV2 = expectedFieldsV1.concat([
+      'correctionLastRow'
+    ]);
+    const expectedFields = value && value.v === 2
+      ? expectedFieldsV2
+      : expectedFieldsV1;
     if (
       !value ||
       typeof value !== 'object' ||
       Array.isArray(value) ||
       Object.keys(value).length !== expectedFields.length ||
       expectedFields.some(name => !Object.prototype.hasOwnProperty.call(value, name)) ||
-      value.v !== 1 ||
+      (value.v !== 1 && value.v !== 2) ||
       value.resource !== 'history' ||
       !Number.isInteger(value.eventLastRow) ||
       value.eventLastRow < 1 ||
       !Number.isInteger(value.purchaseLastRow) ||
       value.purchaseLastRow < 1 ||
+      (
+        value.v === 2 &&
+        (
+          !Number.isInteger(value.correctionLastRow) ||
+          value.correctionLastRow < 1
+        )
+      ) ||
       !/^[0-9a-f]{64}$/.test(value.snapshotHash) ||
       !/^[0-9a-f]{64}$/.test(value.filterHash) ||
       !Number.isFinite(value.lastTimestampMillis) ||
@@ -1668,7 +2340,10 @@ function analyticsHistorySnapshotHash_(snapshot) {
     purchases: analyticsHashRows_(
       snapshot.purchaseRows,
       snapshot.purchaseHeaders,
-      ['Product UUID', 'Product ID', 'Product name', 'Type']
+      [
+        'Product UUID', 'Product ID', 'Product name', 'Type',
+        'Finished', 'Finished At'
+      ]
     ),
     events: analyticsHashRows_(
       snapshot.eventRows,
@@ -1677,6 +2352,11 @@ function analyticsHistorySnapshotHash_(snapshot) {
         'Event UUID', 'Timestamp', 'Local Date', 'Local Time', 'Product UUID',
         'Legacy Product ID', 'Uses', 'Weight Code', 'Finished', 'Source'
       ]
+    ),
+    corrections: analyticsHashRows_(
+      snapshot.correctionRows,
+      snapshot.correctionHeaders,
+      snapshot.correctionVersion ? CANN.CORRECTION_HEADERS : []
     )
   }));
 }
@@ -1692,6 +2372,11 @@ function analyticsDataVersion_(snapshot, includeLedger) {
       snapshot.eventRows,
       snapshot.eventHeaders,
       CANN.EVENT_HEADERS
+    ),
+    corrections: analyticsHashRows_(
+      snapshot.correctionRows,
+      snapshot.correctionHeaders,
+      snapshot.correctionVersion ? CANN.CORRECTION_HEADERS : []
     )
   };
   if (includeLedger) {
@@ -1705,10 +2390,10 @@ function analyticsDataVersion_(snapshot, includeLedger) {
 }
 
 function analyticsHashRows_(rawRows, headers, fields) {
-  return rawRows.map(raw => ({
+  return (rawRows || []).map(raw => ({
     row: raw.canonicalRow,
     values: fields.map(field => (
-      analyticsHashValue_(value_(raw.cells, headers, field))
+      analyticsHashValue_(value_(raw.cells, headers || {}, field))
     ))
   }));
 }
@@ -1838,6 +2523,7 @@ function doPost(e) {
       purchases: preflight.purchases,
       consumptions: preflight.consumptions,
       finishActions: preflight.finishActions,
+      consumptionCorrections: preflight.consumptionCorrections,
       environment: environment,
       ss: ss,
       sheets: runtime.sheets,
@@ -1883,6 +2569,9 @@ function doPost(e) {
       purchaseCount: Array.isArray(payload.purchases) ? payload.purchases.length : undefined,
       consumptionCount: Array.isArray(payload.consumptions) ? payload.consumptions.length : undefined,
       finishActionCount: Array.isArray(payload.finishActions) ? payload.finishActions.length : undefined,
+      correctionCount: Array.isArray(payload.consumptionCorrections)
+        ? payload.consumptionCorrections.length
+        : undefined,
       allAccepted: response.allAccepted
     };
   } catch (error) {
@@ -1933,6 +2622,7 @@ function handleSync(payload) {
     purchases: preflight.purchases,
     consumptions: preflight.consumptions,
     finishActions: preflight.finishActions,
+    consumptionCorrections: preflight.consumptionCorrections,
     environment: environment,
     ss: ss,
     sheets: runtime.sheets,
@@ -2060,6 +2750,7 @@ function handleV2SyncLocked_(requestContext, started, timing) {
   const purchases = requestContext.purchases;
   const consumptions = requestContext.consumptions;
   const finishActions = requestContext.finishActions;
+  const consumptionCorrections = requestContext.consumptionCorrections;
   const ss = requestContext.ss;
 
   refreshRecoverableSyncApplyStateLocked_(requestContext);
@@ -2071,7 +2762,8 @@ function handleV2SyncLocked_(requestContext, started, timing) {
   }
 
   phaseStarted = Date.now();
-  const context = purchases.length || consumptions.length || finishActions.length
+  const context = purchases.length || consumptions.length ||
+      finishActions.length || consumptionCorrections.length
     ? productContext_(ss, {
       includeActionIds: purchases.length > 0,
       runtimeContext: requestContext
@@ -2187,11 +2879,199 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     stagedFinishActions.push(stagedItem);
     acceptedFinishActions.push(finishActionAck_(item, resolved, 'committed'));
   });
+
+  const correctionCapability = consumptionCorrectionCapability_(
+    requestContext.config
+  );
+  const acceptedConsumptionCorrections = [];
+  const rejectedConsumptionCorrections = [];
+  const stagedConsumptionCorrections = [];
+  const correctionTargetsInRequest = {};
+  const currentCorrectionState = correctionCapability.version &&
+      consumptionCorrections.length
+    ? effectiveConsumptionState_(ss, requestContext)
+    : null;
+  consumptionCorrections.forEach((item, index) => {
+    const error = validateV2ConsumptionCorrection_(item, index);
+    if (error) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          error.code,
+          error.message
+        )
+      );
+      return;
+    }
+    if (!correctionCapability.version || !currentCorrectionState) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'BACKEND_UPDATE_REQUIRED',
+          'Consumption corrections are not provisioned on this backend'
+        )
+      );
+      return;
+    }
+    const actionId = text_(item.actionId).toLowerCase();
+    const existing = currentCorrectionState.resolution.recordsById[actionId];
+    if (existing) {
+      if (!correctionRequestMatchesRecord_(item, existing)) {
+        rejectedConsumptionCorrections.push(
+          rejectedConsumptionCorrection_(
+            item,
+            'CORRECTION_ID_CONFLICT',
+            'Correction actionId is already used by different content',
+            existing.correctionId
+          )
+        );
+        return;
+      }
+      acceptedConsumptionCorrections.push(
+        consumptionCorrectionAck_(item, existing, 'duplicate')
+      );
+      return;
+    }
+    if (!correctionCapability.writesEnabled) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'CORRECTION_WRITES_DISABLED',
+          'Consumption correction writes are temporarily disabled'
+        )
+      );
+      return;
+    }
+    if (!recoverableReady) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'BACKEND_UPDATE_REQUIRED',
+          'Consumption corrections require recoverable sync apply'
+        )
+      );
+      return;
+    }
+    const targetEventId = text_(item.targetEventId).toLowerCase();
+    if (correctionTargetsInRequest[targetEventId]) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'INVALID_ITEM',
+          'Only one correction per target is allowed in a request'
+        )
+      );
+      return;
+    }
+    const targetState =
+      currentCorrectionState.resolution.stateByTarget[targetEventId];
+    if (!targetState) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'UNKNOWN_EVENT',
+          'Unknown consumption event'
+        )
+      );
+      return;
+    }
+    const expectedHead = text_(
+      item.expectedCorrectionHeadId
+    ).toLowerCase();
+    if (expectedHead !== text_(targetState.headId).toLowerCase()) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'CORRECTION_CONFLICT',
+          'The consumption entry has a newer correction revision',
+          targetState.headId
+        )
+      );
+      return;
+    }
+    const staged = stageV2ConsumptionCorrection_(
+      item,
+      targetState,
+      currentCorrectionState.products,
+      requestId,
+      new Date()
+    );
+    if (staged.error) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          staged.error.code,
+          staged.error.message,
+          targetState.headId
+        )
+      );
+      return;
+    }
+    if (
+      stagedFinishActions.some(action =>
+        staged.record.affectedProductIds.indexOf(
+          action.legacyProductId
+        ) >= 0
+      )
+    ) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'CONFLICTING_ACTION',
+          'A finish action for an affected product must sync separately',
+          targetState.headId
+        )
+      );
+      return;
+    }
+    if (
+      staged.record.reopenLegacyProductId &&
+      (
+        stagedConsumptions.some(consumption =>
+          consumption.legacyProductId ===
+            staged.record.reopenLegacyProductId &&
+          consumption.isFinished
+        )
+      )
+    ) {
+      rejectedConsumptionCorrections.push(
+        rejectedConsumptionCorrection_(
+          item,
+          'REOPEN_NOT_SAFE',
+          'Another queued action finishes this product',
+          targetState.headId
+        )
+      );
+      return;
+    }
+    correctionTargetsInRequest[targetEventId] = true;
+    stagedConsumptionCorrections.push(staged.record);
+    acceptedConsumptionCorrections.push(
+      consumptionCorrectionAck_(item, staged.record, 'committed')
+    );
+  });
+  let correctionProjectionEffects = [];
+  if (stagedConsumptionCorrections.length) {
+    const projectedState = effectiveConsumptionState_(
+      ss,
+      requestContext,
+      stagedConsumptions,
+      stagedConsumptionCorrections
+    );
+    correctionProjectionEffects =
+      calculateCorrectionProjectionEffects_(
+        context,
+        projectedState,
+        stagedConsumptionCorrections
+      );
+  }
   recordBackendPhase_(timing, 'stagingValidation', phaseStarted);
 
   phaseStarted = Date.now();
   const allAccepted = rejectedPurchases.length === 0 &&
-    rejectedConsumptions.length === 0 && rejectedFinishActions.length === 0;
+    rejectedConsumptions.length === 0 &&
+    rejectedFinishActions.length === 0 &&
+    rejectedConsumptionCorrections.length === 0;
   const productIdMap = {};
   acceptedPurchases.forEach(item => {
     if (item.tempId && item.legacyProductId) productIdMap[item.tempId] = item.legacyProductId;
@@ -2200,6 +3080,8 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     apiVersion: CANN.API_VERSION,
     requestId: requestId,
     success: true,
+    correctionVersion: correctionCapability.version,
+    correctionWritesEnabled: correctionCapability.writesEnabled,
     allAccepted: allAccepted,
     message: allAccepted ? 'Sync complete' : 'Some items were rejected',
     productIdMap: productIdMap,
@@ -2208,14 +3090,17 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     acknowledgedConsumptions: acceptedConsumptions,
     rejectedConsumptions: rejectedConsumptions,
     acknowledgedFinishActions: acceptedFinishActions,
-    rejectedFinishActions: rejectedFinishActions
+    rejectedFinishActions: rejectedFinishActions,
+    acknowledgedConsumptionCorrections: acceptedConsumptionCorrections,
+    rejectedConsumptionCorrections: rejectedConsumptionCorrections
   };
   recordBackendPhase_(timing, 'responseConstruction', phaseStarted);
 
   const now = new Date();
   const hasCoreMutation =
     staged.accepted.length > 0 || stagedConsumptions.length > 0 ||
-    stagedFinishActions.length > 0;
+    stagedFinishActions.length > 0 ||
+    stagedConsumptionCorrections.length > 0;
   if (recoverableReady && hasCoreMutation) {
     applyRecoverableSyncLocked_({
       runtimeContext: requestContext,
@@ -2223,11 +3108,15 @@ function handleV2SyncLocked_(requestContext, started, timing) {
       stagedPurchases: staged.accepted,
       stagedConsumptions: stagedConsumptions,
       stagedFinishActions: stagedFinishActions,
+      stagedConsumptionCorrections: stagedConsumptionCorrections,
+      correctionProjectionEffects: correctionProjectionEffects,
       kind: 'ANDROID_V2',
       apiVersion: CANN.API_VERSION,
       requestId: requestId,
       response: response,
-      formRefreshRequired: staged.accepted.length > 0 || stagedFinishActions.length > 0,
+      formRefreshRequired: staged.accepted.length > 0 ||
+        stagedFinishActions.length > 0 ||
+        stagedConsumptionCorrections.length > 0,
       ledger: {
         startedAtEpochMillis: started,
         purchaseCount: purchases.length,
@@ -2281,7 +3170,9 @@ function v2RequestFailure_(requestId, code, message) {
     acknowledgedConsumptions: [],
     rejectedConsumptions: [],
     acknowledgedFinishActions: [],
-    rejectedFinishActions: []
+    rejectedFinishActions: [],
+    acknowledgedConsumptionCorrections: [],
+    rejectedConsumptionCorrections: []
   };
 }
 
@@ -2783,6 +3674,41 @@ function ensureInteractionSummarySchema_(ss) {
 }
 
 function canonicalInteractionSummary_(ss) {
+  if (typeof PropertiesService === 'undefined') {
+    return rawCanonicalInteractionSummary_(ss);
+  }
+  const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment_());
+  const capability = consumptionCorrectionCapability_(
+    runtimeConfig.values
+  );
+  if (!capability.version) return rawCanonicalInteractionSummary_(ss);
+  const state = effectiveConsumptionState_(ss);
+  const interactions = {};
+  state.resolution.effectiveEvents.forEach(event => {
+    const legacyProductId = event.product.productId;
+    const existing = interactions[legacyProductId];
+    if (
+      !existing ||
+      event.occurredAtEpochMillis > existing.lastLoggedAtEpochMillis
+    ) {
+      interactions[legacyProductId] = {
+        lastLoggedAtEpochMillis: event.occurredAtEpochMillis,
+        lastQuantity: event.quantity,
+        timestamp: new Date(event.occurredAtEpochMillis),
+        canonicalRow: event.canonicalRow
+      };
+    }
+  });
+  return {
+    interactions: interactions,
+    eventRows: state.snapshot.eventRows.length,
+    correctionRows: state.snapshot.correctionRows.length,
+    validEvents: state.resolution.effectiveEvents.length,
+    invalidEvents: 0
+  };
+}
+
+function rawCanonicalInteractionSummary_(ss) {
   const sheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
   const headers = headerMap_(sheet);
   requireExactHeaders_(headers, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
@@ -3155,7 +4081,7 @@ function ensureCoreSchema_(ss) {
   ensureSheet_(ss, CANN.SHEETS.MIGRATION_REPORT, CANN.REPORT_HEADERS);
   const config = ensureSheet_(ss, CANN.SHEETS.CONFIG, ['Key', 'Value', 'Description']);
   if (config.getLastRow() < 2) {
-    config.getRange(2, 1, 9, 3).setValues([
+    config.getRange(2, 1, 11, 3).setValues([
       ['ENVIRONMENT', environment_(), 'Runtime environment marker'],
       ['TAX_RATE', 0.13, 'Tax rate used for final-cost values'],
       ['TIME_ZONE', CANN.TIME_ZONE, 'Canonical local timezone'],
@@ -3163,13 +4089,62 @@ function ensureCoreSchema_(ss) {
       ['INTERACTION_SUMMARY_VERSION', 0, 'Purchases interaction-summary version'],
       [CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY, 0, 'Recoverable multi-sheet apply version'],
       [CANN.PENDING_APPLY_KEY, '', 'Apply UUID awaiting finalization'],
+      [
+        CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+        0,
+        'Append-only consumption correction schema version'
+      ],
+      [
+        CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+        false,
+        'Whether new consumption correction writes are accepted'
+      ],
       ['MAX_BATCH_SIZE', CANN.MAX_BATCH_SIZE, 'Maximum v2 items per request'],
       ['LOCK_TIMEOUT_MS', CANN.LOCK_TIMEOUT_MS, 'Shared mutation lock timeout']
     ]);
   } else {
     ensureConfigKey_(ss, CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY, 0, 'Recoverable multi-sheet apply version');
     ensureConfigKey_(ss, CANN.PENDING_APPLY_KEY, '', 'Apply UUID awaiting finalization');
+    ensureConfigKey_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+      0,
+      'Append-only consumption correction schema version'
+    );
+    ensureConfigKey_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      false,
+      'Whether new consumption correction writes are accepted'
+    );
   }
+}
+
+function historyEventResponse_(event, query) {
+  const response = {
+    eventUuid: event.eventUuid,
+    occurredAtEpochMillis: event.occurredAtEpochMillis,
+    localDate: event.localDate,
+    localTime: event.localTime,
+    productUuid: event.product.productUuid,
+    productId: event.product.productId,
+    productName: event.product.name,
+    productType: event.product.type,
+    quantity: event.quantity,
+    weightCode: event.weightCode,
+    finished: event.finished,
+    source: event.source
+  };
+  if (query.analyticsVersion >= 2) {
+    response.lifecycleState = event.lifecycleState || 'ORIGINAL';
+    response.correctionHeadId = event.correctionHeadId || null;
+    response.revision = Number(event.revision) || 0;
+    response.reopenEligible = event.reopenEligible === true;
+    if (query.includeAudit) {
+      response.auditRevisions = event.auditRevisions || [];
+    }
+  }
+  return response;
 }
 
 function ensureMigrationResolutionSchema_(ss) {
@@ -3206,6 +4181,13 @@ function provisionRecoverableDateFormats_(ss) {
     [CANN.SHEETS.LEDGER, ['Received At']],
     [CANN.SHEETS.APPLY_JOURNAL, ['Core Committed At', 'Completed At']]
   ];
+  const corrections = ss.getSheetByName(CANN.SHEETS.CORRECTIONS);
+  if (corrections) {
+    specifications.push([
+      CANN.SHEETS.CORRECTIONS,
+      ['Replacement Timestamp', 'Created At']
+    ]);
+  }
   specifications.forEach(specification => {
     const sheet = requiredSheet_(ss, specification[0]);
     const headers = headerMap_(sheet);
@@ -3264,6 +4246,13 @@ function assertRuntimeSchema_(ss, expectedEnvironment, validatedConfig) {
   assertSupportedSchemaVersion_(config);
   const summaryReady = interactionSummaryReady_(config);
   const recoverableApplyReady = recoverableSyncApplyReady_(config);
+  const correctionCapability = consumptionCorrectionCapability_(config);
+  if (correctionCapability.version && !summaryReady) {
+    throw new Error(
+      'SCHEMA_MISMATCH: consumption corrections require the ' +
+      'interaction-summary projection'
+    );
+  }
   if (recoverableApplyReady) assertSpreadsheetTimeZone_(ss, config);
   requireExactHeaders_(
     headers.purchases,
@@ -3278,6 +4267,15 @@ function assertRuntimeSchema_(ss, expectedEnvironment, validatedConfig) {
     requireExactHeaders_(headers.applyJournal, CANN.APPLY_JOURNAL_HEADERS, CANN.SHEETS.APPLY_JOURNAL);
   }
   requireExactHeaders_(headers.events, CANN.EVENT_HEADERS, CANN.SHEETS.EVENTS);
+  if (correctionCapability.version === CANN.CONSUMPTION_CORRECTION_VERSION) {
+    sheets.corrections = requiredSheet_(ss, CANN.SHEETS.CORRECTIONS);
+    headers.corrections = headerMap_(sheets.corrections);
+    requireExactHeaders_(
+      headers.corrections,
+      CANN.CORRECTION_HEADERS,
+      CANN.SHEETS.CORRECTIONS
+    );
+  }
   requireExactHeaders_(headers.ledger, CANN.LEDGER_HEADERS, CANN.SHEETS.LEDGER);
   requireExactHeaders_(headers.config, ['Key', 'Value', 'Description'], CANN.SHEETS.CONFIG);
   requireExactHeaders_(headers.migrationReport, CANN.REPORT_HEADERS, CANN.SHEETS.MIGRATION_REPORT);
@@ -3288,6 +4286,9 @@ function assertRuntimeSchema_(ss, expectedEnvironment, validatedConfig) {
   }
   config.INTERACTION_SUMMARY_READY = summaryReady;
   config.RECOVERABLE_SYNC_APPLY_READY = recoverableApplyReady;
+  config.CONSUMPTION_CORRECTION_VERSION = correctionCapability.version;
+  config.CONSUMPTION_CORRECTION_WRITES_ENABLED =
+    correctionCapability.writesEnabled;
   config.TAX_RATE = finiteNumberOr_(config.TAX_RATE, 0.13);
   return { sheets: sheets, headers: headers, config: config };
 }
@@ -3319,6 +4320,47 @@ function recoverableSyncApplyReady_(config) {
     );
   }
   return true;
+}
+
+function consumptionCorrectionCapability_(config) {
+  const values = config || {};
+  const rawVersion = values[CANN.CONSUMPTION_CORRECTION_VERSION_KEY];
+  const version = rawVersion == null || rawVersion === ''
+    ? 0
+    : Number(rawVersion);
+  if (
+    version !== 0 &&
+    version !== CANN.CONSUMPTION_CORRECTION_VERSION
+  ) {
+    throw new Error(
+      'SCHEMA_MISMATCH: unsupported Config ' +
+      CANN.CONSUMPTION_CORRECTION_VERSION_KEY + ' ' + rawVersion
+    );
+  }
+  const rawWrites = values[CANN.CONSUMPTION_CORRECTION_WRITES_KEY];
+  const writesText = text_(rawWrites).toLowerCase();
+  if (
+    rawWrites != null &&
+    rawWrites !== '' &&
+    ['true', 'false', '1', '0'].indexOf(writesText) < 0
+  ) {
+    throw new Error(
+      'SCHEMA_MISMATCH: Config ' +
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY +
+      ' must be true or false'
+    );
+  }
+  const writesEnabled = truthy_(rawWrites);
+  if (writesEnabled && version !== CANN.CONSUMPTION_CORRECTION_VERSION) {
+    throw new Error(
+      'SCHEMA_MISMATCH: correction writes require schema version ' +
+      CANN.CONSUMPTION_CORRECTION_VERSION
+    );
+  }
+  return {
+    version: version,
+    writesEnabled: writesEnabled
+  };
 }
 
 function requireCompatibilityIdentityHeaders_(headers) {
@@ -3388,7 +4430,16 @@ function applySheetSafety_(ss) {
   // The existing Purchases table already owns the Post-tax typed checkbox
   // column. Reapplying checkbox validation is rejected for typed columns.
 
-  [purchases, requiredSheet_(ss, CANN.SHEETS.EVENTS), requiredSheet_(ss, CANN.SHEETS.LEDGER), requiredSheet_(ss, CANN.SHEETS.CONFIG), requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT)].forEach(sheet => {
+  const protectedSheets = [
+    purchases,
+    requiredSheet_(ss, CANN.SHEETS.EVENTS),
+    requiredSheet_(ss, CANN.SHEETS.LEDGER),
+    requiredSheet_(ss, CANN.SHEETS.CONFIG),
+    requiredSheet_(ss, CANN.SHEETS.MIGRATION_REPORT)
+  ];
+  const corrections = ss.getSheetByName(CANN.SHEETS.CORRECTIONS);
+  if (corrections) protectedSheets.push(corrections);
+  protectedSheets.forEach(sheet => {
     sheet.getRange(1, 1, 1, sheet.getLastColumn())
       .setBackground('#eeeeee')
       .setFontColor('#000000')
@@ -3398,6 +4449,21 @@ function applySheetSafety_(ss) {
   addWarningProtection_(purchases.getRange(1, 1, 1, purchases.getLastColumn()), 'Cannsheet reliability headers');
   addWarningProtection_(purchases.getRange(2, headers['Product ID'] + 1, Math.max(1, purchases.getMaxRows() - 1), 1), 'Cannsheet display identities');
   addWarningProtection_(purchases.getRange(2, headers['Product UUID'] + 1, Math.max(1, purchases.getMaxRows() - 1), 3), 'Cannsheet immutable identities');
+  if (corrections) {
+    addWarningProtection_(
+      corrections.getRange(1, 1, 1, corrections.getLastColumn()),
+      'Cannsheet correction headers'
+    );
+    addWarningProtection_(
+      corrections.getRange(
+        2,
+        1,
+        Math.max(1, corrections.getMaxRows() - 1),
+        corrections.getLastColumn()
+      ),
+      'Cannsheet append-only correction records'
+    );
+  }
 }
 
 function addWarningProtection_(range, description) {
@@ -3617,6 +4683,55 @@ function calculateProductEffects_(context, consumptions) {
   }).filter(Boolean);
 }
 
+function calculateCorrectionProjectionEffects_(
+  productContext,
+  projectedState,
+  corrections
+) {
+  const affected = {};
+  const reopenProducts = {};
+  (corrections || []).forEach(correction => {
+    (correction.affectedProductIds || []).forEach(productId => {
+      affected[productId] = true;
+    });
+    if (correction.reopenLegacyProductId) {
+      reopenProducts[correction.reopenLegacyProductId] = true;
+    }
+  });
+  const projections = effectiveProductProjectionMap_(
+    projectedState.resolution.effectiveEvents,
+    projectedState.resolution.reopenedProducts,
+    {
+      finishActionProductIds:
+        projectedState.snapshot.finishActionProductIds,
+      productsByProductId: projectedState.products.byProductId
+    }
+  );
+  return Object.keys(affected).map(legacyProductId => {
+    const product = productContext.byLegacyId[legacyProductId];
+    if (!product) {
+      throw new Error(
+        'CORRECTION_PROJECTION_BLOCKED: missing product ' +
+        legacyProductId
+      );
+    }
+    const expected = expectedProjectionForProduct_(
+      product,
+      projections[legacyProductId],
+      { reopenProduct: reopenProducts[legacyProductId] === true }
+    );
+    return {
+      legacyProductId: legacyProductId,
+      rowNumber: product.rowNumber,
+      status: expected.status,
+      uses: expected.uses,
+      mostRecentUse: expected.mostRecentUse,
+      lastQuantity: expected.lastQuantity,
+      finishedAt: expected.finishedAt
+    };
+  });
+}
+
 function upsertLedger_(ss, requestId, purchaseCount, consumptionCount, result, durationMs, errorCode, runtimeContext) {
   const sheet = runtimeContext ? runtimeContext.sheets.ledger : requiredSheet_(ss, CANN.SHEETS.LEDGER);
   const headers = runtimeContext ? runtimeContext.headers.ledger : headerMap_(sheet);
@@ -3659,6 +4774,169 @@ function emptyProductContext_(runtimeContext) {
     byProductUuid: {},
     byActionId: {}
   };
+}
+
+/**
+ * Additive rollout entrypoint. Correction-aware source must already be
+ * deployed. New writes remain disabled until the separate enable function
+ * succeeds.
+ */
+function provisionConsumptionCorrections() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment_());
+    assertSupportedSchemaVersion_(runtimeConfig.values);
+    if (
+      !recoverableSyncApplyReady_(runtimeConfig.values) ||
+      !interactionSummaryReady_(runtimeConfig.values)
+    ) {
+      throw new Error(
+        'CORRECTION_PROVISION_BLOCKED: recoverable sync apply and the ' +
+        'interaction-summary projection are required'
+      );
+    }
+    if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
+      throw new Error(
+        'CORRECTION_PROVISION_BLOCKED: recoverable apply is pending'
+      );
+    }
+    ensureConfigKey_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+      0,
+      'Append-only consumption correction schema version'
+    );
+    ensureConfigKey_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      false,
+      'Whether new consumption correction writes are accepted'
+    );
+    ensureSheet_(ss, CANN.SHEETS.CORRECTIONS, CANN.CORRECTION_HEADERS);
+    setConfigValue_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      false,
+      'Whether new consumption correction writes are accepted'
+    );
+    setConfigValue_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
+      CANN.CONSUMPTION_CORRECTION_VERSION,
+      'Append-only consumption correction schema version'
+    );
+    provisionRecoverableDateFormats_(ss);
+    applySheetSafety_(ss);
+    SpreadsheetApp.flush();
+    const reconciliation = reconcileConsumptionCorrections_(ss);
+    if (reconciliation.differences.length) {
+      throw new Error(
+        'CORRECTION_PROVISION_BLOCKED: ' +
+        JSON.stringify(reconciliation.differences)
+      );
+    }
+    return {
+      correctionVersion: CANN.CONSUMPTION_CORRECTION_VERSION,
+      writesEnabled: false,
+      correctionRows: reconciliation.correctionRows,
+      effectiveEvents: reconciliation.effectiveEvents,
+      differences: reconciliation.differences
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function enableConsumptionCorrectionWrites() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment_());
+    const capability = consumptionCorrectionCapability_(
+      runtimeConfig.values
+    );
+    if (
+      capability.version !== CANN.CONSUMPTION_CORRECTION_VERSION ||
+      !recoverableSyncApplyReady_(runtimeConfig.values)
+    ) {
+      throw new Error(
+        'CORRECTION_ENABLE_BLOCKED: correction schema and recoverable apply ' +
+        'must be ready'
+      );
+    }
+    if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
+      throw new Error('CORRECTION_ENABLE_BLOCKED: recoverable apply is pending');
+    }
+    const reconciliation = reconcileConsumptionCorrections_(ss);
+    if (reconciliation.differences.length) {
+      throw new Error(
+        'CORRECTION_ENABLE_BLOCKED: ' +
+        JSON.stringify(reconciliation.differences)
+      );
+    }
+    setConfigValue_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      true,
+      'Whether new consumption correction writes are accepted'
+    );
+    SpreadsheetApp.flush();
+    return {
+      correctionVersion: capability.version,
+      writesEnabled: true,
+      correctionRows: reconciliation.correctionRows,
+      effectiveEvents: reconciliation.effectiveEvents
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function disableConsumptionCorrectionWrites() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    ensureConfigKey_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      false,
+      'Whether new consumption correction writes are accepted'
+    );
+    setConfigValue_(
+      ss,
+      CANN.CONSUMPTION_CORRECTION_WRITES_KEY,
+      false,
+      'Whether new consumption correction writes are accepted'
+    );
+    SpreadsheetApp.flush();
+    return {
+      correctionVersion: consumptionCorrectionCapability_(
+        readAndAssertRuntimeConfig_(ss, environment_()).values
+      ).version,
+      writesEnabled: false
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reconcileConsumptionCorrections() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    return reconcileConsumptionCorrections_(ss);
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -4089,7 +5367,246 @@ function canonicalCompatibilityFingerprint_(
   ]);
 }
 
+function effectiveConsumptionState_(
+  ss,
+  runtimeContext,
+  stagedConsumptions,
+  stagedCorrections
+) {
+  const runtimeConfig = runtimeContext
+    ? { values: runtimeContext.config }
+    : readAndAssertRuntimeConfig_(ss, environment_());
+  const capability = consumptionCorrectionCapability_(
+    runtimeConfig.values
+  );
+  const purchases = runtimeContext
+    ? runtimeContext.sheets.purchases
+    : requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const events = runtimeContext
+    ? runtimeContext.sheets.events
+    : requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const corrections = capability.version
+    ? (
+      runtimeContext
+        ? runtimeContext.sheets.corrections
+        : requiredSheet_(ss, CANN.SHEETS.CORRECTIONS)
+    )
+    : null;
+  const purchaseHeaders = runtimeContext
+    ? runtimeContext.headers.purchases
+    : headerMap_(purchases);
+  const eventHeaders = runtimeContext
+    ? runtimeContext.headers.events
+    : headerMap_(events);
+  const correctionHeaders = corrections
+    ? (
+      runtimeContext
+        ? runtimeContext.headers.corrections
+        : headerMap_(corrections)
+    )
+    : {};
+  requireExactHeaders_(
+    purchaseHeaders,
+    CANN.PURCHASE_HEADERS,
+    CANN.SHEETS.PURCHASES
+  );
+  requireExactHeaders_(
+    eventHeaders,
+    CANN.EVENT_HEADERS,
+    CANN.SHEETS.EVENTS
+  );
+  if (corrections) {
+    requireExactHeaders_(
+      correctionHeaders,
+      CANN.CORRECTION_HEADERS,
+      CANN.SHEETS.CORRECTIONS
+    );
+  }
+  const applyEvidence = capability.version
+    ? recoverableApplyEvidence_(ss, runtimeContext)
+    : {
+      eventIds: {},
+      correctionIds: {},
+      finishActionProductIds: {}
+    };
+  const snapshot = {
+    environment: runtimeContext
+      ? runtimeContext.environment
+      : environment_(),
+    taxRate: finiteNumberOr_(runtimeConfig.values.TAX_RATE, 0.13),
+    purchaseHeaders: purchaseHeaders,
+    eventHeaders: eventHeaders,
+    correctionHeaders: correctionHeaders,
+    purchaseRows: readAnalyticsRowsThrough_(
+      purchases,
+      purchases.getLastRow()
+    ),
+    eventRows: readAnalyticsRowsThrough_(events, events.getLastRow()),
+    correctionRows: corrections
+      ? readAnalyticsRowsThrough_(corrections, corrections.getLastRow())
+      : [],
+    eventLastRow: events.getLastRow(),
+    correctionLastRow: corrections ? corrections.getLastRow() : 1,
+    correctionVersion: capability.version,
+    correctionWritesEnabled: capability.writesEnabled,
+    finishActionProductIds: applyEvidence.finishActionProductIds,
+    finishProvenanceEventIds: applyEvidence.eventIds,
+    finishProvenanceCorrectionIds: applyEvidence.correctionIds
+  };
+  const quality = newAnalyticsQuality_();
+  const products = normalizeAnalyticsProducts_(snapshot, quality);
+  const canonicalEvents = normalizeAnalyticsEvents_(
+    snapshot,
+    products,
+    quality
+  );
+  (stagedConsumptions || []).forEach((item, index) => {
+    const productUuid = text_(item.productUuid).toLowerCase();
+    const legacyProductId = text_(item.legacyProductId);
+    const product = (
+      productUuid && products.byProductUuid[productUuid]
+    ) || (
+      legacyProductId && products.byProductId[legacyProductId]
+    );
+    // A consumption for a purchase created in this same request is projected
+    // by the existing purchase plan because that product does not exist in the
+    // spreadsheet snapshot yet.
+    if (!product) return;
+    canonicalEvents.push({
+      canonicalRow: snapshot.eventLastRow + index + 1,
+      eventUuid: text_(item.eventId).toLowerCase(),
+      occurredAtEpochMillis: dateOrNow_(item.timestamp).getTime(),
+      localDate: text_(item.localDate),
+      localTime: text_(item.localTime),
+      product: product,
+      quantity: finiteNumberOr_(item.uses, 0),
+      weightCode: text_(item.weightCode) || null,
+      finished: item.isFinished === true,
+      source: text_(item.source) || 'ANDROID_V2'
+    });
+  });
+  const resolution = resolveAnalyticsCorrections_(
+    snapshot,
+    products,
+    canonicalEvents,
+    stagedCorrections || []
+  );
+  return {
+    snapshot: snapshot,
+    quality: quality,
+    products: products,
+    canonicalEvents: canonicalEvents,
+    resolution: resolution
+  };
+}
+
+function effectiveProductProjectionMap_(events, reopenedProducts, options) {
+  const settings = options || {};
+  const projections = {};
+  (events || []).forEach(event => {
+    const legacyProductId = event.product.productId;
+    const projection = projections[legacyProductId] ||
+      (projections[legacyProductId] = {
+        eventCount: 0,
+        uses: 0,
+        mostRecentUse: null,
+        mostRecentMillis: null,
+        lastQuantity: null,
+        hasFinishedEvent: false,
+        finishedEventCount: 0,
+        finishedAt: null,
+        finishedAtMillis: null,
+        lastCanonicalRow: null
+      });
+    projection.eventCount++;
+    projection.uses += event.quantity;
+    if (
+      projection.mostRecentMillis == null ||
+      event.occurredAtEpochMillis > projection.mostRecentMillis
+    ) {
+      projection.mostRecentUse = new Date(event.occurredAtEpochMillis);
+      projection.mostRecentMillis = event.occurredAtEpochMillis;
+      projection.lastQuantity = event.quantity;
+    }
+    if (event.finished) {
+      projection.hasFinishedEvent = true;
+      projection.finishedEventCount++;
+      if (
+        projection.finishedAtMillis == null ||
+        event.occurredAtEpochMillis > projection.finishedAtMillis
+      ) {
+        projection.finishedAt = new Date(event.occurredAtEpochMillis);
+        projection.finishedAtMillis = event.occurredAtEpochMillis;
+      }
+    }
+    projection.lastCanonicalRow = event.canonicalRow;
+  });
+  Object.keys(reopenedProducts || {}).forEach(legacyProductId => {
+    const product = settings.productsByProductId
+      ? settings.productsByProductId[legacyProductId]
+      : null;
+    if (
+      product &&
+      finishActionEvidenceForProduct_(
+        settings.finishActionProductIds || {},
+        product
+      )
+    ) {
+      return;
+    }
+    const projection = projections[legacyProductId] ||
+      (projections[legacyProductId] = {
+        eventCount: 0,
+        uses: 0,
+        mostRecentUse: null,
+        mostRecentMillis: null,
+        lastQuantity: null,
+        hasFinishedEvent: false,
+        finishedEventCount: 0,
+        finishedAt: null,
+        finishedAtMillis: null,
+        lastCanonicalRow: null
+      });
+    projection.reopenRequested = true;
+    projection.reopenBasisFinishedAtMillis =
+      reopenedProducts[legacyProductId].basisFinishedAtEpochMillis;
+  });
+  return projections;
+}
+
+function reconcileConsumptionCorrections_(ss) {
+  const state = effectiveConsumptionState_(ss);
+  const projectionReconciliation = reconcileProductProjections_(ss, null);
+  return {
+    rawEvents: state.snapshot.eventRows.length,
+    correctionRows: state.snapshot.correctionRows.length,
+    effectiveEvents: state.resolution.effectiveEvents.length,
+    revisionChains: Object.keys(state.resolution.groupsByTarget).length,
+    differences: projectionReconciliation.differences
+  };
+}
+
 function canonicalProductProjections_(ss) {
+  if (typeof PropertiesService === 'undefined') {
+    return rawCanonicalProductProjections_(ss);
+  }
+  const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment_());
+  const capability = consumptionCorrectionCapability_(
+    runtimeConfig.values
+  );
+  if (!capability.version) return rawCanonicalProductProjections_(ss);
+  const state = effectiveConsumptionState_(ss);
+  return effectiveProductProjectionMap_(
+    state.resolution.effectiveEvents,
+    state.resolution.reopenedProducts,
+    {
+      finishActionProductIds: state.snapshot.finishActionProductIds,
+      productsByProductId: state.products.byProductId
+    }
+  );
+}
+
+function rawCanonicalProductProjections_(ss) {
   const sheet = requiredSheet_(ss, CANN.SHEETS.EVENTS);
   const headers = headerMap_(sheet);
   const projections = {};
@@ -4146,7 +5663,12 @@ function canonicalProductProjections_(ss) {
   return projections;
 }
 
-function expectedProjectionForProduct_(product, canonicalProjection) {
+function expectedProjectionForProduct_(
+  product,
+  canonicalProjection,
+  options
+) {
+  const settings = options || {};
   const canonical = canonicalProjection || {
     eventCount: 0,
     uses: 0,
@@ -4157,8 +5679,21 @@ function expectedProjectionForProduct_(product, canonicalProjection) {
     finishedAt: null
   };
   let status = allowedStatusOr_(product.status, CANN.STATUS.UNOPENED);
+  let finishedAt = product.finishedAt;
+  const storedFinishedAtMillis = timestampMillisOrNull_(product.finishedAt);
+  const replayedReopen = canonical.reopenRequested === true &&
+    (
+      storedFinishedAtMillis == null ||
+      storedFinishedAtMillis === canonical.reopenBasisFinishedAtMillis
+    );
   if (canonical.hasFinishedEvent) {
     status = CANN.STATUS.FINISHED;
+    finishedAt = canonical.finishedAt;
+  } else if (settings.reopenProduct === true || replayedReopen) {
+    status = canonical.eventCount > 0
+      ? CANN.STATUS.ACTIVE
+      : CANN.STATUS.UNOPENED;
+    finishedAt = null;
   } else if (canonical.eventCount > 0 && status === CANN.STATUS.UNOPENED) {
     status = CANN.STATUS.ACTIVE;
   }
@@ -4168,9 +5703,7 @@ function expectedProjectionForProduct_(product, canonicalProjection) {
     mostRecentUse: canonical.mostRecentUse,
     mostRecentMillis: canonical.mostRecentMillis,
     lastQuantity: canonical.lastQuantity,
-    finishedAt: canonical.hasFinishedEvent
-      ? canonical.finishedAt
-      : product.finishedAt
+    finishedAt: finishedAt
   };
 }
 
@@ -4223,6 +5756,53 @@ function rebuildProductProjectionsFromCanonical_(ss, productIds) {
   });
   sheetsBatchUpdateInChunks_(ss, requests, 400);
   return { rebuiltProducts: (productIds || []).length };
+}
+
+/**
+ * Explicit repair entrypoint. It is intentionally separate from read-only
+ * reconciliation because it rewrites the five derived Purchases projection
+ * cells from effective history.
+ */
+function rebuildEffectiveProductProjections() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
+  try {
+    const ss = spreadsheet_();
+    assertConfigEnvironment_(ss);
+    assertSpreadsheetTimeZone_(ss);
+    const runtimeConfig = readAndAssertRuntimeConfig_(ss, environment_());
+    const capability = consumptionCorrectionCapability_(
+      runtimeConfig.values
+    );
+    if (capability.version !== CANN.CONSUMPTION_CORRECTION_VERSION) {
+      throw new Error(
+        'CORRECTION_REBUILD_BLOCKED: correction schema is not provisioned'
+      );
+    }
+    const context = productContext_(ss);
+    const projections = canonicalProductProjections_(ss);
+    const productIds = Array.from(new Set(
+      Object.keys(context.byLegacyId).concat(Object.keys(projections))
+    ));
+    const rebuilt = rebuildProductProjectionsFromCanonical_(
+      ss,
+      productIds
+    );
+    SpreadsheetApp.flush();
+    const reconciliation = reconcileProductProjections_(ss, productIds);
+    if (reconciliation.differences.length) {
+      throw new Error(
+        'CORRECTION_REBUILD_FAILED: ' +
+        JSON.stringify(reconciliation.differences)
+      );
+    }
+    return {
+      rebuiltProducts: rebuilt.rebuiltProducts,
+      differences: reconciliation.differences
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /**
@@ -4936,6 +6516,10 @@ function applyRecoverableSyncLocked_(settings) {
   const stagedPurchases = settings.stagedPurchases || [];
   const stagedConsumptions = settings.stagedConsumptions || [];
   const stagedFinishActions = settings.stagedFinishActions || [];
+  const stagedConsumptionCorrections =
+    settings.stagedConsumptionCorrections || [];
+  const correctionProjectionEffects =
+    settings.correctionProjectionEffects || [];
   const purchasePlan = planRecoverablePurchaseRows_(
     settings.productContext,
     stagedPurchases,
@@ -4964,6 +6548,9 @@ function applyRecoverableSyncLocked_(settings) {
       stagedConsumptions
     );
   const eventRows = buildRecoverableEventRows_(stagedConsumptions);
+  const correctionRows = buildRecoverableCorrectionRows_(
+    stagedConsumptionCorrections
+  );
   const journalSheet = requiredSheet_(
     ss,
     CANN.SHEETS.APPLY_JOURNAL
@@ -4977,6 +6564,16 @@ function applyRecoverableSyncLocked_(settings) {
     kind: settings.kind,
     requestId: settings.requestId || '',
     eventIds: stagedConsumptions.map(item => item.eventId),
+    correctionActions: stagedConsumptionCorrections.map(item => ({
+      actionId: item.correctionId,
+      targetEventId: item.targetEventId,
+      supersedesCorrectionId: item.supersedesCorrectionId,
+      revision: item.revision,
+      operation: item.operation,
+      reopenProduct: item.reopenProduct,
+      reopenLegacyProductId: item.reopenLegacyProductId || null,
+      affectedProductIds: item.affectedProductIds || []
+    })),
     finishActions: stagedFinishActions.map(item => ({
       actionId: item.actionId,
       productUuid: item.productUuid,
@@ -5047,6 +6644,12 @@ function applyRecoverableSyncLocked_(settings) {
       eventRows
     ));
   }
+  if (correctionRows.length) {
+    coreRequests.push(appendCellsRequest_(
+      runtimeContext.sheets.corrections,
+      correctionRows
+    ));
+  }
   maybeInjectSandboxSyncApplyBatchFault_(
     CANN.SYNC_APPLY_FAULTS.CANONICAL,
     coreRequests
@@ -5103,6 +6706,39 @@ function applyRecoverableSyncLocked_(settings) {
       effect.rowNumber,
       headers['Most recent use'] + 1,
       [[effect.mostRecentUse || '']]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Last quantity'] + 1,
+      [[effect.lastQuantity == null ? '' : effect.lastQuantity]]
+    ));
+  });
+  correctionProjectionEffects.forEach(effect => {
+    const headers = settings.productContext.headers;
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Finished'] + 1,
+      [[effect.status]]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Uses'] + 1,
+      [[effect.uses]]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Most recent use'] + 1,
+      [[effect.mostRecentUse || '']]
+    ));
+    coreRequests.push(updateCellsRequest_(
+      runtimeContext.sheets.purchases,
+      effect.rowNumber,
+      headers['Finished At'] + 1,
+      [[effect.finishedAt || '']]
     ));
     coreRequests.push(updateCellsRequest_(
       runtimeContext.sheets.purchases,
@@ -5225,6 +6861,16 @@ function applyRecoverableSyncLocked_(settings) {
       product.status = effect.status;
       product.finishedAt = effect.finishedAt;
     });
+  correctionProjectionEffects.forEach(effect => {
+    const product =
+      settings.productContext.byLegacyId[effect.legacyProductId];
+    if (!product) return;
+    product.status = effect.status;
+    product.uses = effect.uses;
+    product.mostRecentUse = effect.mostRecentUse;
+    product.finishedAt = effect.finishedAt;
+    product.lastQuantity = effect.lastQuantity;
+  });
   return result;
 }
 
@@ -5309,6 +6955,34 @@ function buildRecoverableEventRows_(staged) {
     item.weightCode || '', !!item.isFinished, item.source,
     item.requestId || '', '', ''
   ]);
+}
+
+function buildRecoverableCorrectionRows_(staged) {
+  return (staged || []).map(item => {
+    const replacement = item.replacement;
+    return [
+      item.correctionId,
+      item.targetEventId,
+      item.supersedesCorrectionId || '',
+      item.revision,
+      item.operation,
+      replacement
+        ? new Date(replacement.occurredAtEpochMillis)
+        : '',
+      replacement ? replacement.localDate : '',
+      replacement ? replacement.localTime : '',
+      replacement ? replacement.product.productUuid : '',
+      replacement ? replacement.product.productId : '',
+      replacement ? replacement.quantity : '',
+      replacement ? (replacement.weightCode || '') : '',
+      replacement ? replacement.finished : '',
+      item.reopenProduct === true,
+      item.reason || '',
+      item.requestId,
+      item.source,
+      new Date(item.createdAtEpochMillis)
+    ];
+  });
 }
 
 function repairRecoverableStateLocked_(runtimeContext) {
@@ -5693,6 +7367,54 @@ function finishActionContext_(ss, runtimeContext, submittedActionIds) {
     });
   });
   return matches;
+}
+
+function recoverableApplyEvidence_(ss, runtimeContext) {
+  const evidence = {
+    eventIds: {},
+    correctionIds: {},
+    finishActionProductIds: {}
+  };
+  const sheet = runtimeContext && runtimeContext.sheets.applyJournal
+    ? runtimeContext.sheets.applyJournal
+    : requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const headers = runtimeContext && runtimeContext.headers.applyJournal
+    ? runtimeContext.headers.applyJournal
+    : headerMap_(sheet);
+  readDataRows_(sheet).forEach(row => {
+    if (text_(value_(row, headers, 'State')) !== 'COMPLETE') return;
+    const finalizationJson = text_(value_(
+      row,
+      headers,
+      'Finalization JSON'
+    ));
+    if (!finalizationJson) return;
+    let plan;
+    try {
+      plan = JSON.parse(finalizationJson);
+    } catch (error) {
+      throw new Error('RECOVERABLE_APPLY_CORRUPT: invalid finalization JSON');
+    }
+    (plan.eventIds || []).forEach(eventId => {
+      const normalized = text_(eventId).toLowerCase();
+      if (normalized) evidence.eventIds[normalized] = true;
+    });
+    (plan.correctionActions || []).forEach(action => {
+      const correctionId = text_(action && action.actionId).toLowerCase();
+      if (correctionId) evidence.correctionIds[correctionId] = true;
+    });
+    (plan.finishActions || []).forEach(action => {
+      const productUuid = text_(action && action.productUuid).toLowerCase();
+      const legacyProductId = text_(action && action.legacyProductId);
+      if (productUuid) {
+        evidence.finishActionProductIds[productUuid] = true;
+      }
+      if (legacyProductId) {
+        evidence.finishActionProductIds[legacyProductId] = true;
+      }
+    });
+  });
+  return evidence;
 }
 
 function findConfigRowNumber_(ss, key) {
@@ -6224,6 +7946,140 @@ function stageV2FinishAction_(item, resolved) {
   };
 }
 
+function stageV2ConsumptionCorrection_(
+  item,
+  targetState,
+  products,
+  requestId,
+  createdAt
+) {
+  const operation = text_(item.operation).toUpperCase();
+  let replacement = null;
+  if (operation === CANN.CORRECTION_OPERATIONS.REPLACE) {
+    const value = item.replacement;
+    const productUuid = text_(value.productUuid).toLowerCase();
+    const productId = text_(value.productId);
+    const byUuid = products.byProductUuid[productUuid];
+    const byId = products.byProductId[productId];
+    if (!byUuid || !byId || byUuid !== byId) {
+      return {
+        error: itemError_(
+          'UNKNOWN_PRODUCT',
+          'Unknown or conflicting replacement product reference'
+        )
+      };
+    }
+    const timestamp = parseClientDateTime_(value.date, value.time);
+    replacement = {
+      occurredAtEpochMillis: timestamp.getTime(),
+      localDate: text_(value.date),
+      localTime: text_(value.time),
+      product: byUuid,
+      quantity: Number(value.uses),
+      weightCode: text_(value.weightCode) || null,
+      finished: value.finished === true
+    };
+    if (
+      text_(replacement.weightCode) !==
+      text_(targetState.original.weightCode)
+    ) {
+      return {
+        error: itemError_(
+          'IMMUTABLE_FIELD',
+          'Weight code cannot be changed by a correction'
+        )
+      };
+    }
+  }
+  const current = targetState.current;
+  const finishBasis = targetState.reopenBasis;
+  const proposed = operation === CANN.CORRECTION_OPERATIONS.REPLACE
+    ? replacement
+    : (
+      operation === CANN.CORRECTION_OPERATIONS.RESTORE
+        ? targetState.original
+        : null
+    );
+  const removesCurrentFinish = !!(
+    finishBasis &&
+    finishBasis.finished &&
+    (
+      !proposed ||
+      !proposed.finished ||
+      proposed.product.productId !== finishBasis.product.productId
+    )
+  );
+  const reopenProduct = item.reopenProduct === true;
+  if (reopenProduct && !removesCurrentFinish) {
+    return {
+      error: itemError_(
+        'REOPEN_NOT_APPLICABLE',
+        'This correction does not remove the current finish marker'
+      )
+    };
+  }
+  if (reopenProduct && !targetState.reopenEligible) {
+    return {
+      error: itemError_(
+        'REOPEN_NOT_SAFE',
+        'The product finish cannot be traced only to this consumption entry'
+      )
+    };
+  }
+  const correctionId = text_(item.actionId).toLowerCase();
+  const createdAtEpochMillis = createdAt.getTime();
+  const record = {
+    canonicalRow: Number.MAX_SAFE_INTEGER,
+    correctionId: correctionId,
+    targetEventId: text_(item.targetEventId).toLowerCase(),
+    supersedesCorrectionId: text_(
+      item.expectedCorrectionHeadId
+    ).toLowerCase(),
+    revision: targetState.revision + 1,
+    operation: operation,
+    replacement: replacement,
+    reopenProduct: reopenProduct,
+    reopenLegacyProductId: reopenProduct && finishBasis
+      ? finishBasis.product.productId
+      : null,
+    reason: text_(item.reason) || null,
+    requestId: requestId,
+    source: 'ANDROID_V2',
+    createdAtEpochMillis: createdAtEpochMillis,
+    affectedProductIds: Array.from(new Set([
+      current ? current.product.productId : '',
+      proposed ? proposed.product.productId : '',
+      reopenProduct && finishBasis ? finishBasis.product.productId : ''
+    ].filter(Boolean)))
+  };
+  return { record: record };
+}
+
+function correctionRequestMatchesRecord_(item, record) {
+  if (
+    text_(item.targetEventId).toLowerCase() !== record.targetEventId ||
+    text_(item.expectedCorrectionHeadId).toLowerCase() !==
+      text_(record.supersedesCorrectionId).toLowerCase() ||
+    text_(item.operation).toUpperCase() !== record.operation ||
+    (item.reopenProduct === true) !== record.reopenProduct ||
+    (text_(item.reason) || '') !== (record.reason || '')
+  ) {
+    return false;
+  }
+  if (record.operation !== CANN.CORRECTION_OPERATIONS.REPLACE) {
+    return item.replacement == null;
+  }
+  const value = item.replacement || {};
+  return text_(value.date) === record.replacement.localDate &&
+    text_(value.time) === record.replacement.localTime &&
+    text_(value.productUuid).toLowerCase() ===
+      text_(record.replacement.product.productUuid).toLowerCase() &&
+    text_(value.productId) === record.replacement.product.productId &&
+    finiteNumber_(value.uses) === record.replacement.quantity &&
+    text_(value.weightCode) === text_(record.replacement.weightCode) &&
+    (value.finished === true) === record.replacement.finished;
+}
+
 function resolveProduct_(item, byLegacyId, byProductUuid) {
   const productUuid = text_(item.productUuid);
   const productId = text_(item.productId);
@@ -6264,6 +8120,30 @@ function rejectedFinishAction_(item, code, message) {
     actionId: text_(item && item.actionId) || null,
     errorCode: code,
     message: message
+  };
+}
+
+function consumptionCorrectionAck_(item, record, status) {
+  return {
+    actionId: text_(item.actionId).toLowerCase(),
+    targetEventId: record.targetEventId,
+    revision: record.revision,
+    status: status
+  };
+}
+
+function rejectedConsumptionCorrection_(
+  item,
+  code,
+  message,
+  currentHeadId
+) {
+  return {
+    actionId: text_(item && item.actionId).toLowerCase() || null,
+    targetEventId: text_(item && item.targetEventId).toLowerCase() || null,
+    errorCode: code,
+    message: message,
+    currentHeadId: currentHeadId || null
   };
 }
 
@@ -6318,20 +8198,48 @@ function preflightSyncRequest_(payload, apiVersion) {
   const purchases = arrayOrEmpty_(payload && payload.purchases);
   const consumptions = arrayOrEmpty_(payload && payload.consumptions);
   const finishActions = arrayOrEmpty_(payload && payload.finishActions);
+  const consumptionCorrections = arrayOrEmpty_(
+    payload && payload.consumptionCorrections
+  );
   if (apiVersion === 1 && Object.prototype.hasOwnProperty.call(payload || {}, 'finishActions')) {
     return {
       purchases: purchases,
       consumptions: consumptions,
       finishActions: finishActions,
+      consumptionCorrections: consumptionCorrections,
       failure: itemError_('INVALID_ITEM', 'finishActions require apiVersion 2')
     };
   }
-  const sizeError = validateBatchSize_(purchases, consumptions, finishActions);
+  if (
+    apiVersion === 1 &&
+    Object.prototype.hasOwnProperty.call(
+      payload || {},
+      'consumptionCorrections'
+    )
+  ) {
+    return {
+      purchases: purchases,
+      consumptions: consumptions,
+      finishActions: finishActions,
+      consumptionCorrections: consumptionCorrections,
+      failure: itemError_(
+        'INVALID_ITEM',
+        'consumptionCorrections require apiVersion 2'
+      )
+    };
+  }
+  const sizeError = validateBatchSize_(
+    purchases,
+    consumptions,
+    finishActions,
+    consumptionCorrections
+  );
   if (sizeError) {
     return {
       purchases: purchases,
       consumptions: consumptions,
       finishActions: finishActions,
+      consumptionCorrections: consumptionCorrections,
       failure: itemError_('INVALID_ITEM', sizeError)
     };
   }
@@ -6341,11 +8249,13 @@ function preflightSyncRequest_(payload, apiVersion) {
         purchases: purchases,
         consumptions: consumptions,
         finishActions: finishActions,
+        consumptionCorrections: consumptionCorrections,
         failure: itemError_('INVALID_ITEM', 'requestId must be a UUID')
       };
     }
     const duplicateActionId = firstDuplicate_(purchases
       .concat(finishActions)
+      .concat(consumptionCorrections)
       .map(item => text_(item && item.actionId))
       .filter(Boolean));
     const duplicateEventId = firstDuplicate_(consumptions.map(item => text_(item && item.eventId)).filter(Boolean));
@@ -6354,6 +8264,7 @@ function preflightSyncRequest_(payload, apiVersion) {
         purchases: purchases,
         consumptions: consumptions,
         finishActions: finishActions,
+        consumptionCorrections: consumptionCorrections,
         failure: itemError_('INVALID_ITEM', 'Duplicate UUID inside request')
       };
     }
@@ -6362,6 +8273,7 @@ function preflightSyncRequest_(payload, apiVersion) {
     purchases: purchases,
     consumptions: consumptions,
     finishActions: finishActions,
+    consumptionCorrections: consumptionCorrections,
     failure: null
   };
 }
@@ -6370,9 +8282,121 @@ function isRequestPayloadObject_(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function validateBatchSize_(purchases, consumptions, finishActions) {
-  if (!Array.isArray(purchases) || !Array.isArray(consumptions) || !Array.isArray(finishActions)) return 'purchases, consumptions, and finishActions must be arrays';
-  if (purchases.length + consumptions.length + finishActions.length > CANN.MAX_BATCH_SIZE) return 'Batch exceeds maximum size';
+function validateBatchSize_(
+  purchases,
+  consumptions,
+  finishActions,
+  consumptionCorrections
+) {
+  if (consumptionCorrections == null) consumptionCorrections = [];
+  if (
+    !Array.isArray(purchases) ||
+    !Array.isArray(consumptions) ||
+    !Array.isArray(finishActions) ||
+    !Array.isArray(consumptionCorrections)
+  ) {
+    return 'purchases, consumptions, finishActions, and ' +
+      'consumptionCorrections must be arrays';
+  }
+  if (
+    purchases.length +
+    consumptions.length +
+    finishActions.length +
+    consumptionCorrections.length >
+      CANN.MAX_BATCH_SIZE
+  ) {
+    return 'Batch exceeds maximum size';
+  }
+  return null;
+}
+
+function validateV2ConsumptionCorrection_(item, index) {
+  if (!item || !isUuid_(text_(item.actionId))) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Invalid correction actionId at index ' + index
+    );
+  }
+  if (!isUuid_(text_(item.targetEventId))) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Invalid correction targetEventId at index ' + index
+    );
+  }
+  const expectedHead = text_(item.expectedCorrectionHeadId);
+  if (expectedHead && !isUuid_(expectedHead)) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Invalid expected correction head at index ' + index
+    );
+  }
+  const operation = text_(item.operation).toUpperCase();
+  if (!Object.prototype.hasOwnProperty.call(
+    CANN.CORRECTION_OPERATIONS,
+    operation
+  )) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Invalid correction operation at index ' + index
+    );
+  }
+  if (
+    item.reason != null &&
+    typeof item.reason !== 'string'
+  ) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Correction reason must be text at index ' + index
+    );
+  }
+  if (text_(item.reason).length > CANN.MAX_CORRECTION_REASON_LENGTH) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Correction reason exceeds ' +
+      CANN.MAX_CORRECTION_REASON_LENGTH + ' characters'
+    );
+  }
+  if (
+    item.reopenProduct != null &&
+    typeof item.reopenProduct !== 'boolean'
+  ) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Correction reopenProduct must be true or false at index ' + index
+    );
+  }
+  if (operation !== CANN.CORRECTION_OPERATIONS.REPLACE) {
+    if (item.replacement != null) {
+      return itemError_(
+        'INVALID_ITEM',
+        operation + ' correction must not include replacement values'
+      );
+    }
+    return null;
+  }
+  const replacement = item.replacement;
+  if (!replacement || typeof replacement !== 'object' ||
+      Array.isArray(replacement)) {
+    return itemError_(
+      'INVALID_ITEM',
+      'REPLACE correction requires a replacement snapshot at index ' + index
+    );
+  }
+  if (
+    !isClientDate_(replacement.date) ||
+    !isClientTime_(replacement.time) ||
+    !isUuid_(text_(replacement.productUuid)) ||
+    !text_(replacement.productId) ||
+    !isFiniteNumber_(replacement.uses) ||
+    Number(replacement.uses) <= 0 ||
+    typeof replacement.finished !== 'boolean' ||
+    typeof replacement.weightCode !== 'string'
+  ) {
+    return itemError_(
+      'INVALID_ITEM',
+      'Invalid REPLACE snapshot at index ' + index
+    );
+  }
   return null;
 }
 

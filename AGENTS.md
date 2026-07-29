@@ -80,6 +80,7 @@ Additional checked-in backend suites can be run directly with Node:
 
 ```powershell
 node tests/backend_contract_test.js
+node tests/backend_corrections_test.js
 node tests/backend_recovery_test.js
 node tests/backend_spreadsheet_test.js
 node tests/fake_sheets_batch_update_test.js
