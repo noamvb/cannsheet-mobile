@@ -7,14 +7,126 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  release:
+  confirm-main-validation:
+    name: Confirm tested main commit
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Verify exact commit SHA passed main validation
+        shell: bash
+        run: |
+          set -e
+          echo "=== Searching for push-to-main validation run for commit $GITHUB_SHA ==="
+
+          WORKFLOW_FILE=".github/workflows/android-pr-checks.yml"
+
+          RUNS_JSON=$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/workflows/android-pr-checks.yml/runs" \
+            -f event=push \
+            -f branch=main \
+            -f per_page=50)
+
+          MATCHING_RUN=$(echo "$RUNS_JSON" | jq -c --arg sha "$GITHUB_SHA" '
+            .workflow_runs
+            | map(select(.head_sha == $sha and .event == "push" and .head_branch == "main"))
+            | sort_by(.created_at)
+            | last
+          ')
+
+          if [ -z "$MATCHING_RUN" ] || [ "$MATCHING_RUN" = "null" ]; then
+            echo "ERROR: No push-to-main validation run found for commit $GITHUB_SHA!"
+            echo "Releases require proof that their exact commit SHA passed the main validation workflow."
+            exit 1
+          fi
+
+          RUN_ID=$(echo "$MATCHING_RUN" | jq -r '.id')
+          RUN_STATUS=$(echo "$MATCHING_RUN" | jq -r '.status')
+          RUN_CONCLUSION=$(echo "$MATCHING_RUN" | jq -r '.conclusion')
+          RUN_URL=$(echo "$MATCHING_RUN" | jq -r '.html_url')
+
+          echo "Found matching run ID $RUN_ID (Status: $RUN_STATUS, Conclusion: $RUN_CONCLUSION)"
+
+          if [ "$RUN_STATUS" != "completed" ]; then
+            echo "Matching validation run is still in progress (status: $RUN_STATUS). Watching run $RUN_ID..."
+            gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --exit-status || true
+
+            RUN_DATA=$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID")
+            RUN_STATUS=$(echo "$RUN_DATA" | jq -r '.status')
+            RUN_CONCLUSION=$(echo "$RUN_DATA" | jq -r '.conclusion')
+          fi
+
+          if [ "$RUN_STATUS" != "completed" ] || [ "$RUN_CONCLUSION" != "success" ]; then
+            echo "ERROR: Main validation run $RUN_ID failed or did not complete successfully (status: $RUN_STATUS, conclusion: $RUN_CONCLUSION)!"
+            exit 1
+          fi
+
+          echo "=== Verifying required job-level proof for run $RUN_ID ==="
+          JOBS_JSON=$(gh api --method GET "/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?filter=latest")
+
+          EXPECTED_JOBS=(
+            "Classify changes and scan repository"
+            "Backend validation"
+            "Android static validation"
+            "Emulator API 24"
+            "Emulator API 36"
+            "Cannsheet Android PR validation"
+          )
+
+          for job_name in "${EXPECTED_JOBS[@]}"; do
+            MATCHING_JOB=$(echo "$JOBS_JSON" | jq -c --arg name "$job_name" '
+              .jobs | map(select(.name == $name))
+            ')
+            JOB_COUNT=$(echo "$MATCHING_JOB" | jq 'length')
+
+            if [ "$JOB_COUNT" -ne 1 ]; then
+              echo "ERROR: Expected exactly 1 job named '$job_name', found $JOB_COUNT"
+              exit 1
+            fi
+
+            JOB_STATUS=$(echo "$MATCHING_JOB" | jq -r '.[0].status')
+            JOB_CONCLUSION=$(echo "$MATCHING_JOB" | jq -r '.[0].conclusion')
+
+            echo "Job '$job_name': status=$JOB_STATUS, conclusion=$JOB_CONCLUSION"
+
+            if [ "$JOB_STATUS" != "completed" ] || [ "$JOB_CONCLUSION" != "success" ]; then
+              echo "ERROR: Required job '$job_name' did not pass cleanly! (status=$JOB_STATUS, conclusion=$JOB_CONCLUSION)"
+              exit 1
+            fi
+          done
+
+          echo "=== Validation Proof Verified ==="
+
+          cat << EOF >> "$GITHUB_STEP_SUMMARY"
+          ### Exact-SHA Validation Proof Verified
+          - **Tagged SHA**: \`$GITHUB_SHA\`
+          - **Matching Run ID**: [$RUN_ID]($RUN_URL)
+          - **Event**: \`push\`
+          - **Branch**: \`main\`
+          - **Overall Conclusion**: \`$RUN_CONCLUSION\`
+          - **API 24 Result**: \`success\`
+          - **API 36 Result**: \`success\`
+          - **Required Aggregation Result**: \`success\`
+          EOF
+
+  verify:
+    name: Verify and build signed APK
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      version_code: ${{ steps.metadata.outputs.version_code }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -31,18 +143,42 @@ jobs:
       - name: Set up Gradle caching
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Check tag against versionName
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Verify tag, main, and version metadata
+        id: metadata
         shell: bash
         run: |
+          set -e
           app_version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
+          app_code=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts)
           tag_version="${GITHUB_REF_NAME#v}"
-          test -n "$app_version"
-          test "$app_version" = "$tag_version"
 
-      - name: Run unit tests and lint
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon testDebugUnitTest lintDebug
+          test -n "$app_version"
+          test -n "$app_code"
+
+          echo "App versionName: $app_version"
+          echo "App versionCode: $app_code"
+          echo "Tag version: $tag_version"
+
+          if [ "$app_version" != "$tag_version" ]; then
+            echo "ERROR: Version in app/build.gradle.kts ($app_version) does not match tag version ($tag_version)"
+            exit 1
+          fi
+
+          git fetch origin main
+          MAIN_SHA=$(git rev-parse origin/main)
+          echo "Origin main SHA: $MAIN_SHA"
+          echo "Current SHA: $GITHUB_SHA"
+
+          if [ "$GITHUB_SHA" != "$MAIN_SHA" ]; then
+            echo "ERROR: Tagged commit ($GITHUB_SHA) is not the current tip of origin/main ($MAIN_SHA)"
+            exit 1
+          fi
+
+          echo "version=$app_version" >> "$GITHUB_OUTPUT"
+          echo "version_code=$app_code" >> "$GITHUB_OUTPUT"
 
       - name: Validate release secrets
         shell: bash
@@ -53,11 +189,62 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
           RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
         run: |
+          set -e
           test -n "$RELEASE_KEYSTORE_BASE64"
           test -n "$RELEASE_STORE_PASSWORD"
           test -n "$RELEASE_KEY_ALIAS"
           test -n "$RELEASE_KEY_PASSWORD"
           test -n "$RELEASES_TOKEN"
+          echo "All release secrets are present."
+
+      - name: Require monotonic versionCode
+        shell: bash
+        env:
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          set -e
+          echo "=== Checking version monotonicity against published releases ==="
+          RELEASE_REPOSITORY="noamvb/cannsheet-mobile-releases"
+          export GH_TOKEN="$RELEASES_TOKEN"
+
+          LATEST_RELEASE_JSON=$(gh api --method GET "/repos/$RELEASE_REPOSITORY/releases" 2>/dev/null || echo "[]")
+
+          if [ "$LATEST_RELEASE_JSON" = "[]" ] || [ -z "$LATEST_RELEASE_JSON" ]; then
+            echo "No previous releases found in $RELEASE_REPOSITORY. Initial release permitted."
+          else
+            LATEST_TAG=$(echo "$LATEST_RELEASE_JSON" | jq -r '.[0].tag_name // empty')
+            if [ -n "$LATEST_TAG" ]; then
+              echo "Found latest published release: $LATEST_TAG"
+              mkdir -p "$RUNNER_TEMP/prev_release"
+              if gh release download "$LATEST_TAG" --repo "$RELEASE_REPOSITORY" --pattern "*.apk" --dir "$RUNNER_TEMP/prev_release" 2>/dev/null; then
+                PREV_APK=$(ls "$RUNNER_TEMP/prev_release"/*.apk 2>/dev/null | head -n1 || true)
+                if [ -n "$PREV_APK" ] && [ -f "$PREV_APK" ]; then
+                  PREV_CODE=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$PREV_APK" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+                  echo "Previous published versionCode: $PREV_CODE"
+                  echo "New build versionCode: ${{ steps.metadata.outputs.version_code }}"
+                  if [ -n "$PREV_CODE" ]; then
+                    if [ "${{ steps.metadata.outputs.version_code }}" -le "$PREV_CODE" ]; then
+                      echo "ERROR: New versionCode (${{ steps.metadata.outputs.version_code }}) must be greater than previous published versionCode ($PREV_CODE)"
+                      exit 1
+                    fi
+                    echo "Monotonic versionCode check passed."
+                  else
+                    echo "ERROR: Could not extract versionCode from previous APK $PREV_APK"
+                    exit 1
+                  fi
+                else
+                  echo "Warning: No APK asset found in previous release $LATEST_TAG."
+                fi
+              else
+                echo "Warning: Could not download assets for previous release $LATEST_TAG."
+              fi
+            else
+              echo "No existing releases found. Initial release permitted."
+            fi
+          fi
+
+      - name: Run unit tests and lint
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug
 
       - name: Restore release keystore
         shell: bash
@@ -74,42 +261,176 @@ jobs:
           STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+        run: ./gradlew --no-daemon --no-configuration-cache assembleRelease
 
-      - name: Verify, name, and hash APK
+      - name: Verify signed APK
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          set -e
           source_apk="app/build/outputs/apk/release/app-release.apk"
-          apk="Cannsheet-Mobile-${version}.apk"
           test -f "$source_apk"
-          cp "$source_apk" "$apk"
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" \
-            verify --verbose --print-certs "$apk"
-          sha256sum "$apk" > "${apk}.sha256"
 
-      - name: Publish APK-only GitHub Release
+          echo "=== Verifying release APK signature ==="
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$source_apk"
+
+          echo "=== Verifying APK badging metadata ==="
+          BADGING=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$source_apk")
+          PKG_NAME=$(echo "$BADGING" | sed -n "s/.*package: name='\([^']*\)'.*/\1/p")
+          VER_CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          VER_NAME=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+
+          echo "APK Package Name: $PKG_NAME"
+          echo "APK Version Code: $VER_CODE"
+          echo "APK Version Name: $VER_NAME"
+
+          if [ "$PKG_NAME" != "com.noamv.cannsheet.mobile" ]; then
+            echo "ERROR: Package name '$PKG_NAME' does not match expected 'com.noamv.cannsheet.mobile'"
+            exit 1
+          fi
+
+          if [ "$VER_CODE" != "${{ steps.metadata.outputs.version_code }}" ]; then
+            echo "ERROR: Version code '$VER_CODE' does not match expected '${{ steps.metadata.outputs.version_code }}'"
+            exit 1
+          fi
+
+          if [ "$VER_NAME" != "${{ steps.metadata.outputs.version }}" ]; then
+            echo "ERROR: Version name '$VER_NAME' does not match expected '${{ steps.metadata.outputs.version }}'"
+            exit 1
+          fi
+
+          echo "Signed APK verification succeeded."
+
+      - name: Upload signed APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apk
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish verified Cannsheet APK
+    needs: [verify, confirm-main-validation]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download signed APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-apk
+
+      - name: Set up Android SDK tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install required Android SDK packages
+        run: |
+          sdkmanager "build-tools;36.0.0"
+
+      - name: Prepare and independently verify publication APK
+        shell: bash
+        run: |
+          set -e
+          VERSION="${{ needs.verify.outputs.version }}"
+          VERSION_CODE="${{ needs.verify.outputs.version_code }}"
+          APK_NAME="Cannsheet-Mobile-${VERSION}.apk"
+          SHA_NAME="${APK_NAME}.sha256"
+
+          cp app-release.apk "$APK_NAME"
+
+          echo "=== Verifying prepared APK ==="
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
+
+          BADGING=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK_NAME")
+          PKG_NAME=$(echo "$BADGING" | sed -n "s/.*package: name='\([^']*\)'.*/\1/p")
+          VER_CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          VER_NAME=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+
+          if [ "$PKG_NAME" != "com.noamv.cannsheet.mobile" ] || [ "$VER_CODE" != "$VERSION_CODE" ] || [ "$VER_NAME" != "$VERSION" ]; then
+            echo "ERROR: Prepared APK metadata mismatch! Package: $PKG_NAME, Code: $VER_CODE, Name: $VER_NAME"
+            exit 1
+          fi
+
+          sha256sum "$APK_NAME" > "$SHA_NAME"
+          sha256sum -c "$SHA_NAME"
+          echo "Prepared APK and checksum verified cleanly."
+
+      - name: Reject existing public versions
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          RELEASE_REPOSITORY: noamvb/cannsheet-mobile-releases
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          apk="Cannsheet-Mobile-${version}.apk"
+          set -e
+          RELEASE_REPOSITORY="noamvb/cannsheet-mobile-releases"
 
-          if gh release view "$GITHUB_REF_NAME" \
-            --repo "$RELEASE_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" \
-              "$apk" "${apk}.sha256" \
-              --clobber \
-              --repo "$RELEASE_REPOSITORY"
-          else
-            gh release create "$GITHUB_REF_NAME" \
-              "$apk" "${apk}.sha256" \
-              --title "Cannsheet Mobile ${version}" \
-              --notes "Signed Cannsheet Mobile ${version} APK." \
-              --repo "$RELEASE_REPOSITORY"
+          echo "=== Checking if release tag $GITHUB_REF_NAME already exists ==="
+          if gh release view "$GITHUB_REF_NAME" --repo "$RELEASE_REPOSITORY" >/dev/null 2>&1; then
+            echo "ERROR: Release $GITHUB_REF_NAME already exists in $RELEASE_REPOSITORY!"
+            echo "Overwriting existing public releases is prohibited. Bump the version or remove the tag manually."
+            exit 1
+          fi
+          echo "Release tag does not exist. Proceeding with publication."
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          set -e
+          RELEASE_REPOSITORY="noamvb/cannsheet-mobile-releases"
+          VERSION="${{ needs.verify.outputs.version }}"
+          APK_NAME="Cannsheet-Mobile-${VERSION}.apk"
+          SHA_NAME="${APK_NAME}.sha256"
+
+          echo "=== Creating GitHub release ==="
+          gh release create "$GITHUB_REF_NAME" \
+            "$APK_NAME" "$SHA_NAME" \
+            --title "Cannsheet Mobile ${VERSION}" \
+            --notes "Signed Cannsheet Mobile ${VERSION} APK." \
+            --repo "$RELEASE_REPOSITORY"
+
+      - name: Post-publication verification
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+        run: |
+          set -e
+          RELEASE_REPOSITORY="noamvb/cannsheet-mobile-releases"
+          VERSION="${{ needs.verify.outputs.version }}"
+          VERSION_CODE="${{ needs.verify.outputs.version_code }}"
+          APK_NAME="Cannsheet-Mobile-${VERSION}.apk"
+          SHA_NAME="${APK_NAME}.sha256"
+
+          echo "=== Verifying published assets on $RELEASE_REPOSITORY ==="
+          PUB_JSON=$(gh release view "$GITHUB_REF_NAME" --repo "$RELEASE_REPOSITORY" --json assets)
+
+          ASSET_NAMES=$(echo "$PUB_JSON" | jq -r '.assets[].name' | sort)
+          EXPECTED_NAMES=$(printf "%s\n%s" "$APK_NAME" "$SHA_NAME" | sort)
+
+          if [ "$ASSET_NAMES" != "$EXPECTED_NAMES" ]; then
+            echo "ERROR: Published asset names mismatch!"
+            echo "Expected:"
+            echo "$EXPECTED_NAMES"
+            echo "Got:"
+            echo "$ASSET_NAMES"
+            exit 1
           fi
 
+          mkdir -p "$RUNNER_TEMP/pub_verify"
+          gh release download "$GITHUB_REF_NAME" --repo "$RELEASE_REPOSITORY" --dir "$RUNNER_TEMP/pub_verify"
+
+          cd "$RUNNER_TEMP/pub_verify"
+          sha256sum -c "$SHA_NAME"
+
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$APK_NAME"
+
+          BADGING=$("$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK_NAME")
+          PKG_NAME=$(echo "$BADGING" | sed -n "s/.*package: name='\([^']*\)'.*/\1/p")
+          VER_CODE=$(echo "$BADGING" | sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p")
+          VER_NAME=$(echo "$BADGING" | sed -n "s/.*versionName='\([^']*\)'.*/\1/p")
+
+          if [ "$PKG_NAME" != "com.noamv.cannsheet.mobile" ] || [ "$VER_CODE" != "$VERSION_CODE" ] || [ "$VER_NAME" != "$VERSION" ]; then
+            echo "ERROR: Downloaded public APK metadata mismatch!"
+            exit 1
+          fi
+
+          echo "Post-publication verification succeeded completely!"

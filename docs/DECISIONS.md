@@ -49,4 +49,27 @@ historical rationale.
 - Rationale: Guarantees that manually selected dates in date pickers stay on the chosen calendar date regardless of the device's local timezone.
 - Related files: `app/src/main/java/com/example/ui/ConsumptionDateTime.kt`, `app/src/main/java/com/example/ui/PurchaseScreen.kt`, `app/src/main/java/com/example/ui/ConsumptionScreen.kt`, `app/src/test/java/com/example/ui/ConsumptionDateTimeTest.kt`
 
+## ADR-004: Tiered Validation Workflows and Exact-SHA Release Provenance Gate
+
+- Status: Accepted
+- Date: 2026-07-28
+- Context: CI validation and release workflows needed optimization to keep documentation-only and backend-only pull requests fast, execute full Android matrix validation across boundary versions (API 24 and API 36) on `main`, prove exact commit SHA validation prior to release publishing, and securely manage Gradle configuration caching and signing secrets.
+- Decision:
+  1. Implement fail-safe path classification job (`classify`) in `.github/workflows/android-pr-checks.yml`:
+     - Documentation-only PRs skip backend and Android static/emulator jobs.
+     - Backend-only PRs run backend test suites and skip Android static/emulator jobs.
+     - Android and uncertain PRs run backend, Android unit/lint/debug assembly, and API 24 emulator tests.
+     - Pushes to `main` and manual dispatches run full matrix validation across both API 24 and API 36 boundary versions.
+     - Maintain the exact required status check job display name (`Cannsheet Android PR validation`) for branch protection compatibility.
+  2. Implement reusable AVD snapshot caching (`cannsheet-avd-v1`) seeded from `main` branch pushes to accelerate emulator boot times.
+  3. Enforce exact-SHA validation proof in `.github/workflows/release-apk.yml` (`confirm-main-validation` job):
+     - Release tag creation requires proof via GitHub Actions API that the exact commit SHA passed all validation jobs (`Classify changes and scan repository`, `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`, `Cannsheet Android PR validation`) on `main` push.
+  4. Exclude signing credentials from Gradle configuration caching:
+     - The release build explicitly passes `--no-configuration-cache` for `assembleRelease` while normal PR and `main` builds preserve full configuration caching.
+  5. Remove release overwrite (`--clobber`):
+     - Existing public releases on `noamvb/cannsheet-mobile-releases` cannot be overwritten; publications require version code monotonicity and post-publication asset download and verification.
+- Rationale: Ensures fast developer feedback on narrow PRs, guarantees comprehensive emulator test coverage on `main` before release, prevents unverified code from being published, and protects release signing credentials.
+- Related files: `.github/workflows/android-pr-checks.yml`, `.github/workflows/release-apk.yml`, `gradle.properties`, `docs/PROJECT_STATE.md`, `docs/HANDOFF.md`
+
+
 

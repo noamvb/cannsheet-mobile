@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - main
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -14,8 +17,158 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  cannsheet-android-pr-validation:
-    name: Cannsheet Android PR validation
+  classify:
+    name: Classify changes and scan repository
+    runs-on: ubuntu-latest
+    outputs:
+      run_backend: ${{ steps.determine.outputs.run_backend }}
+      run_android: ${{ steps.determine.outputs.run_android }}
+      api_levels: ${{ steps.determine.outputs.api_levels }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Security and repository safety scan
+        shell: bash
+        run: |
+          set -e
+          echo "=== Scanning for forbidden tracked files ==="
+          forbidden_files=$(git ls-files | grep -E '^(local\.properties|sandbox\.properties|keystore\.properties|\.env|\.env\..*|debug\.keystore|.*\.jks|.*\.keystore)$' || true)
+          if [ -n "$forbidden_files" ]; then
+            echo "ERROR: Found forbidden tracked files:"
+            echo "$forbidden_files"
+            exit 1
+          fi
+
+          echo "=== Scanning for tracked private key material ==="
+          if git grep -E -n -e '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----' -- . ':!sandbox.properties.example' ':!docs/**' ':!*.md' ; then
+            echo "ERROR: Found potential private key header in tracked repository content!"
+            exit 1
+          fi
+          echo "Security scan passed clean."
+
+      - name: Determine change classification
+        id: determine
+        shell: bash
+        run: |
+          set -e
+          EVENT_NAME="${{ github.event_name }}"
+          echo "Event name: $EVENT_NAME"
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+            HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+            echo "PR Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
+
+            if ! git cat-file -e "$BASE_SHA" 2>/dev/null; then
+              git fetch origin "$BASE_SHA" --depth=1 || true
+            fi
+            if ! git cat-file -e "$HEAD_SHA" 2>/dev/null; then
+              git fetch origin "$HEAD_SHA" --depth=1 || true
+            fi
+
+            CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)
+
+            if [ -z "$CHANGED_FILES" ]; then
+              echo "Warning: Could not obtain changed files between $BASE_SHA and $HEAD_SHA. Falling back to full Android validation."
+              echo "run_backend=true" >> "$GITHUB_OUTPUT"
+              echo "run_android=true" >> "$GITHUB_OUTPUT"
+              echo "api_levels=[24]" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            echo "Changed files:"
+            echo "$CHANGED_FILES"
+
+            IS_ALL_DOCS=true
+            IS_ALL_BACKEND_OR_DOCS=true
+
+            while IFS= read -r file; do
+              [ -z "$file" ] && continue
+
+              IS_DOC=false
+              if [[ "$file" == docs/* ]] || [[ "$file" == *.md ]]; then
+                IS_DOC=true
+              fi
+
+              IS_BACKEND=false
+              if [[ "$file" == "backend_additions.gs" ]] || [[ "$file" == tests/* ]]; then
+                IS_BACKEND=true
+              fi
+
+              if [ "$IS_DOC" = false ]; then
+                IS_ALL_DOCS=false
+              fi
+
+              if [ "$IS_DOC" = false ] && [ "$IS_BACKEND" = false ]; then
+                IS_ALL_BACKEND_OR_DOCS=false
+              fi
+            done <<< "$CHANGED_FILES"
+
+            if [ "$IS_ALL_DOCS" = true ]; then
+              echo "Classification: Documentation-only PR"
+              echo "run_backend=false" >> "$GITHUB_OUTPUT"
+              echo "run_android=false" >> "$GITHUB_OUTPUT"
+              echo "api_levels=[24]" >> "$GITHUB_OUTPUT"
+            elif [ "$IS_ALL_BACKEND_OR_DOCS" = true ]; then
+              echo "Classification: Backend-only PR"
+              echo "run_backend=true" >> "$GITHUB_OUTPUT"
+              echo "run_android=false" >> "$GITHUB_OUTPUT"
+              echo "api_levels=[24]" >> "$GITHUB_OUTPUT"
+            else
+              echo "Classification: Full Android PR"
+              echo "run_backend=true" >> "$GITHUB_OUTPUT"
+              echo "run_android=true" >> "$GITHUB_OUTPUT"
+              echo "api_levels=[24]" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "Classification: Push to main or manual dispatch"
+            echo "run_backend=true" >> "$GITHUB_OUTPUT"
+            echo "run_android=true" >> "$GITHUB_OUTPUT"
+            echo "api_levels=[24,36]" >> "$GITHUB_OUTPUT"
+          fi
+
+  backend:
+    name: Backend validation
+    needs: classify
+    if: needs.classify.outputs.run_backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Run backend tests
+        shell: bash
+        run: |
+          set -e
+          node tests/backend_contract_test.js
+          node tests/backend_analytics_test.js
+          node tests/backend_recovery_test.js
+          node tests/backend_spreadsheet_test.js
+          node tests/fake_sheets_batch_update_test.js
+          node tests/sandbox_performance_fixture_test.js
+          node tests/sandbox_provisioning_test.js
+          PYTHONPATH=. python3 -m unittest tests/test_backend_sync_benchmark.py
+
+  android-static:
+    name: Android static validation
+    needs: classify
+    if: needs.classify.outputs.run_android == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -28,11 +181,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - name: Set up Android SDK tools
         uses: android-actions/setup-android@v3
@@ -49,11 +197,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run backend analytics tests
-        run: node tests/backend_analytics_test.js
-
-      - name: Run Android unit tests and build debug APK
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+      - name: Run Android unit tests, lint, and build debug APK
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -62,3 +207,159 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+  emulator:
+    name: Emulator API ${{ matrix.api-level }}
+    needs: classify
+    if: needs.classify.outputs.run_android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: ${{ fromJSON(needs.classify.outputs.api_levels) }}
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle caching
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up Android SDK tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install project Android SDK packages
+        run: |
+          sdkmanager \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0"
+
+      - name: Enable KVM hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm-rules.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x gradlew
+
+      - name: Restore AVD snapshot cache
+        id: avd-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: cannsheet-avd-v1-${{ runner.os }}-api${{ matrix.api-level }}-default-x86_64
+
+      - name: Generate AVD snapshot on cache miss
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: default
+          arch: x86_64
+          avd-name: cannsheet_api_${{ matrix.api-level }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
+          script: echo "AVD generated for cache"
+
+      - name: Run instrumentation tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: default
+          arch: x86_64
+          avd-name: cannsheet_api_${{ matrix.api-level }}
+          force-avd-creation: false
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot-save
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Save AVD snapshot cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.avd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: cannsheet-avd-v1-${{ runner.os }}-api${{ matrix.api-level }}-default-x86_64
+
+  required:
+    name: Cannsheet Android PR validation
+    needs: [classify, backend, android-static, emulator]
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required job statuses
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          RUN_BACKEND: ${{ needs.classify.outputs.run_backend }}
+          RUN_ANDROID: ${{ needs.classify.outputs.run_android }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
+          ANDROID_STATIC_RESULT: ${{ needs.android-static.result }}
+          EMULATOR_RESULT: ${{ needs.emulator.result }}
+        shell: bash
+        run: |
+          set -e
+          echo "=== Cannsheet Android PR Validation Aggregation ==="
+          echo "classify result:        $CLASSIFY_RESULT"
+          echo "run_backend:            $RUN_BACKEND"
+          echo "backend result:         $BACKEND_RESULT"
+          echo "run_android:            $RUN_ANDROID"
+          echo "android_static result:  $ANDROID_STATIC_RESULT"
+          echo "emulator result:        $EMULATOR_RESULT"
+
+          if [ "$CLASSIFY_RESULT" != "success" ]; then
+            echo "ERROR: Classification job failed or did not run!"
+            exit 1
+          fi
+
+          if [ "$RUN_BACKEND" = "true" ]; then
+            if [ "$BACKEND_RESULT" != "success" ]; then
+              echo "ERROR: Backend validation was required but result is '$BACKEND_RESULT' (expected 'success')"
+              exit 1
+            fi
+          elif [ "$RUN_BACKEND" = "false" ]; then
+            if [ "$BACKEND_RESULT" != "skipped" ]; then
+              echo "ERROR: Backend validation was not required but result is '$BACKEND_RESULT' (expected 'skipped')"
+              exit 1
+            fi
+          else
+            echo "ERROR: Invalid run_backend output: '$RUN_BACKEND'"
+            exit 1
+          fi
+
+          if [ "$RUN_ANDROID" = "true" ]; then
+            if [ "$ANDROID_STATIC_RESULT" != "success" ]; then
+              echo "ERROR: Android static validation was required but result is '$ANDROID_STATIC_RESULT' (expected 'success')"
+              exit 1
+            fi
+            if [ "$EMULATOR_RESULT" != "success" ]; then
+              echo "ERROR: Emulator validation was required but result is '$EMULATOR_RESULT' (expected 'success')"
+              exit 1
+            fi
+          elif [ "$RUN_ANDROID" = "false" ]; then
+            if [ "$ANDROID_STATIC_RESULT" != "skipped" ]; then
+              echo "ERROR: Android static validation was not required but result is '$ANDROID_STATIC_RESULT' (expected 'skipped')"
+              exit 1
+            fi
+            if [ "$EMULATOR_RESULT" != "skipped" ]; then
+              echo "ERROR: Emulator validation was not required but result is '$EMULATOR_RESULT' (expected 'skipped')"
+              exit 1
+            fi
+          else
+            echo "ERROR: Invalid run_android output: '$RUN_ANDROID'"
+            exit 1
+          fi
+
+          echo "All required validation checks passed cleanly!"

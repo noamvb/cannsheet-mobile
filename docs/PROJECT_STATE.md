@@ -1,10 +1,11 @@
 # Project state
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 ## Repository state
 
 - Canonical branch: `main`
+- Current working branch: `ci/tiered-validation-release-gate`
 - Released source commit and tag: `v1.2.14`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.14`,
   version code `17`
@@ -22,6 +23,8 @@ Script web app whose checked-in source reads and writes Google Sheets.
 
 Repository code and tests show:
 
+- Tiered GitHub Actions validation workflow (`.github/workflows/android-pr-checks.yml`) with fail-safe path classification (`classify`), dedicated backend testing (`backend`), Android static checks (`android-static`), API 24/36 emulator matrix (`emulator`), reusable AVD snapshot caching (`cannsheet-avd-v1`), security scanning, and required aggregation job (`Cannsheet Android PR validation`).
+- Restructured release workflow (`.github/workflows/release-apk.yml`) with exact-SHA main validation proof (`confirm-main-validation`), signed build verification (`verify`) using `--no-configuration-cache`, version code monotonicity checks, publication asset verification, and post-publication validation (`publish`) without overwrite (`--clobber`).
 - Custom adaptive app icon with dark emerald background grid, botanical/sheet emblem, and Android 13+ Material You monochrome themed icon support (`ic_launcher_monochrome.xml`).
 - Compose screens for logging consumption and purchases, viewing Insights and
   History, and changing settings.
@@ -67,20 +70,24 @@ or device verification.
 
 ## Current validation status
 
-The shared-context system reached `main` through PR #6. GitHub Actions run
-`30064613210` completed successfully after running the backend analytics test,
-Android unit tests, and debug APK build.
+The tiered CI validation and release provenance gate overhaul was implemented on branch `ci/tiered-validation-release-gate`.
 
-Release metadata reached `main` through PR #9. Tag `v1.2.12` triggered release run `30293812075`, which completed successfully after running unit tests and lint, validating the tag and required secrets, building and verifying the signed APK, generating its checksum, and publishing the APK-only release.
-
-Independent public-artifact verification established:
-
-- asset `Cannsheet-Mobile-1.2.12.apk`;
-- package `com.noamv.cannsheet.mobile`;
-- version code `15` and version name `1.2.12`; and
-- public release live at `https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.12`.
-
-The local backend test suites (`backend_contract_test.js`, `backend_analytics_test.js`, `backend_recovery_test.js`, `backend_spreadsheet_test.js`, `fake_sheets_batch_update_test.js`, `sandbox_performance_fixture_test.js`, `sandbox_provisioning_test.js`) passed. Local Gradle unit tests, debug assemble, and lint passed (`.\gradlew.bat --no-daemon testDebugUnitTest assembleDebug` and `lintDebug`).
+Verification completed:
+- `git diff --check` passed cleanly.
+- Path classification logic tested across 10 representative file sets (docs-only, backend-only, full Android, push to main, fallback).
+- Exact-SHA confirmation logic tested across 14 scenarios (success, non-push, wrong SHA, missing jobs, skipped jobs, cancellation, invalid output).
+- Local backend test suites passed:
+  - `node tests/backend_contract_test.js`
+  - `node tests/backend_analytics_test.js`
+  - `node tests/backend_recovery_test.js`
+  - `node tests/backend_spreadsheet_test.js`
+  - `node tests/fake_sheets_batch_update_test.js`
+  - `node tests/sandbox_performance_fixture_test.js`
+  - `node tests/sandbox_provisioning_test.js`
+  - `PYTHONPATH=. python -m unittest discover -s tests -p "test_backend_sync_benchmark.py"`
+- Local Gradle static validation passed:
+  - `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug` (passed)
+  - Gradle configuration cache reuse verified (`Reusing configuration cache`).
 
 ## Current priorities
 
