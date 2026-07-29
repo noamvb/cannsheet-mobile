@@ -60,7 +60,7 @@ or device verification.
 
 ## Current branch implementation
 
-The uncommitted backend milestone adds:
+The backend milestone in PR #19 adds:
 
 - an append-only `ConsumptionEventCorrections` schema and the `REPLACE`, `VOID`,
   and `RESTORE` correction protocol;
@@ -75,7 +75,9 @@ The uncommitted backend milestone adds:
 - focused fake-runtime, regression, scale, recovery, and provisioning tests,
   registered in backend-only CI; and
 - canonical-time parsing for version-2 consumption, finish, and correction
-  wall-clock values, independent of the execution host's timezone.
+  wall-clock values, independent of the execution host's timezone;
+- strict rejection of nonexistent correction replacement wall times; and
+- lock-held refresh of the independently controlled correction write gate.
 
 Android persistence, queueing, History editing UI, and network integration are
 not part of this milestone and remain pending behind the backend PR and sandbox
@@ -128,13 +130,18 @@ GitHub Actions run passed classification, Android static validation, and the API
 The same failure was reproduced locally under `TZ=UTC`. The backend now parses
 wall-clock input explicitly in `America/New_York`, and the fake runtime and
 affected assertions cover both UTC and New York hosts. Follow-up run
-`30497869300` passed classification/security, backend validation, Android static
+`30498099177` passed classification/security, backend validation, Android static
 validation, the API 24 emulator, and required aggregate validation for exact
-commit `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`.
+commit `05c4b58e89b2451f54a566e244f1761c578ca68a`.
+
+Required review then found stale pre-lock correction capability and nonexistent
+spring-forward replacement-time edge cases. Safety-repair commit `a39e199`
+rereads the capability under the script lock and rejects invalid canonical wall
+times without changing consumption history. Focused deterministic regressions
+passed; required checks and resolved review conversations remain the merge gate.
 
 Not yet performed:
 
-- GitHub Actions for this branch or a pull request;
 - a real Apps Script deployment or live sandbox workbook verification;
 - production provisioning, reconciliation, write enablement, or deployment;
 - Android implementation, Gradle validation, emulator/device validation; or

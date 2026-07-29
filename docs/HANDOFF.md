@@ -6,10 +6,10 @@ Branch: `codex/history-corrections-backend`
 
 Repository position:
 
-- the latest implementation commit is
-  `d5c68a61fe20fd51916980a801a6c9f308d17e90`;
-- GitHub Actions validated implementation-plus-handoff commit
-  `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`;
+- the latest safety-repair implementation commit is
+  `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`;
+- GitHub Actions validated the prior implementation-plus-handoff head
+  `05c4b58e89b2451f54a566e244f1761c578ca68a`;
 - the initial backend milestone is
   `870e99215506c36802c2430dfa9bd0449d414286`;
 - `origin/main` remains
@@ -24,8 +24,8 @@ enabled, or released.
 
 Implement the backend milestone for user-editable consumption History while
 preserving auditability, offline retry safety, effective analytics, and strict
-sandbox/production isolation. Take the focused backend pull request through CI,
-then stop at the separate merge-approval gate.
+sandbox/production isolation. Take the focused backend pull request through its
+approved merge, then stop at the separate live-sandbox approval gate.
 
 ## Product outcome
 
@@ -74,6 +74,13 @@ bound spreadsheet, form destination, and existing Config checks before its first
 mutation. A production-marker regression compares full before/after snapshots
 and proves zero cell writes, structural changes, batch writes, or form changes.
 The second independent verification pass found the backend milestone ready.
+Required GitHub review then identified two additional P1 edge cases: a request
+could retain a stale correction-write gate while waiting for the script lock,
+and a nonexistent New York spring-forward wall time could be stored with a
+different normalized timestamp. The repair rereads mutable rollout state under
+the acquired lock and strictly rejects nonexistent correction replacement
+times. Deterministic regressions cover both cases, including the intentional
+idempotent `SyncLedger` audit row for a rejected request.
 
 ## Pull request CI diagnosis and repair
 
@@ -93,14 +100,19 @@ that API. Correction commit/retry, recovery, and spreadsheet expectations are
 timezone-stable, and the complete backend matrix passes with both UTC and New
 York host zones.
 
-Follow-up GitHub Actions run `30497869300` passed all required jobs for exact
-commit `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`:
+Follow-up GitHub Actions run `30498099177` passed all required jobs for the
+prior exact head `05c4b58e89b2451f54a566e244f1761c578ca68a`:
 
 - Classify changes and scan repository;
 - Backend validation;
 - Android static validation;
 - Emulator API 24; and
 - Cannsheet Android PR validation.
+
+Safety-repair commit `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`
+adds the lock-interleaving and DST-gap regressions. The focused correction suite
+passed under UTC and New York host zones; the final required PR checks remain the
+authoritative merge gate for that head.
 
 ## Files changed by this task
 
@@ -205,11 +217,10 @@ and test repairs.
 
 ## Approval gate and next action
 
-The user approved the initial commit, push, and PR. The focused timezone repair
-is implementation commit `d5c68a6`, and the implementation passed all PR checks
-at `7729bd0`. Obtain separate user approval before merging. After merge, do not
-deploy to the live sandbox without its separate approval and target-identity
-verification.
+The user approved the initial commit, push, PR, and squash merge. Merge only
+after the exact safety-repair head passes required checks and all required review
+conversations are resolved. After merge, do not deploy to the live sandbox
+without its separate approval and target-identity verification.
 
 Android implementation starts only after the backend contract is merged and
 verified in the sandbox.
