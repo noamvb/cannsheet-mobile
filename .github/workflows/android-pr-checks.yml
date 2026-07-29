@@ -251,47 +251,16 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Restore AVD snapshot cache
-        id: avd-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: cannsheet-avd-v1-${{ runner.os }}-api${{ matrix.api-level }}-default-x86_64
-
-      - name: Generate AVD snapshot on cache miss
-        if: steps.avd-cache.outputs.cache-hit != 'true'
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api-level }}
-          target: default
-          arch: x86_64
-          avd-name: cannsheet_api_${{ matrix.api-level }}
-          force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
-          script: echo "AVD generated for cache"
-
       - name: Run instrumentation tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
-          target: default
+          target: ${{ matrix.api-level == 36 && 'google_apis' || 'default' }}
           arch: x86_64
-          avd-name: cannsheet_api_${{ matrix.api-level }}
           force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot-save
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
           script: ./gradlew --no-daemon connectedDebugAndroidTest
-
-      - name: Save AVD snapshot cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.avd-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.android/avd/*
-            ~/.android/adb*
-          key: cannsheet-avd-v1-${{ runner.os }}-api${{ matrix.api-level }}-default-x86_64
 
   required:
     name: Cannsheet Android PR validation
