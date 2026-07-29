@@ -51,7 +51,9 @@ class QuickLogQuantityEditorTest {
         }
 
         composeRule.onNodeWithContentDescription("Remove preset 3").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Remove preset 2").performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("Remove preset 1").assertIsNotEnabled()
     }
 
