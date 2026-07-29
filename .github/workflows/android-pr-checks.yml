@@ -240,7 +240,8 @@ jobs:
         run: |
           sdkmanager \
             "platforms;android-36.1" \
-            "build-tools;36.0.0"
+            "build-tools;36.0.0" \
+            "system-images;android-${{ matrix.api-level }};${{ matrix.api-level == 36 && 'google_apis' || 'default' }};${{ matrix.api-level == 24 && 'x86' || 'x86_64' }}"
 
       - name: Enable KVM hardware acceleration
         run: |
