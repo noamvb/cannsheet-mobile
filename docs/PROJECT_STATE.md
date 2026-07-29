@@ -7,8 +7,8 @@ Last updated: 2026-07-28
 - Canonical branch: `main`
 - Current working branch: `ci/tiered-validation-release-gate`
 - Released source commit and tag: `v1.2.14`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.14`,
-  version code `17`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.15`,
+  version code `18`
 - The public signed release is available from
   `noamvb/cannsheet-mobile-releases` under tag `v1.2.14`.
 
