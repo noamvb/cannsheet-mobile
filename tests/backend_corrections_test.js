@@ -470,6 +470,92 @@ function assertCorrectionProjection(runtime) {
   );
 }));
 
+// A syntactically valid wall time can still be nonexistent in the canonical
+// timezone. The spring-forward gap must be item-rejected, never replaced with
+// the server clock, and its retry must remain free of domain/history mutation.
+// The SyncLedger request-audit row is the intentional durable exception.
+{
+  const runtime = buildRuntime();
+  const action = correction(93, 'REPLACE');
+  action.replacement.date = '2026-03-08';
+  action.replacement.time = '02:30:00';
+  const request = payload(93, [action]);
+  const before = {
+    purchases: JSON.stringify(rows(runtime, 'Purchases')),
+    compatibility: JSON.stringify(rows(runtime, 'Form Responses 1')),
+    canonical: JSON.stringify(rows(runtime, 'ConsumptionEvents')),
+    corrections: JSON.stringify(rows(runtime, 'ConsumptionEventCorrections')),
+    journal: JSON.stringify(rows(runtime, 'SyncApplyJournal')),
+  };
+  assert.equal(dataRows(runtime, 'SyncLedger').length, 0);
+
+  const response = post(runtime, request);
+  assert.equal(response.success, true, JSON.stringify(response));
+  assert.equal(response.allAccepted, false, JSON.stringify(response));
+  assert.deepEqual(response.acknowledgedConsumptionCorrections, []);
+  assert.deepEqual(response.rejectedConsumptionCorrections, [{
+    actionId: action.actionId,
+    targetEventId: EVENT_ID,
+    errorCode: 'INVALID_ITEM',
+    message: 'Correction replacement date or time is invalid in America/New_York',
+    currentHeadId: null,
+  }]);
+  assert.equal(JSON.stringify(rows(runtime, 'Purchases')), before.purchases);
+  assert.equal(JSON.stringify(rows(runtime, 'Form Responses 1')), before.compatibility);
+  assert.equal(JSON.stringify(rows(runtime, 'ConsumptionEvents')), before.canonical);
+  assert.equal(
+    JSON.stringify(rows(runtime, 'ConsumptionEventCorrections')),
+    before.corrections,
+  );
+  assert.equal(JSON.stringify(rows(runtime, 'SyncApplyJournal')), before.journal);
+  const firstLedgerRows = rows(runtime, 'SyncLedger');
+  assert.equal(dataRows(runtime, 'SyncLedger').length, 1);
+  assert.equal(
+    firstLedgerRows[1][headerIndex(firstLedgerRows, 'Request UUID')],
+    request.requestId,
+  );
+  assert.equal(firstLedgerRows[1][headerIndex(firstLedgerRows, 'API Version')], 2);
+  assert.equal(firstLedgerRows[1][headerIndex(firstLedgerRows, 'Result')], 'PARTIAL');
+  const ledgerRowNumber = 2;
+
+  runtime.resetAudit();
+  const retry = post(runtime, request);
+  assert.equal(retry.success, true, JSON.stringify(retry));
+  assert.deepEqual(
+    retry.rejectedConsumptionCorrections,
+    response.rejectedConsumptionCorrections,
+    JSON.stringify(retry),
+  );
+  assert.deepEqual(retry.acknowledgedConsumptionCorrections, []);
+  assert.equal(JSON.stringify(rows(runtime, 'Purchases')), before.purchases);
+  assert.equal(JSON.stringify(rows(runtime, 'ConsumptionEvents')), before.canonical);
+  assert.equal(
+    JSON.stringify(rows(runtime, 'ConsumptionEventCorrections')),
+    before.corrections,
+  );
+  assert.equal(JSON.stringify(rows(runtime, 'SyncApplyJournal')), before.journal);
+  const retryLedgerRows = rows(runtime, 'SyncLedger');
+  assert.equal(
+    dataRows(runtime, 'SyncLedger').length,
+    1,
+    'retry must reuse the existing request-audit row',
+  );
+  assert.equal(
+    retryLedgerRows[1][headerIndex(retryLedgerRows, 'Request UUID')],
+    request.requestId,
+  );
+  assert.equal(retryLedgerRows[1][headerIndex(retryLedgerRows, 'Result')], 'PARTIAL');
+  assert.equal(
+    runtime.audit.writes.some(entry => (
+      entry.sheet === 'SyncLedger'
+      && entry.row === ledgerRowNumber
+      && entry.operation === 'setValues'
+    )),
+    true,
+    'retry must update the existing SyncLedger row',
+  );
+}
+
 // Revisions form a linear append-only chain. VOID removes the effective row and
 // RESTORE returns the immutable original snapshot.
 {
@@ -513,6 +599,60 @@ function assertCorrectionProjection(runtime) {
   const disabledResponse = post(disabled, payload(23, [correction(23, 'VOID')]));
   assert.equal(disabledResponse.rejectedConsumptionCorrections[0].errorCode, 'CORRECTION_WRITES_DISABLED');
   assert.equal(dataRows(disabled, 'ConsumptionEventCorrections').length, 0);
+}
+
+// A request may read an enabled capability before waiting for the script lock.
+// If disable completes first, the lock-held request must refresh that state and
+// reject the correction rather than committing from its stale pre-lock read.
+{
+  const runtime = buildRuntime();
+  const action = correction(92, 'REPLACE');
+  const request = payload(92, [action]);
+  const originalCanonical = JSON.stringify(rows(runtime, 'ConsumptionEvents'));
+  const originalCompatibility = JSON.stringify(rows(runtime, 'Form Responses 1'));
+  assert.equal(configValue(runtime, 'CONSUMPTION_CORRECTION_WRITES_ENABLED'), true);
+
+  runtime.lock.beforeNextTryLock(() => {
+    const disabled = runtime.context.disableConsumptionCorrectionWrites();
+    assert.equal(disabled.writesEnabled, false);
+  });
+  const response = post(runtime, request);
+
+  assert.equal(response.success, true, JSON.stringify(response));
+  assert.equal(response.allAccepted, false, JSON.stringify(response));
+  assert.equal(response.correctionVersion, 1, JSON.stringify(response));
+  assert.equal(response.correctionWritesEnabled, false, JSON.stringify(response));
+  assert.deepEqual(response.acknowledgedConsumptionCorrections, []);
+  assert.deepEqual(
+    response.rejectedConsumptionCorrections.map(item => ({
+      actionId: item.actionId,
+      targetEventId: item.targetEventId,
+      errorCode: item.errorCode,
+      currentHeadId: item.currentHeadId,
+    })),
+    [{
+      actionId: action.actionId,
+      targetEventId: EVENT_ID,
+      errorCode: 'CORRECTION_WRITES_DISABLED',
+      currentHeadId: null,
+    }],
+    JSON.stringify(response),
+  );
+  assert.equal(dataRows(runtime, 'ConsumptionEventCorrections').length, 0);
+  assert.equal(JSON.stringify(rows(runtime, 'ConsumptionEvents')), originalCanonical);
+  assert.equal(JSON.stringify(rows(runtime, 'Form Responses 1')), originalCompatibility);
+  assert.equal(configValue(runtime, 'CONSUMPTION_CORRECTION_WRITES_ENABLED'), false);
+  assert.deepEqual(
+    runtime.audit.locks
+      .filter(entry => entry.operation === 'tryLock')
+      .map(entry => entry.acquired),
+    [true, true],
+    'disable must acquire/release before the request acquires the same lock',
+  );
+  assert.equal(
+    runtime.audit.locks.filter(entry => entry.operation === 'releaseLock').length,
+    2,
+  );
 }
 
 // A mixed request reports precisely the independently accepted ordinary event

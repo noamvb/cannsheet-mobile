@@ -6468,21 +6468,48 @@ function reconcileRecoverableSyncApply_(ss) {
 }
 
 /**
- * doPost reads Config before waiting for the script lock. Refresh both rollout
- * state values after the lock so an enable or predecessor core commit cannot be
- * hidden by that stale request context.
+ * doPost reads Config before waiting for the script lock. Refresh every
+ * mutation gate after acquiring it so a concurrent provision, enable, disable,
+ * or predecessor core commit cannot be hidden by that stale request context.
  */
 function refreshRecoverableSyncApplyStateLocked_(runtimeContext) {
   const ss = runtimeContext.ss;
   const configSheet = requiredSheet_(ss, CANN.SHEETS.CONFIG);
-  const values = configValuesFromSheet_(configSheet, headerMap_(configSheet));
+  const configHeaders = headerMap_(configSheet);
+  requireExactHeaders_(
+    configHeaders,
+    ['Key', 'Value', 'Description'],
+    CANN.SHEETS.CONFIG
+  );
+  const values = configValuesFromSheet_(configSheet, configHeaders);
+  if (text_(values.ENVIRONMENT) !== runtimeContext.environment) {
+    throw new Error('CONFIGURATION_ERROR: Config ENVIRONMENT mismatch');
+  }
+  assertSupportedSchemaVersion_(values);
+  const summaryReady = interactionSummaryReady_(values);
+  const recoverableReady = recoverableSyncApplyReady_(values);
+  const correctionCapability = consumptionCorrectionCapability_(values);
+  if (correctionCapability.version && !summaryReady) {
+    throw new Error(
+      'SCHEMA_MISMATCH: consumption corrections require the ' +
+      'interaction-summary projection'
+    );
+  }
   runtimeContext.config[CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY] =
     values[CANN.RECOVERABLE_SYNC_APPLY_CONFIG_KEY];
   runtimeContext.config[CANN.PENDING_APPLY_KEY] =
     values[CANN.PENDING_APPLY_KEY];
+  runtimeContext.config[CANN.CONSUMPTION_CORRECTION_VERSION_KEY] =
+    values[CANN.CONSUMPTION_CORRECTION_VERSION_KEY];
+  runtimeContext.config[CANN.CONSUMPTION_CORRECTION_WRITES_KEY] =
+    values[CANN.CONSUMPTION_CORRECTION_WRITES_KEY];
+  runtimeContext.config.CONSUMPTION_CORRECTION_VERSION =
+    correctionCapability.version;
+  runtimeContext.config.CONSUMPTION_CORRECTION_WRITES_ENABLED =
+    correctionCapability.writesEnabled;
   runtimeContext.config.RECOVERABLE_SYNC_APPLY_READY =
-    recoverableSyncApplyReady_(values);
-  if (runtimeContext.config.RECOVERABLE_SYNC_APPLY_READY) {
+    recoverableReady;
+  if (recoverableReady) {
     const responses = requiredSheet_(ss, CANN.SHEETS.RESPONSES);
     runtimeContext.headers.responses = headerMap_(responses);
     requireCompatibilityIdentityHeaders_(runtimeContext.headers.responses);
@@ -6494,6 +6521,17 @@ function refreshRecoverableSyncApplyStateLocked_(runtimeContext) {
       runtimeContext.headers.applyJournal,
       CANN.APPLY_JOURNAL_HEADERS,
       CANN.SHEETS.APPLY_JOURNAL
+    );
+  }
+  if (correctionCapability.version) {
+    runtimeContext.sheets.corrections =
+      requiredSheet_(ss, CANN.SHEETS.CORRECTIONS);
+    runtimeContext.headers.corrections =
+      headerMap_(runtimeContext.sheets.corrections);
+    requireExactHeaders_(
+      runtimeContext.headers.corrections,
+      CANN.CORRECTION_HEADERS,
+      CANN.SHEETS.CORRECTIONS
     );
   }
 }
@@ -7969,7 +8007,16 @@ function stageV2ConsumptionCorrection_(
         )
       };
     }
-    const timestamp = parseClientDateTime_(value.date, value.time);
+    const timestamp = parseClientDateTimeStrict_(value.date, value.time);
+    if (!timestamp) {
+      return {
+        error: itemError_(
+          'INVALID_ITEM',
+          'Correction replacement date or time is invalid in ' +
+          CANN.TIME_ZONE
+        )
+      };
+    }
     replacement = {
       occurredAtEpochMillis: timestamp.getTime(),
       localDate: text_(value.date),
@@ -8668,6 +8715,10 @@ function formatDate_(date) { return Utilities.formatDate(new Date(date), CANN.TI
 function formatTime_(date) { return Utilities.formatDate(new Date(date), CANN.TIME_ZONE, 'HH:mm:ss'); }
 
 function parseClientDateTime_(dateText, timeText) {
+  return parseClientDateTimeStrict_(dateText, timeText) || new Date();
+}
+
+function parseClientDateTimeStrict_(dateText, timeText) {
   const date = text_(dateText);
   const suppliedTime = text_(timeText);
   const time = suppliedTime || '00:00:00';
@@ -8679,7 +8730,7 @@ function parseClientDateTime_(dateText, timeText) {
     !isClientDate_(date) ||
     (suppliedTime && !isClientTime_(suppliedTime))
   ) {
-    return new Date();
+    return null;
   }
   try {
     const parsed = Utilities.parseDate(combined, CANN.TIME_ZONE, format);
@@ -8688,12 +8739,11 @@ function parseClientDateTime_(dateText, timeText) {
       isNaN(parsed.getTime()) ||
       Utilities.formatDate(parsed, CANN.TIME_ZONE, format) !== combined
     ) {
-      return new Date();
+      return null;
     }
     return parsed;
   } catch (error) {
-    // Preserve the deployed fallback for invalid client date/time input.
-    return new Date();
+    return null;
   }
 }
 

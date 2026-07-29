@@ -1260,9 +1260,12 @@ class FakeScriptLock {
   constructor(runtime) {
     this.runtime = runtime;
     this.locked = false;
+    this.beforeTryLockHooks = [];
   }
 
   tryLock(timeoutMs) {
+    const beforeTryLock = this.beforeTryLockHooks.shift();
+    if (beforeTryLock) beforeTryLock();
     const acquired = !this.locked;
     if (acquired) this.locked = true;
     this.runtime.audit.record('locks', { operation: 'tryLock', timeoutMs: Number(timeoutMs), acquired });
@@ -1289,6 +1292,13 @@ class FakeScriptLock {
 
   forceHeld(value = true) {
     this.locked = !!value;
+  }
+
+  beforeNextTryLock(callback) {
+    if (typeof callback !== 'function') {
+      throw new Error('beforeNextTryLock requires a callback');
+    }
+    this.beforeTryLockHooks.push(callback);
   }
 }
 
