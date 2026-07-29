@@ -1,11 +1,11 @@
 # Project state
 
-Last updated: 2026-07-28
+Last updated: 2026-07-29
 
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `ci/tiered-validation-release-gate`
+- Current working branch: `codex/quick-log-test-hardening`
 - Released source commit and tag: `v1.2.15`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.15`,
   version code `18`
@@ -41,6 +41,9 @@ Repository code and tests show:
 - Versioned Insights and History responses, Room analytics caching, pagination,
   stale-cursor handling, and data-quality warnings.
 - DataStore-backed quick-log quantity presets and the unopened-product setting.
+- Quick-log preset boundary rules covered by fast JVM tests, with one focused
+  Compose add-and-save smoke test using stable test tags instead of text-field
+  ordering or visible labels.
 - A sandbox Android build type with a separate application ID suffix and a
   Gradle task that validates its local endpoint before sandbox builds.
 - Fake Apps Script/Sheets runtimes and regression suites for backend contracts,
@@ -70,7 +73,10 @@ or device verification.
 
 ## Current validation status
 
-The tiered CI validation and release provenance gate overhaul was implemented on branch `ci/tiered-validation-release-gate`.
+Release `1.2.15` passed the full GitHub Actions main matrix and signed
+publication workflow. The current focused branch hardens the quick-log preset
+tests and makes instrumentation-test compilation part of the static Android CI
+job.
 
 Verification completed:
 - `git diff --check` passed cleanly.
@@ -88,20 +94,30 @@ Verification completed:
 - Local Gradle static validation passed:
   - `.\gradlew.bat --no-daemon testDebugUnitTest lintDebug assembleDebug` (passed)
   - Gradle configuration cache reuse verified (`Reusing configuration cache`).
+- Current quick-log test hardening validation:
+  - `.\gradlew.bat --no-daemon --console=plain compileDebugAndroidTestKotlin`
+    passed.
+  - `.\gradlew.bat --no-daemon --console=plain testDebugUnitTest assembleDebug`
+    passed.
+  - `.\gradlew.bat --no-daemon --console=plain lintDebug` passed.
+  - Focused `ConsumptionPreferencesRepositoryTest` passed after separating
+    minimum/maximum and invalid-value cases.
+  - No local Android device or emulator was connected, so the remaining
+    Compose smoke test requires the pull-request API 24 runner.
 
 ## Current priorities
 
-No product roadmap priority can be verified from the repository. The
-shared-context bootstrap and release `1.2.11` are complete; no next product task
-is established by repository evidence.
+Complete the focused quick-log test-hardening pull request and verify its API 24
+Compose smoke test in GitHub Actions. No separate product roadmap priority can
+be verified from the repository.
 
 ## Unresolved questions
 
 - What is the current live Apps Script deployment version and trigger state?
 - Do the connected production sheets currently match the contracts and
   reconciliation expectations in the checked-in backend reports?
-- Which supported Android versions/devices have been manually exercised for
-  release `1.2.11`?
+- Which supported physical Android devices have been manually exercised for
+  release `1.2.15`?
 
 These require external or device evidence and should not be answered from this
 document alone.
@@ -112,6 +128,7 @@ document alone.
 - `app/src/main/java/com/example/data`
 - `app/src/test`
 - `app/src/androidTest`
+- `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`
 - `tests`
 - `backend_additions.gs`
 - `app/build.gradle.kts`
