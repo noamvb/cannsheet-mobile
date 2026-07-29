@@ -8,6 +8,8 @@ Repository position:
 
 - the latest implementation commit is
   `d5c68a61fe20fd51916980a801a6c9f308d17e90`;
+- GitHub Actions validated implementation-plus-handoff commit
+  `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`;
 - the initial backend milestone is
   `870e99215506c36802c2430dfa9bd0449d414286`;
 - `origin/main` remains
@@ -90,6 +92,15 @@ The production repair uses Apps Script `Utilities.parseDate()` with
 that API. Correction commit/retry, recovery, and spreadsheet expectations are
 timezone-stable, and the complete backend matrix passes with both UTC and New
 York host zones.
+
+Follow-up GitHub Actions run `30497869300` passed all required jobs for exact
+commit `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`:
+
+- Classify changes and scan repository;
+- Backend validation;
+- Android static validation;
+- Emulator API 24; and
+- Cannsheet Android PR validation.
 
 ## Files changed by this task
 
@@ -174,7 +185,6 @@ and test repairs.
 
 ## Validation not performed
 
-- The follow-up GitHub Actions run has not yet completed.
 - No Apps Script source has been deployed.
 - No live sandbox spreadsheet, trigger, web app, or reconciliation has been
   exercised.
@@ -196,8 +206,8 @@ and test repairs.
 ## Approval gate and next action
 
 The user approved the initial commit, push, and PR. The focused timezone repair
-is implementation commit `d5c68a6`; wait for all PR checks and update the PR
-evidence. Do not merge without a separate user approval. After merge, do not
+is implementation commit `d5c68a6`, and the implementation passed all PR checks
+at `7729bd0`. Obtain separate user approval before merging. After merge, do not
 deploy to the live sandbox without its separate approval and target-identity
 verification.
 

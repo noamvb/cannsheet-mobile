@@ -127,8 +127,10 @@ GitHub Actions run passed classification, Android static validation, and the API
 24 emulator, but the backend job exposed a host-timezone-dependent retry bug.
 The same failure was reproduced locally under `TZ=UTC`. The backend now parses
 wall-clock input explicitly in `America/New_York`, and the fake runtime and
-affected assertions cover both UTC and New York hosts. A follow-up CI run is
-pending.
+affected assertions cover both UTC and New York hosts. Follow-up run
+`30497869300` passed classification/security, backend validation, Android static
+validation, the API 24 emulator, and required aggregate validation for exact
+commit `7729bd047ff0d5671128fac39ef1dcc2e7bc8a80`.
 
 Not yet performed:
 
