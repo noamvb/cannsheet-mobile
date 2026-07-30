@@ -2,28 +2,26 @@
 
 Last updated: 2026-07-29
 
-Branch: `codex/history-corrections-android`
+Branch: `codex/typed-column-provisioning-fix`
 
 Repository position:
 
 - `origin/main` is
-  `621f9801f907dde9d5315cb5f261bbfc3407f868`, the squash merge of backend
-  [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19);
-- Android commit `ffbec5a` opened draft
+  `434d0046b9add4c100d6781197d56f81e4d8b58e`, the squash merge of Android
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20);
-- test-only follow-up `ce1be28` confirmed `performScrollTo()` alone does not
-  satisfy modal-sheet full-visibility assertions on API 24;
-- semantic assertion follow-up `d3b81cf` used the correct member method but
-  included an invalid extension import; and
-- this handoff accompanies the approved one-line import removal;
+- focused [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21)
+  skips unsupported cosmetic formatting on the typed `Purchases` header and
+  requires a full recoverable reconciliation before correction writes can be
+  enabled;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
-The Android implementation is committed and pushed. Draft PR #20 is open.
-No merge, production change, version change, tag, signed APK, or publication
-has been made.
+The Android implementation is merged. PR #21 is ready except for the review
+thread addressed by this handoff update. Production has the additive,
+disabled-only partial state described below; its deployment is unchanged. No
+version change, tag, signed APK, or publication has been made.
 
-Approximate delivery position: 87% toward a downloadable updated APK. CI built
+Approximate delivery position: 94% toward a downloadable updated APK. CI built
 and uploaded a temporary debug APK, but no signed installable update has been
 prepared.
 
@@ -57,9 +55,34 @@ History UI without touching production or release metadata.
 - A `PRODUCTION`-labelled request to the sandbox was rejected with
   `ENVIRONMENT_MISMATCH`.
 
-Production was not opened, provisioned, reconciled, deployed, or enabled.
+## Production rollout containment snapshot
 
-## Current uncommitted Android implementation
+On 2026-07-29, the production spreadsheet, linked Form, bound Apps Script
+project, existing web deployment, access mode, and triggers were verified
+before mutation. A fresh workbook backup and source/manifest rollback material
+were captured.
+
+The first `provisionConsumptionCorrections()` attempt made only additive,
+disabled-state changes before stopping:
+
+- `ConsumptionEventCorrections` exists with the exact expected header and zero
+  correction rows;
+- `CONSUMPTION_CORRECTION_SCHEMA_VERSION` is `1`;
+- `CONSUMPTION_CORRECTION_WRITES_ENABLED` is `false`; and
+- provisioning stopped when Google Sheets rejected cosmetic header formatting
+  on typed `Purchases` columns.
+
+A full post-failure recoverable reconciliation reported no pending apply, zero
+incomplete journals, and no differences or blocking differences. The observed
+raw row counts are only a point-in-time snapshot and must be read fresh because
+ordinary production entries continue during this work.
+
+The Apps Script editor source was restored byte-for-byte to the captured
+pre-attempt source. The same public deployment remains on version 11, and no
+valid production correction request was sent. Production correction writes
+remain disabled.
+
+## Merged Android implementation
 
 ### Persistence and retry safety
 
@@ -207,8 +230,6 @@ was added for the final parent validation.
 ## Validation not performed
 
 - `assembleSandbox` was not run.
-- The approved one-line `HistoryContentTest` import removal has not yet passed
-  its follow-up compile/API 24 CI run.
 - No manual emulator or physical-device visual check was performed.
 - No screenshot or recording was captured for the visible UI change.
 - No Android build was installed against the live sandbox deployment.
@@ -217,7 +238,9 @@ was added for the final parent validation.
   credit limit was reached, so it was not retried or worked around.
 - The full backend test matrix was not repeated during the Android milestone;
   backend PR CI and the completed live sandbox proof are the relevant evidence.
-- No production or release validation was attempted.
+- Production validation stopped at the contained provisioning failure described
+  above. No successful post-fix production provisioning, deployment, or
+  enablement validation and no release validation have been attempted.
 
 ## Independent review findings and residual risks
 
@@ -252,11 +275,12 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Commit and push the approved one-line `HistoryContentTest` import removal, then
-monitor the one resulting PR run. Do not manually rerun already-passing jobs.
-If API 24 and the aggregate pass, update the PR validation summary and request
-the separate merge, production-rollout, and release approvals as needed. The
-debug artifact is validation evidence, not the signed production update.
+Commit and push this factual production-state update to PR #21, monitor its one
+resulting CI run, resolve the review thread, and merge after all required checks
+pass. Then retry idempotent production provisioning from the merge-verified
+source, reconcile fresh, update the same deployment in place, verify its
+disabled state, reconcile again, and only then enable and verify correction
+writes.
 
-Do not provision or enable production and do not bump the version, tag, sign,
-or publish an APK without the user's separate approval.
+The user has approved this contained production rollout. Version changes,
+tagging, signing, and APK publication remain a separate approval gate.
