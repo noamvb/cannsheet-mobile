@@ -13,7 +13,9 @@ Repository position:
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20);
 - test-only follow-up `ce1be28` confirmed `performScrollTo()` alone does not
   satisfy modal-sheet full-visibility assertions on API 24;
-- this handoff accompanies the final approved semantic assertion adjustment;
+- semantic assertion follow-up `d3b81cf` used the correct member method but
+  included an invalid extension import; and
+- this handoff accompanies the approved one-line import removal;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
@@ -178,6 +180,11 @@ secret, backend, workflow, or release file is changed in this Android worktree.
 - The final approved adjustment keeps the visible timestamp assertion, checks
   lower details with `assertExists()`, and requires Correct/Void to exist with
   click actions. The focused diff passes `git diff --check`.
+- Run `30505232031` stopped at `compileDebugAndroidTestKotlin` with only
+  `Unresolved reference 'assertExists'` on the import line. Local inspection of
+  the resolved Compose test library confirms `assertExists()` is a
+  `SemanticsNodeInteraction` member, so the approved fix removes only that
+  import.
 
 The Gradle invocation was:
 
@@ -200,8 +207,8 @@ was added for the final parent validation.
 ## Validation not performed
 
 - `assembleSandbox` was not run.
-- The final approved `HistoryContentTest` semantic assertion adjustment has not
-  yet passed its follow-up API 24 CI run.
+- The approved one-line `HistoryContentTest` import removal has not yet passed
+  its follow-up compile/API 24 CI run.
 - No manual emulator or physical-device visual check was performed.
 - No screenshot or recording was captured for the visible UI change.
 - No Android build was installed against the live sandbox deployment.
@@ -245,12 +252,11 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Commit and push the final focused `HistoryContentTest` assertion adjustment,
-then monitor the one resulting PR run. Do not manually rerun already-passing
-jobs. If API 24 and the aggregate pass, update the PR validation summary and
-request the separate merge, production-rollout, and release approvals as
-needed. The debug artifact is validation evidence, not the signed production
-update.
+Commit and push the approved one-line `HistoryContentTest` import removal, then
+monitor the one resulting PR run. Do not manually rerun already-passing jobs.
+If API 24 and the aggregate pass, update the PR validation summary and request
+the separate merge, production-rollout, and release approvals as needed. The
+debug artifact is validation evidence, not the signed production update.
 
 Do not provision or enable production and do not bump the version, tag, sign,
 or publish an APK without the user's separate approval.

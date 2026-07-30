@@ -151,8 +151,11 @@ Follow-up run `30504243649` proved that Compose could scroll to the nodes, but
 Material's modal-sheet clipping still did not satisfy the stronger
 `assertIsDisplayed()` geometry check. The final approved test-only adjustment
 keeps the visible timestamp assertion, verifies lower details exist, and
-verifies Correct/Void exist with click actions. It still requires CI
-confirmation.
+verifies Correct/Void exist with click actions. Run `30505232031` then stopped
+at instrumentation-test compilation because `assertExists` was imported as an
+extension even though this Compose version exposes it as a
+`SemanticsNodeInteraction` member. The approved one-line import removal still
+requires CI confirmation.
 
 Not yet performed:
 
@@ -164,9 +167,9 @@ Not yet performed:
 
 ## Current priorities
 
-Commit and push the final approved test-only assertion adjustment, then use the
-resulting PR run for the authoritative API 24 emulator and aggregate evidence.
-Merge, production rollout, and release remain separate approval gates.
+Commit and push the approved one-line import removal, then use the resulting PR
+run for the authoritative API 24 emulator and aggregate evidence. Merge,
+production rollout, and release remain separate approval gates.
 
 ## Unresolved questions
 
