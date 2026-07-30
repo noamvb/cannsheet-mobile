@@ -5,9 +5,9 @@ Last updated: 2026-07-29
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/history-corrections-android`
+- Current working branch: `codex/typed-column-provisioning-fix`
 - Branch base and `origin/main`:
-  `621f9801f907dde9d5315cb5f261bbfc3407f868`
+  `434d0046b9add4c100d6781197d56f81e4d8b58e`
 - Released source tag `v1.2.16`:
   `7ee3f3a6995475c25addc712259cc44f8530b7a0`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
@@ -15,10 +15,11 @@ Last updated: 2026-07-29
 - The public signed release is published to
   `noamvb/cannsheet-mobile-releases` under tag
   [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
-- The Android History-correction milestone is committed and pushed on the
-  current branch in draft
-  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20). It has not been
-  merged or released.
+- The Android History-correction milestone was merged through
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20). Focused
+  production-rollout hardening is in
+  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21). Neither milestone
+  has been included in a signed release.
 
 ## Project summary
 
@@ -114,10 +115,25 @@ The current Android branch adds:
   covered by fake-runtime tests. Live Apps Script and spreadsheet behavior still
   requires separate validation.
 - The currently published v1.2.16 APK cannot create or queue consumption
-  corrections. The controls exist only in this unmerged working branch.
+  corrections. The Android controls are merged on `main`, but the published
+  production backend deployment still predates the correction API.
 - The correction schema is provisioned and correction writes are enabled in the
-  isolated live sandbox. Production has not been provisioned, reconciled,
-  deployed, or enabled for correction writes.
+  isolated live sandbox.
+- Production is in a safe, additive partial-provisioning state. On 2026-07-29,
+  after identity checks and a fresh workbook backup, the first provisioning
+  attempt created an empty, exact-header `ConsumptionEventCorrections` sheet and
+  set schema version `1` with correction writes `false`. It then stopped when
+  Google Sheets rejected cosmetic formatting on the typed `Purchases` header.
+- The post-failure recoverable reconciliation snapshot was clean: no pending
+  apply, no incomplete journal, and no reported differences or blocking
+  differences. Its observed row counts are deliberately not recorded as future
+  expectations because ordinary production entries continue during rollout.
+  The editor source was restored exactly to its pre-attempt content, and the
+  existing production deployment remained unchanged at version 11.
+- PR #21 contains the focused typed-column provisioning fix and adds the full
+  recoverable reconciliation as an enablement gate. Production provisioning
+  has not yet completed, no correction write has been enabled, and no new
+  backend version has been deployed.
 
 ## Current validation status
 
@@ -155,27 +171,33 @@ verifies Correct/Void exist with click actions. Run `30505232031` then stopped
 at instrumentation-test compilation because `assertExists` was imported as an
 extension even though this Compose version exposes it as a
 `SemanticsNodeInteraction` member. The approved one-line import removal still
-requires CI confirmation.
+required one more CI run; that follow-up passed and PR #20 was subsequently
+merged at `434d004`.
 
 Not yet performed:
 
-- production provisioning, reconciliation, write enablement, or deployment;
-- a passing API 24 emulator/aggregate result after the focused test fix;
+- successful completion of production correction provisioning;
+- a new production backend deployment, disabled-state endpoint verification,
+  correction write enablement, or post-enable verification;
 - a physical-device visual check, screenshot/recording, or live-sandbox APK
   installation; and
 - signed APK preparation or publication for this feature.
 
 ## Current priorities
 
-Commit and push the approved one-line import removal, then use the resulting PR
-run for the authoritative API 24 emulator and aggregate evidence. Merge,
-production rollout, and release remain separate approval gates.
+Merge the focused PR #21 only after its review thread and required CI are clear.
+Then retry idempotent production provisioning from the merge-verified source,
+read fresh reconciliation state, update the existing deployment in place, and
+verify the public endpoint while writes are still disabled. Enable writes only
+after the second clean reconciliation. Release remains a separate approval
+gate.
 
 ## Unresolved questions
 
-- What is the current live Apps Script deployment version and trigger state?
-- Do the connected production sheets currently match the contracts and
-  reconciliation expectations in the checked-in backend reports?
+- Will the merge-verified typed-column fix complete idempotent provisioning
+  against the current production table layout?
+- Will fresh production reconciliation remain clean immediately before
+  correction writes are enabled?
 - Which supported physical Android device will be used for the final correction
   workflow check?
 
