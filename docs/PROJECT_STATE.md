@@ -1,25 +1,29 @@
 # Project state
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/typed-column-cosmetic-fallback`
+- Current working branch: `codex/release-v1.2.17`
 - Branch base and `origin/main`:
-  `76638fb8d84ef38f0c24f39fd2e4c12cca0efe6e`
+  `71136ae8faa39a2032a05590adfbca137540f57b`
 - Released source tag `v1.2.16`:
   `7ee3f3a6995475c25addc712259cc44f8530b7a0`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
-  version code `19`
+- Release-candidate metadata in `app/build.gradle.kts`: version name `1.2.17`,
+  version code `20`, proposed by
+  [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)
 - The public signed release is published to
   `noamvb/cannsheet-mobile-releases` under tag
-  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
+  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16);
+  v1.2.17 has not yet been tagged or published.
 - The Android History-correction milestone was merged through
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and its first
   production-rollout hardening was merged through
   [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21) and
-  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22). These milestones
+  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), followed by the
+  bounded typed-column fallback in
+  [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23). These milestones
   have not been included in a signed release.
 
 ## Project summary
@@ -116,11 +120,11 @@ The current Android branch adds:
   covered by fake-runtime tests. Live Apps Script and spreadsheet behavior still
   requires separate validation.
 - The currently published v1.2.16 APK cannot create or queue consumption
-  corrections. The Android controls are merged on `main`, but the published
-  production backend deployment still predates the correction API.
+  corrections. The Android controls are merged on `main`, and the production
+  backend now exposes correction schema version `1` with writes enabled.
 - The correction schema is provisioned and correction writes are enabled in the
   isolated live sandbox.
-- Production is in a safe, additive partial-provisioning state. On 2026-07-29,
+- Historical production rollout sequence: on 2026-07-29,
   after identity checks and a fresh workbook backup, the first provisioning
   attempt created an empty, exact-header `ConsumptionEventCorrections` sheet and
   set schema version `1` with correction writes `false`. It then stopped when
@@ -156,8 +160,9 @@ The current Android branch adds:
 - The current focused follow-up handles only the exact Google typed-column
   restriction around cosmetic styling and frozen-row setup. Validation,
   protection, schema, configuration, and reconciliation failures remain fatal.
-  Production provisioning has not completed and no new backend version has
-  been deployed.
+  After PR #23, production provisioning and reconciliation completed, the
+  existing deployment was updated in place to version 12, and correction
+  writes were enabled.
 
 ## Current validation status
 
