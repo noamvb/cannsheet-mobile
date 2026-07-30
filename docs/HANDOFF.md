@@ -2,27 +2,28 @@
 
 Last updated: 2026-07-29
 
-Branch: `codex/typed-table-freeze-fix`
+Branch: `codex/typed-column-cosmetic-fallback`
 
 Repository position:
 
 - `origin/main` is
-  `fb3ad6b763a7fab0b9f49f7e4855715eadde6aa6`, the squash merge of focused
-  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21);
-- PR #21
-  skips unsupported cosmetic formatting on the typed `Purchases` header and
-  requires a full recoverable reconciliation before correction writes can be
-  enabled;
+  `76638fb8d84ef38f0c24f39fd2e4c12cca0efe6e`, the squash merge of focused
+  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22);
+- [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21) skips
+  unsupported cosmetic formatting on the typed `Purchases` header and requires
+  a full recoverable reconciliation before correction writes can be enabled;
+- PR #22 adds exact Advanced Sheets table detection before the header
+  formatting/frozen-row operations;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
-The Android implementation and PR #21 are merged. The first post-merge
-production retry exposed one additional typed-table restriction and was
-contained as described below. Production remains in an additive, disabled-only
-partial state and its deployment is unchanged. No version change, tag, signed
-APK, or publication has been made.
+The Android implementation, PR #21, and PR #22 are merged. Exact-source
+production retries still exposed a typed-column restriction in the shared
+cosmetic header path and were contained as described below. Production remains
+in an additive, disabled-only partial state and its deployment is unchanged. No
+version change, tag, signed APK, or publication has been made.
 
-Approximate delivery position: 94% toward a downloadable updated APK. CI built
+Approximate delivery position: 97% toward a downloadable updated APK. CI built
 and uploaded a temporary debug APK, but no signed installable update has been
 prepared.
 
@@ -95,11 +96,37 @@ remained `false`, and a fresh full reconciliation remained clean while ordinary
 production entries continued. No deployment or correction request followed
 the failed attempt.
 
-The current follow-up uses the exact `Purchases` sheet ID and Advanced Sheets
-`tables` metadata before correction provisioning. Table-backed headers are left
-to Google Sheets even if their frozen-row count changes; ordinary sheets retain
-the existing styling and freeze behavior. Unavailable, missing, or ambiguous
-metadata stops before additive correction configuration changes.
+PR #22 then used the exact `Purchases` sheet ID and Advanced Sheets `tables`
+metadata before correction provisioning. A first retry from that source still
+stopped at the shared header-formatting line. The editor was immediately
+restored to its captured prior source and a fresh full reconciliation was
+clean.
+
+Read-only live probes then established all of the following:
+
+- the exact PR #22 field mask returned the `Purchases` table;
+- the exact merged PR #22 helper returned `true`;
+- the sheet name and ID matched the expected `Purchases` sheet; and
+- of the sheets touched by the shared header-safety loop, only `Purchases` was
+  reported as a Google Sheets table.
+
+One final controlled retry used the exact saved PR #22 source after
+`cloud_done`, a complete editor read-back, normalized source hash verification,
+and a fresh clean reconciliation. It still stopped at the same shared cosmetic
+formatting line. No further retry was made.
+
+After that stopped attempt, the editor was restored byte-for-byte to rollback
+hash `f46c958296c0fb9f81d99bcc6103dee59d3e359e5e03fae9a1c3218e50609521`.
+The correction sheet remained header-only, schema version remained `1`, writes
+remained `false`, and the post-failure full reconciliation again reported no
+pending apply, incomplete journal, difference, or blocking difference. The
+public deployment remains version 11 and no valid production correction request
+has been sent.
+
+The current focused follow-up removes table metadata from the cosmetic control
+path. Only the exact Google typed-column restriction is tolerated around header
+styling and frozen-row setup; all schema, validation, protection,
+configuration, and reconciliation failures remain fatal.
 
 ## Merged Android implementation
 
@@ -165,32 +192,32 @@ metadata stops before additive correction configuration changes.
 
 Modified tracked files:
 
-- `app/src/androidTest/java/com/example/data/DatabaseMigrationTest.kt`
-- `app/src/androidTest/java/com/example/ui/HistoryContentTest.kt`
-- `app/src/main/java/com/example/data/AnalyticsData.kt`
-- `app/src/main/java/com/example/data/Database.kt`
-- `app/src/main/java/com/example/data/Network.kt`
-- `app/src/main/java/com/example/data/Repository.kt`
-- `app/src/main/java/com/example/data/SyncQueueLogic.kt`
-- `app/src/main/java/com/example/ui/AnalyticsState.kt`
-- `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
-- `app/src/main/java/com/example/ui/InsightsScreen.kt`
-- `app/src/test/java/com/example/data/SyncQueueLogicTest.kt`
+- `backend_additions.gs`
+- `tests/backend_corrections_test.js`
+- `tests/fake_apps_script_runtime.js`
 - `docs/HANDOFF.md`
+- `docs/PROJECT_STATE.md`
 
-Untracked task tests:
-
-- `app/src/test/java/com/example/data/ConsumptionCorrectionMappingTest.kt`
-- `app/src/test/java/com/example/ui/HistoryCorrectionUiTest.kt`
-
-No version, endpoint, application ID, namespace/package, signing, credential,
-secret, backend, workflow, or release file is changed in this Android worktree.
+There are no task-related untracked files. No Android source, version, endpoint,
+application ID, namespace/package, signing, credential, secret, workflow, or
+release file is changed on this focused branch.
 
 ## Validation performed
 
 ### Passing evidence
 
-- `git -c core.fsmonitor=false diff --check` exited 0 before this handoff update.
+- Terra/high ran `node tests/backend_corrections_test.js` once after each of its
+  two substantive test revisions; the final source reported
+  `backend correction tests passed`.
+- Terra/medium ran each complementary check once on the final source:
+  - `node tests/backend_recovery_test.js`;
+  - `node tests/fake_sheets_batch_update_test.js`;
+  - `Get-Content -Raw backend_additions.gs | node --check`; and
+  - `git -c core.fsmonitor=false diff --check`.
+  All four passed, and the verifier found no P0, P1, or P2 issue.
+- Sol/high approved the exact-error-only cosmetic fallback and required all
+  validation, protection, schema, configuration, and reconciliation failures
+  to remain fatal.
 - Android JVM compilation reached the test runner and generated reports for 12
   test classes: 49 tests, zero failures, zero errors, and zero skipped.
 - The new passing JVM coverage includes:
@@ -257,9 +284,9 @@ was added for the final parent validation.
   credit limit was reached, so it was not retried or worked around.
 - The full backend test matrix was not repeated during the Android milestone;
   backend PR CI and the completed live sandbox proof are the relevant evidence.
-- Production validation stopped at the contained provisioning failure described
-  above. No successful post-fix production provisioning, deployment, or
-  enablement validation and no release validation have been attempted.
+- Production validation stopped after the final contained exact-source
+  provisioning failure described above. No successful production provisioning,
+  deployment, enablement validation, or release validation has been completed.
 
 ## Independent review findings and residual risks
 
@@ -294,12 +321,13 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-The focused typed-table frozen-row fix and its production-shaped regression
-test are implemented on the current branch. Resolve every PR review thread and
-require green CI on the exact final head before merge. After merge, retry
-idempotent production provisioning from the exact merged source, reconcile
-fresh, update the same deployment in place, verify its disabled state,
-reconcile again, and only then enable and verify correction writes.
+Complete and independently review the focused cosmetic-fallback change, run its
+single focused regression suite, open a focused PR, resolve every review thread,
+and require green CI on the exact final head before merge. Only after that merge
+may idempotent production provisioning be attempted once from the exact saved
+source. If it succeeds, reconcile fresh, update the same deployment in place,
+verify its disabled state, reconcile again, and only then enable and verify
+correction writes.
 
 The user has approved this contained production rollout. Version changes,
 tagging, signing, and APK publication remain a separate approval gate.

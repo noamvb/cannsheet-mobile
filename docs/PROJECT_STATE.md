@@ -5,9 +5,9 @@ Last updated: 2026-07-29
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/typed-table-freeze-fix`
+- Current working branch: `codex/typed-column-cosmetic-fallback`
 - Branch base and `origin/main`:
-  `fb3ad6b763a7fab0b9f49f7e4855715eadde6aa6`
+  `76638fb8d84ef38f0c24f39fd2e4c12cca0efe6e`
 - Released source tag `v1.2.16`:
   `7ee3f3a6995475c25addc712259cc44f8530b7a0`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
@@ -18,8 +18,9 @@ Last updated: 2026-07-29
 - The Android History-correction milestone was merged through
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and its first
   production-rollout hardening was merged through
-  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21). Neither milestone
-  has been included in a signed release.
+  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21) and
+  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22). These milestones
+  have not been included in a signed release.
 
 ## Project summary
 
@@ -138,13 +139,25 @@ The current Android branch adds:
 - After the second contained failure, the editor source was again restored
   exactly, the correction sheet remained header-only, schema version remained
   `1`, writes remained `false`, and a fresh full reconciliation remained clean.
+- PR #22 merged exact Advanced Sheets table detection before the cosmetic
+  header operations. Read-only live probes subsequently proved that the exact
+  helper, sheet name, sheet ID, and table predicate all identify `Purchases` as
+  table-backed.
+- Despite that proof, two exact-source PR #22 provisioning attempts stopped at
+  the same shared cosmetic header-formatting line. The final controlled attempt
+  followed `cloud_done`, complete editor read-back and hash verification, and a
+  fresh clean reconciliation. No additional retry was made.
+- After the final contained failure, the editor was restored exactly to the
+  captured rollback source, the correction sheet remained header-only, schema
+  version remained `1`, writes remained `false`, and a fresh full
+  reconciliation again reported no pending apply, incomplete journal,
+  difference, or blocking difference. The public deployment remains version 11
+  and no valid production correction request was sent.
+- The current focused follow-up handles only the exact Google typed-column
+  restriction around cosmetic styling and frozen-row setup. Validation,
+  protection, schema, configuration, and reconciliation failures remain fatal.
   Production provisioning has not completed and no new backend version has
   been deployed.
-- The current follow-up reads the exact `Purchases` sheet's Advanced Sheets
-  table metadata before correction provisioning. Table-backed headers are left
-  to Google Sheets regardless of frozen-row count; ordinary sheets retain
-  styling and frozen-row setup. Missing or ambiguous metadata fails closed
-  before additive correction configuration is changed.
 
 ## Current validation status
 
@@ -157,6 +170,15 @@ passed all five required checks. Live sandbox verification then proved:
 - History exposed the resulting lifecycle, head, and audit revision;
 - `resetSandboxData()` restored the five seeded original events; and
 - a production-labelled request was rejected with `ENVIRONMENT_MISMATCH`.
+
+Cosmetic-fallback branch evidence:
+
+- the focused correction regression suite passes, including a protected
+  non-`Purchases` typed-header restriction and a frozen-row-only restriction;
+- recovery, fake batch-update, Apps Script syntax, and diff-whitespace checks
+  each pass once on the final source; and
+- independent Sol/high design and Terra/medium verification found no remaining
+  P0, P1, or P2 issue.
 
 Android branch evidence:
 
@@ -196,18 +218,20 @@ Not yet performed:
 
 ## Current priorities
 
-The focused typed-table frozen-row fix and its production-shaped regression
-coverage are implemented on the current branch. Resolve every PR review thread
-and require green CI on the exact final head before merge. Retry idempotent
-production provisioning only from that merge-verified source, read fresh
-reconciliation state, update the existing deployment in place, and verify the
-public endpoint while writes are still disabled. Enable writes only after the
-second clean reconciliation. Release remains a separate approval gate.
+Complete the focused cosmetic-fallback implementation and regression coverage,
+obtain independent review, and require green CI on the exact final PR head
+before merge. Retry idempotent production provisioning once only from that
+merge-verified and save-verified source, read fresh reconciliation state,
+update the existing deployment in place, and verify the public endpoint while
+writes are still disabled. Enable writes only after the second clean
+reconciliation. Release remains a separate approval gate.
 
 ## Unresolved questions
 
-- Will the follow-up typed-table fix complete idempotent provisioning against
-  the current production table layout?
+- Which protected header causes the live typed-column cosmetic restriction even
+  though the exact `Purchases` table predicate is true?
+- Will the exact-error cosmetic fallback complete idempotent provisioning
+  against the current production sheet layout?
 - Will fresh production reconciliation remain clean immediately before
   correction writes are enabled?
 - Which supported physical Android device will be used for the final correction
