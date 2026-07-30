@@ -2,258 +2,239 @@
 
 Last updated: 2026-07-29
 
-Branch: `codex/history-corrections-backend`
+Branch: `codex/history-corrections-android`
 
 Repository position:
 
-- the latest safety-repair implementation commit is
-  `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`;
-- GitHub Actions validated the prior implementation-plus-handoff head
-  `05c4b58e89b2451f54a566e244f1761c578ca68a`;
-- the initial backend milestone is
-  `870e99215506c36802c2430dfa9bd0449d414286`;
-- `origin/main` remains
-  `7ee3f3a6995475c25addc712259cc44f8530b7a0`, tagged `v1.2.16`; and
-- [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) targets `main`.
+- `HEAD` and `origin/main` are
+  `621f9801f907dde9d5315cb5f261bbfc3407f868`;
+- that commit is the squash merge of backend
+  [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19);
+- the latest released source tag is `v1.2.16` at `7ee3f3a`; and
+- version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
-Working tree status: clean after the implementation and this handoff refresh are
-committed and pushed to PR #19. Nothing has been merged, deployed, provisioned,
-enabled, or released.
+Working tree status: Android implementation is uncommitted. There are 15
+modified tracked files, including the shared-context documents, and two
+untracked test files.
+Nothing is staged. No Android commit, push, pull request, merge, production
+change, version change, tag, signed APK, or publication has been made.
+
+Approximate delivery position: 80% toward a downloadable
+updated APK. This is a progress estimate, not artifact evidence; no updated APK
+has been built yet.
 
 ## Purpose of this session
 
-Implement the backend milestone for user-editable consumption History while
-preserving auditability, offline retry safety, effective analytics, and strict
-sandbox/production isolation. Take the focused backend pull request through its
-approved merge, then stop at the separate live-sandbox approval gate.
+Continue the approved editable-consumption-History feature after its backend
+foundation: merge and prove the backend in the live sandbox, then implement the
+Android Room queue, sync contract, ViewModel behavior, and Correct/Void/Restore
+History UI without touching production or release metadata.
 
-## Product outcome
+## Completed backend and sandbox milestones
 
-The intended user-facing feature will let a person correct, void, or restore a
-mistaken consumption entry from History. This branch implements only the server
-contract and safety foundation. The current Android APK has no correction UI or
-local correction queue yet.
+- Backend PR #19 was merged to `main` at `621f980`.
+- Its final GitHub Actions run, `30499192644`, passed all five required checks.
+- The checked-in merged Apps Script source was copied to the verified
+  `Cannsheet Sandbox Backend` bound project and normalized source equality was
+  confirmed.
+- `provisionSandbox()` completed successfully and created the additive
+  `ConsumptionEventCorrections` sheet.
+- The existing sandbox web-app deployment was updated in place from version 12
+  to version 13. Its deployment identity, execution owner, and public access
+  setting were preserved.
+- A live sandbox capability read returned environment `SANDBOX`, API v2,
+  correction schema version 1, and correction writes enabled.
+- A focused live `VOID` proof committed revision 1; an identical retry returned
+  `duplicate`; History showed lifecycle `VOIDED`, the matching correction head,
+  and one audit revision.
+- `resetSandboxData()` then completed. Final sandbox History contained the five
+  seeded events in `ORIGINAL` state, revision 0, with no correction heads or
+  audit revisions.
+- A `PRODUCTION`-labelled request to the sandbox was rejected with
+  `ENVIRONMENT_MISMATCH`.
 
-## Work completed
+Production was not opened, provisioned, reconciled, deployed, or enabled.
 
-- Added append-only `ConsumptionEventCorrections` support with:
-  - `REPLACE`, `VOID`, and `RESTORE` operations;
-  - stable correction/action UUIDs;
-  - expected-head conflict detection;
-  - exact duplicate acknowledgement and different-content conflict rejection;
-  - immutable replacement validation; and
-  - safe product-reopen checks.
-- Integrated corrections with:
-  - mixed version-2 sync requests and exact acknowledgements;
-  - the durable apply journal and recovery/finalization path;
-  - reconciliation;
-  - product projections;
-  - legacy and current Insights/History reads;
-  - History audit metadata; and
-  - correction-aware stale-cursor detection.
-- Added additive rollout helpers:
-  - production schema provisioning starts with correction writes disabled;
-  - reconciliation is required before enabling writes;
-  - sandbox provisioning enables the schema only after its target guard passes.
-- Registered the focused correction suite in backend-only CI and classified
-  `sandbox_provisioning.gs` as backend code.
-- Added fake-runtime support and regression, scale, recovery, capability-gate,
-  lifecycle, cursor, audit, duplicate, and conflict coverage.
-- Made version-2 consumption, finish, and correction wall-clock parsing explicit
-  in `CANN.TIME_ZONE`, independent of the Apps Script or test host timezone.
-- Updated architecture, project-state, decision, contributor, and handoff
-  documentation.
+## Current uncommitted Android implementation
 
-## Independent safety review
+### Persistence and retry safety
 
-The first read-only verification pass found one defect: `provisionSandbox()`
-could create schema before checking an existing production Config marker.
+- Room is advanced from schema 8 to 9 with an additive
+  `pending_consumption_corrections` table and a tested `MIGRATION_8_9`.
+- The existing `sync_request_state` gains a non-null payload fingerprint with an
+  empty migration default; existing request rows are preserved.
+- A pending correction stores a stable action UUID, target event UUID, expected
+  correction head, operation, optional reason, optional product-reopen request,
+  and the complete immutable replacement snapshot when applicable.
+- The target event is the queue primary key and the action ID is unique.
+  Enqueue uses `ABORT`, so a second correction cannot silently replace the first.
+- The repository exposes pending-correction flows and explicit enqueue, lookup,
+  list, and user-confirmed cancel operations.
+- An unchanged queue snapshot reuses its request UUID after an unknown network
+  outcome. A changed snapshot receives a new request UUID.
+- A correction row is removed automatically only when a successful response
+  contains `committed` or `duplicate` for the exact sent
+  `(actionId, targetEventId)` pair. Rejections remain queued.
 
-The repaired implementation now performs all environment, configured/active/
-bound spreadsheet, form destination, and existing Config checks before its first
-mutation. A production-marker regression compares full before/after snapshots
-and proves zero cell writes, structural changes, batch writes, or form changes.
-The second independent verification pass found the backend milestone ready.
-Required GitHub review then identified two additional P1 edge cases: a request
-could retain a stale correction-write gate while waiting for the script lock,
-and a nonexistent New York spring-forward wall time could be stored with a
-different normalized timestamp. The repair rereads mutable rollout state under
-the acquired lock and strictly rejects nonexistent correction replacement
-times. Deterministic regressions cover both cases, including the intentional
-idempotent `SyncLedger` audit row for a rejected request.
+### Network and analytics contract
 
-## Pull request CI diagnosis and repair
+- Sync API v2 carries `consumptionCorrections` and parses capability,
+  acknowledgement, rejection, stale-head, and current-head fields.
+- The Android reason limit matches the merged backend limit of 200 characters;
+  no silent truncation is used.
+- History now requests analytics contract v2 and parses lifecycle, head,
+  revision, reopen eligibility, capability, source-revision, and optional audit
+  DTOs with safe defaults. Ordinary page requests omit full audit revisions so
+  paginated payloads and the 200-entry cache remain bounded.
+- Version-1 acknowledgement compatibility remains available for ordinary
+  queues, while correction requests require a matching version-2 request ID.
+- A successful audited partial response clears its request identity after local
+  acknowledgement processing, so a smaller remaining payload cannot reuse the
+  prior audited request ID.
 
-PR #19's first run, `30496452018`, passed classification, Android static
-validation, and API 24 emulator validation. Backend validation failed in the new
-same-request correction retry.
+### User-facing History behavior
 
-A Terra/high read-only audit reproduced the failure locally with `TZ=UTC`.
-`parseClientDateTime_()` used host-local `new Date()` for the app's zone-less
-wall-clock value. An Eastern host stored 11:30 as 15:30Z; a UTC host stored it as
-11:30Z. Reading the persisted row in canonical New York time then rejected the
-retry with `INTERNAL_ERROR` because its local time no longer matched.
+- Editing is available only from a fresh, non-cached History snapshot whose
+  backend advertises correction schema version 1 and enabled writes.
+- An entry with a local pending correction cannot receive another correction.
+- Tapping a History entry exposes:
+  - `Correct` for an effective entry;
+  - `Void` for an effective entry; and
+  - `Restore` for a voided entry.
+- Correct pre-fills date, time, product, quantity, and finished state. It
+  validates canonical UUIDs, a real calendar date, a valid time shape, positive
+  quantity, and the 200-character reason boundary.
+- Void and Restore require confirmation and preserve the original event.
+- Product reopening is offered only when the backend says it is eligible and
+  the proposed correction removes the current finish marker.
+- Plain-language messages cover offline pending state, exact server acceptance,
+  stale-head conflict, unsafe reopen, disabled capability, and unavailable
+  backend.
+- A pending correction can be cancelled only through an explicit confirmation.
+  Cancellation is serialized with sync so it cannot race an active request.
+- History is marked stale after accepted changes; the existing coordinator
+  performs one refresh when History is visible.
 
-The production repair uses Apps Script `Utilities.parseDate()` with
-`CANN.TIME_ZONE` and a timezone round-trip check. The fake runtime now models
-that API. Correction commit/retry, recovery, and spreadsheet expectations are
-timezone-stable, and the complete backend matrix passes with both UTC and New
-York host zones.
+## Files changed
 
-Follow-up GitHub Actions run `30498099177` passed all required jobs for the
-prior exact head `05c4b58e89b2451f54a566e244f1761c578ca68a`:
+Modified tracked files:
 
-- Classify changes and scan repository;
-- Backend validation;
-- Android static validation;
-- Emulator API 24; and
-- Cannsheet Android PR validation.
-
-Safety-repair commit `a39e19902215e670c9d5817dc30a35aa2b7ba5f1`
-adds the lock-interleaving and DST-gap regressions. The focused correction suite
-passed under UTC and New York host zones; the final required PR checks remain the
-authoritative merge gate for that head.
-
-## Files changed by this task
-
-- `.github/workflows/android-pr-checks.yml`
-- `AGENTS.md`
-- `backend_additions.gs`
-- `sandbox_provisioning.gs`
-- `tests/backend_analytics_test.js`
-- `tests/backend_corrections_test.js`
-- `tests/backend_recovery_test.js`
-- `tests/backend_spreadsheet_test.js`
-- `tests/fake_apps_script_runtime.js`
-- `tests/sandbox_provisioning_test.js`
-- `docs/ARCHITECTURE.md`
-- `docs/DECISIONS.md`
-- `docs/PROJECT_STATE.md`
+- `app/src/androidTest/java/com/example/data/DatabaseMigrationTest.kt`
+- `app/src/androidTest/java/com/example/ui/HistoryContentTest.kt`
+- `app/src/main/java/com/example/data/AnalyticsData.kt`
+- `app/src/main/java/com/example/data/Database.kt`
+- `app/src/main/java/com/example/data/Network.kt`
+- `app/src/main/java/com/example/data/Repository.kt`
+- `app/src/main/java/com/example/data/SyncQueueLogic.kt`
+- `app/src/main/java/com/example/ui/AnalyticsState.kt`
+- `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
+- `app/src/main/java/com/example/ui/InsightsScreen.kt`
+- `app/src/test/java/com/example/data/SyncQueueLogicTest.kt`
 - `docs/HANDOFF.md`
 
-No Android source, version, endpoint, application ID, namespace/package,
-signing, credential, secret, tag, or release file was changed.
+Untracked task tests:
+
+- `app/src/test/java/com/example/data/ConsumptionCorrectionMappingTest.kt`
+- `app/src/test/java/com/example/ui/HistoryCorrectionUiTest.kt`
+
+No version, endpoint, application ID, namespace/package, signing, credential,
+secret, backend, workflow, or release file is changed in this Android worktree.
 
 ## Validation performed
 
-All eight Node backend suites passed:
+### Passing evidence
+
+- `git -c core.fsmonitor=false diff --check` exited 0 before this handoff update.
+- Android JVM compilation reached the test runner and generated reports for 12
+  test classes: 49 tests, zero failures, zero errors, and zero skipped.
+- The new passing JVM coverage includes:
+  - correction DTO mapping and immutable replacement validation;
+  - exact action/target acknowledgement matching;
+  - retained structured conflicts and unsafe-reopen rejections;
+  - stable retry fingerprint and changed-payload fingerprint behavior; and
+  - History capability, lifecycle action, reason, product identity, and reopen
+    UI rules.
+- A read-only Terra/medium verification pass found no P0 or P1 defect in the
+  combined Android diff.
+- A Sol/high architecture pass confirmed there is no safe existing single-event
+  audit query. It recommended keeping full audit revisions out of ordinary
+  History pages until a bounded, non-caching detail endpoint exists.
+
+The Gradle invocation was:
 
 ```powershell
-node tests/backend_analytics_test.js
-node tests/backend_contract_test.js
-node tests/backend_corrections_test.js
-node tests/backend_recovery_test.js
-node tests/backend_spreadsheet_test.js
-node tests/fake_sheets_batch_update_test.js
-node tests/sandbox_performance_fixture_test.js
-node tests/sandbox_provisioning_test.js
+.\gradlew.bat --no-daemon testDebugUnitTest
 ```
 
-The correction scale case passed with 3,600 events and 600 corrections. The
-complete eight-suite matrix passed twice:
+The command wrapper timed out after 124 seconds without returning Gradle's final
+exit code. The Gradle process continued and subsequently produced complete XML
+reports showing the 49/0/0/0 result above. Treat the test reports as passing
+evidence, but do not claim that the wrapper itself returned success.
 
-```powershell
-$env:TZ='UTC'
-Get-ChildItem tests -Filter '*_test.js' | Sort-Object Name |
-  ForEach-Object { node $_.FullName }
+### Earlier blocked attempts
 
-$env:TZ='America/New_York'
-Get-ChildItem tests -Filter '*_test.js' | Sort-Object Name |
-  ForEach-Object { node $_.FullName }
-```
-
-The pre-fix source from exact commit `870e992` fails the UTC correction retry
-with the expected diagnostic:
-
-```text
-INTERNAL_ERROR: Correction replacement local date/time does not match its timestamp
-```
-
-Both Apps Script syntax checks passed:
-
-```powershell
-Get-Content -Raw backend_additions.gs | node --check
-Get-Content -Raw sandbox_provisioning.gs | node --check
-```
-
-The bundled Python runtime passed 13 benchmark tests:
-
-```powershell
-C:\Users\noamv\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe `
-  -m unittest discover -s tests -p 'test_backend_sync_benchmark.py'
-```
-
-Diff whitespace validation passed:
-
-```powershell
-git -c core.fsmonitor=false diff --check origin/main
-```
-
-The independent verifier reran the complete Node matrix, both syntax checks,
-the Python benchmark, and diff validation after the sandbox-safety repair. A
-separate CI-audit agent reproduced and reviewed the timezone failure, and
-separate Sol/xhigh and Terra/high agents implemented and tested its production
-and test repairs.
+The implementation agents' focused Gradle attempts were blocked first by
+missing local SDK configuration and then by restricted SDK access/timeouts.
+They did not run a second broad test matrix. A local ignored `local.properties`
+was added for the final parent validation.
 
 ## Validation not performed
 
-- No Apps Script source has been deployed.
-- No live sandbox spreadsheet, trigger, web app, or reconciliation has been
-  exercised.
-- Production has not been provisioned, reconciled, enabled, or deployed.
-- Android code has not been changed, so Gradle, emulator, and device checks for
-  the eventual UI are pending.
-- No signed APK has been built or published for this feature.
+- `assembleDebug`, `assembleSandbox`, and `lintDebug` were not run.
+- The new Room 8-to-9 instrumentation migration test was not executed on an
+  emulator/device.
+- The updated Compose `HistoryContentTest` was not executed.
+- No emulator or physical-device visual check was performed.
+- No screenshot or recording was captured for the visible UI change.
+- No Android build was installed against the live sandbox deployment.
+- No Android branch CI or pull request exists.
+- Direct local ADB/emulator discovery was blocked by local access restrictions.
+  The approved elevated route was then unavailable because the Codex execution
+  credit limit was reached, so it was not retried or worked around.
+- The full backend test matrix was not repeated during the Android milestone;
+  backend PR CI and the completed live sandbox proof are the relevant evidence.
+- No production or release validation was attempted.
 
-## Current external state
+## Independent review findings and residual risks
 
-- `v1.2.16` is the current source tag and local version metadata
-  (`versionCode` 19).
-- A read-only public release query on 2026-07-29 confirmed
-  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16)
-  with an APK and checksum.
-- GitHub CLI was reauthenticated through the signed-in in-app browser and now
-  reports active `noamvb` access with repository/workflow scopes.
+1. Resolved design finding: unconditional `includeAudit=true` would make every
+   page and cached event grow with an unbounded correction chain. The Android
+   page shows lifecycle and revision number, while the full audit remains in the
+   backend/Sheet. A future visible trail requires a single-event detail API.
+2. P2: the migration test creates a reduced hand-written version-8 database and
+   invokes `MIGRATION_8_9`; it does not perform full Room schema-parity
+   validation against an exported version-8 schema. Emulator execution is still
+   required.
+3. The backend is the final strict validator for New York wall-clock time,
+   including nonexistent daylight-saving gap times. Such a rejection remains
+   queued and visible rather than being discarded.
+4. `docs/PROJECT_STATE.md`, `docs/DECISIONS.md`, and `docs/ARCHITECTURE.md` now
+   describe the Android milestone and bounded audit-loading decision.
+5. Ordinary production entries continued during this work. Any future
+   production provisioning, reconciliation, deployment, and write enablement
+   must acquire the script lock and read fresh state; do not rely on stored row
+   counts.
 
-## Approval gate and next action
+## Safety review
 
-The user approved the initial commit, push, PR, and squash merge. Merge only
-after the exact safety-repair head passes required checks and all required review
-conversations are resolved. After merge, do not deploy to the live sandbox
-without its separate approval and target-identity verification.
+- The 13 Android source/test paths were scanned for secret-like patterns and
+  personal absolute paths; none were found.
+- No staged changes exist.
+- No unrelated source change was found.
+- Ignored `app/build/` output and ignored `local.properties` exist locally and
+  are not part of the Git diff.
+- No generated APK, database, log, credential, token, keystore, or local
+  endpoint property is included in the working tree changes.
 
-Android implementation starts only after the backend contract is merged and
-verified in the sandbox.
+## Recommended next action
 
-## Remaining delivery sequence
+Review the complete diff, create the focused Android commit, and open a draft
+pull request. Use its one normal CI run for JVM tests, instrumentation
+compilation, lint, debug assembly, and the API 24 emulator instead of repeating
+blocked local attempts. CI should also provide a temporary debug APK artifact;
+it is validation evidence, not the signed production update. After CI passes,
+capture any remaining visual/device evidence that is practical and request the
+separate merge, production-rollout, and release approvals as needed.
 
-1. Backend PR, CI, review, and approved merge.
-2. Approved live sandbox provisioning and backend contract verification.
-3. Android Room migration, correction queue, network DTOs, repository logic,
-   ViewModel state, and History edit/void/restore UI.
-4. JVM, migration, Compose, CI, emulator, and physical-device verification
-   against the sandbox.
-5. Approved production disabled-first provisioning, reconciliation, deployment,
-   and write enablement.
-6. Approved version bump, focused release PR, tag, signed APK publication, and
-   independent public-artifact verification.
-
-## Risks and unresolved questions
-
-- Live Apps Script, spreadsheet schema, trigger, and deployment identity are
-  not established by local tests.
-- Version-2 app times are New York wall-clock values. Tests and future code must
-  use the canonical timezone explicitly rather than inherit the machine's zone.
-- The user confirmed that ordinary app entries will continue arriving during
-  this work. Treat production as continuously changing: never rely on a saved
-  row count or long-lived snapshot. Provisioning, reconciliation, and write
-  enablement must each use the script lock and freshly read live state. Ordinary
-  logging must remain available throughout the additive, disabled-first rollout.
-- A correction is data-sensitive. The Android queue must retain a correction
-  until the server returns the exact accepted acknowledgement.
-- Stale correction-head conflicts need plain user-facing recovery rather than
-  silent overwrite.
-- Product reopen remains deliberately conservative; unsafe cases return
-  `REOPEN_NOT_SAFE`.
-- The final device and Android version for physical validation have not been
-  selected.
+Do not provision or enable production and do not bump the version, tag, sign,
+or publish an APK without the user's separate approval.

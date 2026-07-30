@@ -10,6 +10,8 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.UUID
@@ -69,6 +71,35 @@ data class FinishAction(
     val productUuid: String? = null,
 )
 
+@Entity(
+    tableName = "pending_consumption_corrections",
+    indices = [Index(value = ["actionId"], unique = true)],
+)
+data class PendingConsumptionCorrection(
+    @PrimaryKey val targetEventId: String,
+    val actionId: String,
+    val expectedCorrectionHeadId: String,
+    val operation: ConsumptionCorrectionOperation,
+    val reopenProduct: Boolean,
+    val reason: String? = null,
+    val replacementDate: String? = null,
+    val replacementTime: String? = null,
+    val replacementProductUuid: String? = null,
+    val replacementProductId: String? = null,
+    val replacementUses: Double? = null,
+    val replacementWeightCode: String? = null,
+    val replacementFinished: Boolean? = null,
+)
+
+class CannsheetTypeConverters {
+    @TypeConverter
+    fun consumptionCorrectionOperationToString(value: ConsumptionCorrectionOperation): String = value.name
+
+    @TypeConverter
+    fun stringToConsumptionCorrectionOperation(value: String): ConsumptionCorrectionOperation =
+        ConsumptionCorrectionOperation.valueOf(value)
+}
+
 @Entity(tableName = "product_interactions")
 data class ProductInteraction(
     @PrimaryKey val productId: String,
@@ -81,6 +112,7 @@ data class SyncRequestState(
     @PrimaryKey val id: Int = SINGLETON_ID,
     val requestId: String,
     val createdAtEpochMillis: Long,
+    val payloadFingerprint: String,
 ) {
     companion object {
         const val SINGLETON_ID = 1
@@ -143,6 +175,30 @@ interface CannsheetDao {
     @Query("DELETE FROM finish_actions WHERE actionId IN (:actionIds)")
     suspend fun deleteFinishActionsByActionIds(actionIds: List<String>)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertPendingConsumptionCorrection(action: PendingConsumptionCorrection)
+
+    @Query("SELECT * FROM pending_consumption_corrections ORDER BY targetEventId")
+    fun getPendingConsumptionCorrectionsFlow(): Flow<List<PendingConsumptionCorrection>>
+
+    @Query("SELECT * FROM pending_consumption_corrections ORDER BY targetEventId")
+    suspend fun getPendingConsumptionCorrections(): List<PendingConsumptionCorrection>
+
+    @Query(
+        "SELECT * FROM pending_consumption_corrections " +
+            "WHERE targetEventId = :targetEventId LIMIT 1",
+    )
+    suspend fun getPendingConsumptionCorrection(targetEventId: String): PendingConsumptionCorrection?
+
+    @Query(
+        "DELETE FROM pending_consumption_corrections " +
+            "WHERE actionId = :actionId AND targetEventId = :targetEventId",
+    )
+    suspend fun deletePendingConsumptionCorrection(actionId: String, targetEventId: String): Int
+
+    @Query("DELETE FROM pending_consumption_corrections WHERE targetEventId = :targetEventId")
+    suspend fun cancelPendingConsumptionCorrection(targetEventId: String): Int
+
     @Query(
         "UPDATE consumption_actions SET productId = :newProductId, productUuid = :productUuid " +
             "WHERE productId = :oldProductId",
@@ -172,6 +228,9 @@ interface CannsheetDao {
     @Query("SELECT COUNT(*) FROM finish_actions")
     fun getPendingFinishActionsCount(): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM pending_consumption_corrections")
+    fun getPendingConsumptionCorrectionsCount(): Flow<Int>
+
     @Query("SELECT COUNT(*) FROM purchase_actions")
     suspend fun getPendingPurchasesCountNow(): Int
 
@@ -180,6 +239,9 @@ interface CannsheetDao {
 
     @Query("SELECT COUNT(*) FROM finish_actions")
     suspend fun getPendingFinishActionsCountNow(): Int
+
+    @Query("SELECT COUNT(*) FROM pending_consumption_corrections")
+    suspend fun getPendingConsumptionCorrectionsCountNow(): Int
 
     @Query("SELECT * FROM product_interactions ORDER BY lastLoggedAtEpochMillis DESC")
     fun getAllProductInteractions(): Flow<List<ProductInteraction>>
@@ -302,13 +364,15 @@ interface CannsheetDao {
         PurchaseAction::class,
         ConsumptionAction::class,
         FinishAction::class,
+        PendingConsumptionCorrection::class,
         ProductInteraction::class,
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
+@TypeConverters(CannsheetTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun cannsheetDao(): CannsheetDao
 
@@ -479,6 +543,40 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE UNIQUE INDEX `index_purchase_actions_actionId` " +
                         "ON `purchase_actions` (`actionId`)",
+                )
+            }
+        }
+
+        val MIGRATION_8_9: Migration = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `pending_consumption_corrections` (
+                        `targetEventId` TEXT NOT NULL,
+                        `actionId` TEXT NOT NULL,
+                        `expectedCorrectionHeadId` TEXT NOT NULL,
+                        `operation` TEXT NOT NULL,
+                        `reopenProduct` INTEGER NOT NULL,
+                        `reason` TEXT,
+                        `replacementDate` TEXT,
+                        `replacementTime` TEXT,
+                        `replacementProductUuid` TEXT,
+                        `replacementProductId` TEXT,
+                        `replacementUses` REAL,
+                        `replacementWeightCode` TEXT,
+                        `replacementFinished` INTEGER,
+                        PRIMARY KEY(`targetEventId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS " +
+                        "`index_pending_consumption_corrections_actionId` " +
+                        "ON `pending_consumption_corrections` (`actionId`)",
+                )
+                db.execSQL(
+                    "ALTER TABLE `sync_request_state` ADD COLUMN " +
+                        "`payloadFingerprint` TEXT NOT NULL DEFAULT ''",
                 )
             }
         }

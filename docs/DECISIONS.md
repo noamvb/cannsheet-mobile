@@ -73,8 +73,8 @@ historical rationale.
 
 ## ADR-005: Represent consumption edits as append-only corrections
 
-- Status: Accepted; backend implementation ready for pull-request review,
-  Android integration and live rollout pending
+- Status: Accepted; backend merged and sandbox verified, Android integration
+  implemented in a working branch, production rollout pending
 - Date: 2026-07-29
 - Context: A mistaken consumption entry must be correctable from the app without
   erasing its history, producing duplicate rows on retry, changing totals
@@ -94,6 +94,10 @@ historical rationale.
   5. Gate writes separately from schema provisioning. Provision production with
      writes disabled, reconcile, and enable only through an explicit rollout
      action. Sandbox helpers must prove target identity before mutation.
+  6. Keep ordinary Android History pages bounded: show lifecycle and revision
+     metadata without requesting every audit revision for every page. A future
+     user-visible revision trail must use a single-event, non-caching detail
+     request rather than enlarging the paginated History cache.
 - Rationale: An append-only revision log preserves evidence and idempotency while
   allowing the user-facing History screen to behave like editable history.
 - Consequences: The backend and client must carry revision metadata and handle
@@ -101,6 +105,10 @@ historical rationale.
   an exact accepted acknowledgement arrives. Rollout requires separate sandbox,
   production-disabled, reconciliation, enablement, and release evidence.
 - Related files: `backend_additions.gs`, `sandbox_provisioning.gs`,
+  `app/src/main/java/com/example/data/AnalyticsData.kt`,
+  `app/src/main/java/com/example/data/Database.kt`,
+  `app/src/main/java/com/example/data/Repository.kt`,
+  `app/src/main/java/com/example/ui/InsightsScreen.kt`,
   `tests/backend_corrections_test.js`,
   `tests/sandbox_provisioning_test.js`, `docs/ARCHITECTURE.md`
 

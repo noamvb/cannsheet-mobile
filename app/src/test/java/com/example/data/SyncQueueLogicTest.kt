@@ -109,4 +109,124 @@ class SyncQueueLogicTest {
         assertEquals(1, plan.rejectedFinishActionCount)
         assertTrue(plan.finishCapabilityMissing)
     }
+
+    @Test
+    fun correctionAckRequiresExactSentActionAndTargetPair() {
+        val correctionSnapshot = QueuedSyncSnapshot(
+            purchaseActionIds = emptySet(),
+            consumptionEventIds = emptySet(),
+            correctionActionIdByTargetEventId = mapOf("event-1" to "action-1"),
+        )
+        val response = SyncResponse(
+            success = true,
+            apiVersion = 2,
+            correctionVersion = 1,
+            correctionWritesEnabled = true,
+            acknowledgedConsumptionCorrections = listOf(
+                AcknowledgedConsumptionCorrection("action-1", "event-1", 1, "committed"),
+                AcknowledgedConsumptionCorrection("different-action", "event-1", 1, "committed"),
+                AcknowledgedConsumptionCorrection("action-1", "different-event", 1, "duplicate"),
+            ),
+            rejectedConsumptionCorrections = emptyList(),
+        )
+
+        val plan = buildAcknowledgementPlan(correctionSnapshot, response)
+
+        assertEquals(
+            setOf(ConsumptionCorrectionIdentity("action-1", "event-1")),
+            plan.acknowledgedConsumptionCorrections,
+        )
+        assertFalse(plan.correctionCapabilityMissing)
+        assertTrue(plan.requestWasAudited)
+    }
+
+    @Test
+    fun nonmatchingCorrectionAckDoesNotAcknowledgeQueuedCorrection() {
+        val correctionSnapshot = QueuedSyncSnapshot(
+            purchaseActionIds = emptySet(),
+            consumptionEventIds = emptySet(),
+            correctionActionIdByTargetEventId = mapOf("event-1" to "action-new"),
+        )
+        val response = SyncResponse(
+            success = true,
+            apiVersion = 2,
+            correctionVersion = 1,
+            correctionWritesEnabled = true,
+            acknowledgedConsumptionCorrections = listOf(
+                AcknowledgedConsumptionCorrection("action-old", "event-1", 1, "duplicate"),
+            ),
+            rejectedConsumptionCorrections = emptyList(),
+        )
+
+        val plan = buildAcknowledgementPlan(correctionSnapshot, response)
+
+        assertTrue(plan.acknowledgedConsumptionCorrections.isEmpty())
+        assertFalse(plan.hasAcknowledgements)
+    }
+
+    @Test
+    fun structuredCorrectionRejectionsRemainAvailableWithoutAcknowledgement() {
+        val correctionSnapshot = QueuedSyncSnapshot(
+            purchaseActionIds = emptySet(),
+            consumptionEventIds = emptySet(),
+            correctionActionIdByTargetEventId = mapOf(
+                "event-conflict" to "action-conflict",
+                "event-reopen" to "action-reopen",
+            ),
+        )
+        val conflict = RejectedConsumptionCorrection(
+            actionId = "action-conflict",
+            targetEventId = "event-conflict",
+            errorCode = "CORRECTION_CONFLICT",
+            message = "The entry has a newer revision",
+            currentHeadId = "head-current",
+        )
+        val reopen = RejectedConsumptionCorrection(
+            actionId = "action-reopen",
+            targetEventId = "event-reopen",
+            errorCode = "REOPEN_NOT_SAFE",
+            message = "The product cannot be reopened safely",
+            currentHeadId = "head-reopen",
+        )
+        val response = SyncResponse(
+            success = true,
+            apiVersion = 2,
+            correctionVersion = 1,
+            correctionWritesEnabled = true,
+            acknowledgedConsumptionCorrections = emptyList(),
+            rejectedConsumptionCorrections = listOf(conflict, reopen),
+        )
+
+        val plan = buildAcknowledgementPlan(correctionSnapshot, response)
+
+        assertEquals(listOf(conflict, reopen), plan.rejectedConsumptionCorrections)
+        assertEquals("head-current", plan.rejectedConsumptionCorrections.first().currentHeadId)
+        assertTrue(plan.acknowledgedConsumptionCorrections.isEmpty())
+        assertTrue(plan.hasRejections)
+    }
+
+    @Test
+    fun payloadFingerprintIsStableForRetryButChangesWithRemainingPayload() {
+        val first = QueuedSyncSnapshot(
+            purchaseActionIds = setOf("purchase-2", "purchase-1"),
+            consumptionEventIds = setOf("event-2", "event-1"),
+            correctionActionIdByTargetEventId = mapOf(
+                "target-2" to "action-2",
+                "target-1" to "action-1",
+            ),
+        )
+        val retry = first.copy(
+            purchaseActionIds = first.purchaseActionIds.reversed().toSet(),
+            consumptionEventIds = first.consumptionEventIds.reversed().toSet(),
+            correctionActionIdByTargetEventId =
+                first.correctionActionIdByTargetEventId.entries.reversed().associate { it.toPair() },
+        )
+        val remaining = first.copy(
+            purchaseActionIds = setOf("purchase-2"),
+            correctionActionIdByTargetEventId = mapOf("target-2" to "action-2"),
+        )
+
+        assertEquals(first.payloadFingerprint(), retry.payloadFingerprint())
+        assertFalse(first.payloadFingerprint() == remaining.payloadFingerprint())
+    }
 }

@@ -427,6 +427,110 @@ class DatabaseMigrationTest {
         version8.close()
     }
 
+    @Test
+    fun migrationFrom8To9PreservesDataAndAddsDurableCorrectionQueue() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version8 = factory.create(configuration(8, object : SupportSQLiteOpenHelper.Callback(8) {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL)")
+                db.execSQL(
+                    """
+                    CREATE TABLE sync_request_state (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        requestId TEXT NOT NULL,
+                        createdAtEpochMillis INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL("INSERT INTO products VALUES ('p1', 'Keep me')")
+                db.execSQL(
+                    "INSERT INTO sync_request_state VALUES " +
+                        "(1, '50000000-0000-4000-8000-000000000001', 123456)",
+                )
+            }
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }))
+        version8.writableDatabase
+        version8.close()
+
+        val version9 = factory.create(configuration(9, object : SupportSQLiteOpenHelper.Callback(9) {
+            override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                AppDatabase.MIGRATION_8_9.migrate(db)
+            }
+        }))
+        val migrated = version9.writableDatabase
+
+        migrated.query("SELECT name FROM products WHERE id = 'p1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Keep me", cursor.getString(0))
+        }
+        migrated.query(
+            "SELECT requestId, payloadFingerprint FROM sync_request_state WHERE id = 1",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("50000000-0000-4000-8000-000000000001", cursor.getString(0))
+            assertEquals("", cursor.getString(1))
+        }
+        migrated.execSQL(
+            """
+            INSERT INTO pending_consumption_corrections (
+                targetEventId,
+                actionId,
+                expectedCorrectionHeadId,
+                operation,
+                reopenProduct,
+                reason,
+                replacementDate,
+                replacementTime,
+                replacementProductUuid,
+                replacementProductId,
+                replacementUses,
+                replacementWeightCode,
+                replacementFinished
+            ) VALUES (
+                '10000000-0000-4000-8000-000000000001',
+                '20000000-0000-4000-8000-000000000001',
+                '',
+                'REPLACE',
+                0,
+                'Correct quantity',
+                '2026-07-28',
+                '20:15:00',
+                '40000000-0000-4000-8000-000000000001',
+                '*P1',
+                2.0,
+                '',
+                0
+            )
+            """.trimIndent(),
+        )
+        migrated.query(
+            "SELECT actionId, operation, replacementWeightCode " +
+                "FROM pending_consumption_corrections " +
+                "WHERE targetEventId = '10000000-0000-4000-8000-000000000001'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("20000000-0000-4000-8000-000000000001", cursor.getString(0))
+            assertEquals("REPLACE", cursor.getString(1))
+            assertEquals("", cursor.getString(2))
+        }
+        migrated.query("PRAGMA index_list('pending_consumption_corrections')").use { cursor ->
+            val nameIndex = cursor.getColumnIndexOrThrow("name")
+            val uniqueIndex = cursor.getColumnIndexOrThrow("unique")
+            var foundUniqueActionIndex = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(nameIndex) == "index_pending_consumption_corrections_actionId") {
+                    foundUniqueActionIndex = cursor.getInt(uniqueIndex) == 1
+                }
+            }
+            assertTrue(foundUniqueActionIndex)
+        }
+        version9.close()
+    }
+
     private fun configuration(
         version: Int,
         callback: SupportSQLiteOpenHelper.Callback,

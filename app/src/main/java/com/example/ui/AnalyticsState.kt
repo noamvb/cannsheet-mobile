@@ -8,12 +8,14 @@ import com.example.data.HistoryFilters
 import com.example.data.HistoryResponseDto
 import com.example.data.InsightsRange
 import com.example.data.InsightsResponseDto
+import com.example.data.MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -56,6 +58,127 @@ data class HistoryUiState(
     val error: AnalyticsUiError? = null,
     val appendError: AnalyticsUiError? = null,
 )
+
+/**
+ * A user-entered correction before it is given a durable action ID and queued.
+ *
+ * Keeping this separate from the Room entity means the History UI can validate
+ * the user's choices without ever treating an in-progress edit as committed.
+ */
+data class HistoryCorrectionDraft(
+    val targetEventId: String,
+    val expectedHeadId: String?,
+    val operation: HistoryCorrectionOperation,
+    val replacementDate: String? = null,
+    val replacementTime: String? = null,
+    val replacementProductId: String? = null,
+    val replacementProductUuid: String? = null,
+    val replacementQuantity: Double? = null,
+    val replacementFinished: Boolean? = null,
+    val reopenProduct: Boolean = false,
+    val reason: String? = null,
+)
+
+enum class HistoryCorrectionOperation {
+    REPLACE,
+    VOID,
+    RESTORE,
+}
+
+data class HistoryCorrectionUiState(
+    val queuedTargetIds: Set<String> = emptySet(),
+    val status: String? = null,
+    val statusTargetEventId: String? = null,
+)
+
+data class HistoryCorrectionFeedback(
+    val targetEventId: String,
+    val message: String,
+)
+
+data class HistoryCorrectionAvailability(
+    val canCorrect: Boolean,
+    val canVoid: Boolean,
+    val canRestore: Boolean,
+    val reason: String? = null,
+)
+
+/**
+ * Corrections are deliberately restricted to a current server snapshot. A
+ * cached page can be useful to read, but its correction head can be stale.
+ */
+fun historyCorrectionAvailability(
+    state: HistoryUiState,
+    event: HistoryEventDto,
+    queuedTargetIds: Set<String>,
+): HistoryCorrectionAvailability {
+    val disabledReason = when {
+        event.eventUuid in queuedTargetIds ->
+            "A correction for this entry is already queued. Wait for it to sync before making another change."
+        state.isFromCache || state.isStale || state.response == null || !state.hasFreshCursor ->
+            "Refresh History before editing so this entry is current."
+        state.response.correctionVersion < 1 ->
+            "This server does not support history corrections yet."
+        !state.response.correctionWritesEnabled ->
+            "History corrections are not enabled on this server yet."
+        else -> null
+    }
+    if (disabledReason != null) {
+        return HistoryCorrectionAvailability(false, false, false, disabledReason)
+    }
+    val isVoided = event.lifecycleState == "VOIDED"
+    return HistoryCorrectionAvailability(
+        canCorrect = !isVoided,
+        canVoid = !isVoided,
+        canRestore = isVoided,
+    )
+}
+
+fun correctionRejectionMessage(code: String, fallback: String? = null): String = when (code) {
+    "CORRECTION_CONFLICT" ->
+        "This entry changed elsewhere. Refresh History before trying again."
+    "REOPEN_NOT_SAFE" ->
+        "This product cannot be reopened safely, so the correction was not accepted."
+    "BACKEND_UPDATE_REQUIRED", "CORRECTION_WRITES_DISABLED" ->
+        "History corrections are not enabled on this server yet."
+    else -> fallback ?: "This correction was not accepted. It is still saved locally for review."
+}
+
+fun isCorrectionDraftValid(draft: HistoryCorrectionDraft): Boolean {
+    val identityValid = isUuid(draft.targetEventId) &&
+        (draft.expectedHeadId == null || isUuid(draft.expectedHeadId))
+    return identityValid && when (draft.operation) {
+        HistoryCorrectionOperation.REPLACE ->
+            isCorrectionDate(draft.replacementDate) &&
+            draft.replacementTime?.matches(Regex("""(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?""")) == true &&
+            !draft.replacementProductId.isNullOrBlank() &&
+            draft.replacementProductUuid?.let(::isUuid) == true &&
+            draft.replacementQuantity?.let { it.isFinite() && it > 0.0 } == true &&
+            draft.replacementFinished != null &&
+            (draft.reason?.length ?: 0) <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
+        HistoryCorrectionOperation.VOID,
+        HistoryCorrectionOperation.RESTORE,
+        -> (draft.reason?.length ?: 0) <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
+    }
+}
+
+private fun isUuid(value: String): Boolean = runCatching {
+    UUID.fromString(value).toString().equals(value, ignoreCase = true)
+}.getOrDefault(false)
+
+private fun isCorrectionDate(value: String?): Boolean = value?.let { date ->
+    if (!date.matches(Regex("""\d{4}-\d{2}-\d{2}"""))) return@let false
+    runCatching {
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }.parse(date)
+    }.isSuccess
+} ?: false
+
+fun canOfferProductReopen(
+    event: HistoryEventDto,
+    replacementProductId: String,
+    replacementFinished: Boolean,
+): Boolean = event.reopenEligible && event.finished &&
+    (!replacementFinished || replacementProductId != event.productId)
 
 class AnalyticsCoordinator(
     private val repository: AnalyticsDataSource,
