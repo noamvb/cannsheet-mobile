@@ -5,26 +5,26 @@ Last updated: 2026-07-30
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/release-v1.2.17`
-- Branch base and `origin/main`:
-  `71136ae8faa39a2032a05590adfbca137540f57b`
-- Released source tag `v1.2.16`:
-  `7ee3f3a6995475c25addc712259cc44f8530b7a0`
-- Release-candidate metadata in `app/build.gradle.kts`: version name `1.2.17`,
-  version code `20`, proposed by
-  [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)
-- The public signed release is published to
-  `noamvb/cannsheet-mobile-releases` under tag
-  [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16);
-  v1.2.17 has not yet been tagged or published.
-- The Android History-correction milestone was merged through
-  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and its first
-  production-rollout hardening was merged through
-  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21) and
-  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), followed by the
-  bounded typed-column fallback in
-  [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23). These milestones
-  have not been included in a signed release.
+- Current documentation follow-up branch: `codex/handoff-v1.2.17`
+- Current `origin/main` and released source tag `v1.2.17`:
+  `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.17`,
+  version code `20`
+- Release [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)
+  was squash-merged after its required validation passed.
+- The public signed release is
+  [Cannsheet Mobile 1.2.17](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.17).
+  It contains exactly `Cannsheet-Mobile-1.2.17.apk` and
+  `Cannsheet-Mobile-1.2.17.apk.sha256`.
+- Public APK SHA-256:
+  `8ffa67a223963459e8b5bd71a4f186e26cb7cacf84468121ad20d6dcecd5e938`
+- The editable History milestone was delivered through backend
+  [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and production
+  rollout hardening
+  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21),
+  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
+  [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
 
 ## Project summary
 
@@ -35,215 +35,120 @@ Script web app whose checked-in source reads and writes Google Sheets.
 
 ## Verified implemented areas
 
-Repository code and tests show:
+Repository code and validation show:
 
-- Tiered GitHub Actions validation workflow (`.github/workflows/android-pr-checks.yml`) with fail-safe path classification (`classify`), dedicated backend testing (`backend`), Android static checks (`android-static`), API 24/36 emulator matrix (`emulator`), reusable AVD snapshot caching (`cannsheet-avd-v1`), security scanning, and required aggregation job (`Cannsheet Android PR validation`).
-- Restructured release workflow (`.github/workflows/release-apk.yml`) with exact-SHA main validation proof (`confirm-main-validation`), signed build verification (`verify`) using `--no-configuration-cache`, version code monotonicity checks, publication asset verification, and post-publication validation (`publish`) without overwrite (`--clobber`).
-- Custom adaptive app icon with dark emerald background grid, botanical/sheet emblem, and Android 13+ Material You monochrome themed icon support (`ic_launcher_monochrome.xml`).
-- Compose screens for logging consumption and purchases, viewing Insights and
-  History, and changing settings.
-- Purchase screen date picker UTC date formatting (`pickerDateToWire`, `parsePickerDateToMillis`) preventing one-day date shifts in negative-offset timezones.
-- Personal and borrowed-product consumption logging.
-- Standalone product-finish actions.
-- A user-visible cancellation countdown before queued actions are submitted.
-- Room-backed offline queues for purchases, consumption events, and finish
-  actions.
-- Acknowledgement-based queue deletion, duplicate-safe response handling,
-  persisted sync request identity, and production/sandbox environment checks.
-- Server-backed product refresh that restores pending purchases, reapplies
-  queued finish state, and merges newer product interaction data.
+- Tiered GitHub Actions validation with repository/security classification,
+  backend tests, Android static checks, API 24/36 emulator coverage, and the
+  required `Cannsheet Android PR validation` aggregate.
+- A tag-triggered signed release workflow with exact-main validation,
+  version-code monotonicity checks, APK signing verification, checksum
+  generation, public asset verification, and overwrite protection.
+- Compose screens for logging purchases and consumption, viewing Insights and
+  History, editing eligible History entries, and changing settings.
+- Room-backed offline queues for purchases, consumption, finish actions, and
+  consumption corrections.
+- Stable request/action IDs, acknowledgement-based queue deletion,
+  duplicate-safe retry handling, persisted request identity, and
+  production/sandbox environment checks.
 - Versioned Insights and History responses, Room analytics caching, pagination,
   stale-cursor handling, and data-quality warnings.
-- DataStore-backed quick-log quantity presets and the unopened-product setting.
-- Quick-log preset boundary rules covered by fast JVM tests, with one focused
-  Compose add-and-save smoke test using stable test tags instead of text-field
-  ordering or visible labels.
-- A sandbox Android build type with a separate application ID suffix and a
-  Gradle task that validates its local endpoint before sandbox builds.
-- Fake Apps Script/Sheets runtimes and regression suites for backend contracts,
-  spreadsheet writes, recovery, analytics, and sandbox helpers.
-- Android JVM and instrumentation tests for data, migration, queue, coordinator,
-  helper, and Compose UI behavior.
+- Correct, Void, Restore, optional correction reasons, safe product reopening,
+  and explicit cancellation of pending corrections.
+- A forward-only Room 8-to-9 migration and safe legacy defaults for the
+  correction-aware version-2 network contract.
+- A sandbox Android build type and fake Apps Script/Sheets runtimes for backend,
+  spreadsheet, recovery, analytics, and provisioning regression coverage.
 
-These statements describe checked-in implementation, not a fresh live-service
-or device verification.
+## Production correction state
 
-## Current correction milestone
+- Production provisioning and full recoverable reconciliation completed from
+  the merge-verified PR #23 source.
+- The existing production Apps Script deployment was updated in place to
+  version 12.
+- The public production endpoint reports API version 2, production environment,
+  correction schema version 1, and correction writes enabled.
+- Reconciliation was clean immediately before and after provisioning and before
+  write enablement: no pending apply, incomplete journal, reported difference,
+  or blocking difference.
+- Production row counts are deliberately not recorded as durable expectations
+  because ordinary app entries continued during rollout.
+- The correction sheet remained exact-header and otherwise empty during
+  rollout. Codex did not send a valid production correction request.
 
-Merged backend
-[PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) provides:
+## Release and validation status
 
-- an append-only `ConsumptionEventCorrections` schema and the `REPLACE`, `VOID`,
-  and `RESTORE` correction protocol;
-- stable correction IDs, expected-head conflict checks, exact duplicate
-  acknowledgement, content-conflict rejection, and safe product-reopen checks;
-- correction-aware effective events for both legacy and current
-  Insights/History reads, including audit metadata and correction-aware stale
-  cursors;
-- durable journal, recovery, and reconciliation coverage for correction writes;
-- disabled-first production provisioning and sandbox provisioning that validates
-  environment, spreadsheet, form, and Config identity before any mutation; and
-- focused fake-runtime, regression, scale, recovery, and provisioning tests,
-  registered in backend-only CI; and
-- canonical-time parsing for version-2 consumption, finish, and correction
-  wall-clock values, independent of the execution host's timezone;
-- strict rejection of nonexistent correction replacement wall times; and
-- lock-held refresh of the independently controlled correction write gate.
+Private-source evidence:
 
-The current Android branch adds:
+- PR #24 head `e69df9dcb6da90ad1431cc8350b03223ba374d17`
+  passed required PR workflow run
+  [30513183284](https://github.com/noamvb/cannsheet-mobile/actions/runs/30513183284):
+  classification/security, backend validation, Android static validation,
+  API 24 emulator, and aggregate validation.
+- Exact merged-main commit
+  `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3` passed push workflow run
+  [30513760246](https://github.com/noamvb/cannsheet-mobile/actions/runs/30513760246):
+  classification/security, backend validation, Android static validation,
+  API 24, API 36, and aggregate validation.
 
-- a forward-only Room 8-to-9 migration and durable pending-correction queue;
-- stable correction/action IDs, unchanged-payload request-ID reuse, and exact
-  action/target acknowledgement deletion;
-- version-2 correction sync and History contracts with safe legacy defaults;
-- fresh-server and capability gates that prevent editing cached, stale, or
-  already-pending entries;
-- user-facing Correct, Void, Restore, optional reason, safe product-reopen, and
-  explicit pending-correction cancellation flows; and
-- lifecycle and revision details in History while leaving the full append-only
-  audit on the backend instead of adding it to every paginated cache response.
+Signed-publication evidence:
 
-## Partial areas and known limitations
+- Tag `v1.2.17` resolves to the exact merged-main commit above.
+- Signed release workflow run
+  [30514059622](https://github.com/noamvb/cannsheet-mobile/actions/runs/30514059622)
+  passed tag/main/version checks, tests, lint, signed build, signature
+  verification, checksum generation, publication, and post-publication
+  verification.
+- The public release contains exactly one APK (13,241,161 bytes) and its
+  `.sha256` file.
+
+Independent public-artifact evidence:
+
+- The downloaded checksum file matched the APK:
+  `8ffa67a223963459e8b5bd71a4f186e26cb7cacf84468121ad20d6dcecd5e938`.
+- Android `aapt` reported application ID `com.noamv.cannsheet.mobile`,
+  version code `20`, and version name `1.2.17`.
+- Android `apksigner` verified APK Signature Scheme v2 with one signer.
+- Signing certificate SHA-256:
+  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`
+
+Local and device evidence:
+
+- One isolated local Gradle run failed before tests executed with
+  `GeneratedClassCompilationException: Unable to compile generated classes`;
+  no passing local build or test result is claimed.
+- No physical-device installation, Obtainium update, screenshot, recording, or
+  end-to-end correction action using the released APK was performed.
+
+## Known limitations
 
 - `app/src/main/res/xml/backup_rules.xml` and
   `app/src/main/res/xml/data_extraction_rules.xml` remain sample/template rules;
   the latter contains a backup-selection TODO.
-- The Kotlin namespace remains `com.example` while the Android application ID is
-  `com.noamv.cannsheet.mobile`; `README.md` documents this as an intentional
+- The Kotlin namespace remains `com.example` while the application ID is
+  `com.noamv.cannsheet.mobile`; `README.md` records this as an intentional
   source-layout compatibility choice.
-- Device/emulator behavior and Android instrumentation tests require an
-  available Android device or emulator and are not covered by ordinary JVM
-  tests.
-- Live Apps Script deployment, trigger, spreadsheet-schema, and production-data
-  state cannot be established from the checkout alone.
-- Backend behavior is concentrated in the large `backend_additions.gs` file and
-  covered by fake-runtime tests. Live Apps Script and spreadsheet behavior still
-  requires separate validation.
-- The currently published v1.2.16 APK cannot create or queue consumption
-  corrections. The Android controls are merged on `main`, and the production
-  backend now exposes correction schema version `1` with writes enabled.
-- The correction schema is provisioned and correction writes are enabled in the
-  isolated live sandbox.
-- Historical production rollout sequence: on 2026-07-29,
-  after identity checks and a fresh workbook backup, the first provisioning
-  attempt created an empty, exact-header `ConsumptionEventCorrections` sheet and
-  set schema version `1` with correction writes `false`. It then stopped when
-  Google Sheets rejected cosmetic formatting on the typed `Purchases` header.
-- The post-failure recoverable reconciliation snapshot was clean: no pending
-  apply, no incomplete journal, and no reported differences or blocking
-  differences. Its observed row counts are deliberately not recorded as future
-  expectations because ordinary production entries continue during rollout.
-  The editor source was restored exactly to its pre-attempt content, and the
-  existing production deployment remained unchanged at version 11.
-- PR #21 merged the focused typed-header formatting fix and added the full
-  recoverable reconciliation as an enablement gate. The first post-merge retry
-  passed that operation, then stopped when Google Sheets also rejected
-  reapplying `setFrozenRows(1)` to the typed `Purchases` table. Live metadata
-  confirms that table already has one frozen row.
-- After the second contained failure, the editor source was again restored
-  exactly, the correction sheet remained header-only, schema version remained
-  `1`, writes remained `false`, and a fresh full reconciliation remained clean.
-- PR #22 merged exact Advanced Sheets table detection before the cosmetic
-  header operations. Read-only live probes subsequently proved that the exact
-  helper, sheet name, sheet ID, and table predicate all identify `Purchases` as
-  table-backed.
-- Despite that proof, two exact-source PR #22 provisioning attempts stopped at
-  the same shared cosmetic header-formatting line. The final controlled attempt
-  followed `cloud_done`, complete editor read-back and hash verification, and a
-  fresh clean reconciliation. No additional retry was made.
-- After the final contained failure, the editor was restored exactly to the
-  captured rollback source, the correction sheet remained header-only, schema
-  version remained `1`, writes remained `false`, and a fresh full
-  reconciliation again reported no pending apply, incomplete journal,
-  difference, or blocking difference. The public deployment remains version 11
-  and no valid production correction request was sent.
-- The current focused follow-up handles only the exact Google typed-column
-  restriction around cosmetic styling and frozen-row setup. Validation,
-  protection, schema, configuration, and reconciliation failures remain fatal.
-  After PR #23, production provisioning and reconciliation completed, the
-  existing deployment was updated in place to version 12, and correction
-  writes were enabled.
-
-## Current validation status
-
-The backend foundation is merged at `621f980`. Final PR run `30499192644`
-passed all five required checks. Live sandbox verification then proved:
-
-- Apps Script deployment version 13 with environment `SANDBOX`, analytics API
-  version 2, correction schema version 1, and correction writes enabled;
-- one `VOID` committed once and returned `duplicate` on identical retry;
-- History exposed the resulting lifecycle, head, and audit revision;
-- `resetSandboxData()` restored the five seeded original events; and
-- a production-labelled request was rejected with `ENVIRONMENT_MISMATCH`.
-
-Cosmetic-fallback branch evidence:
-
-- the focused correction regression suite passes, including a protected
-  non-`Purchases` typed-header restriction and a frozen-row-only restriction;
-- recovery, fake batch-update, Apps Script syntax, and diff-whitespace checks
-  each pass once on the final source; and
-- independent Sol/high design and Terra/medium verification found no remaining
-  P0, P1, or P2 issue.
-
-Android branch evidence:
-
-- generated JVM XML reports cover 49 tests with zero failures, errors, or
-  skips, including the new mapping, queue, retry, and History helper tests;
-- the Gradle wrapper timed out before returning its final exit code, so the XML
-  reports are evidence but the command itself is not recorded as successful;
-- independent Terra/medium review found no P0 or P1 correctness issue;
-- a second focused architecture review found and removed unconditional audit
-  overfetch from paginated History; and
-- `git -c core.fsmonitor=false diff --check` currently exits successfully.
-
-Draft PR #20 run `30503688027` passed repository/security classification,
-backend validation, Android JVM tests, instrumentation compilation, lint, debug
-APK assembly, and artifact upload. Its API 24 emulator ran 22 instrumentation
-tests: 20 passed, while two `HistoryContentTest` assertions failed because they
-checked details and buttons below the visible area of the new scrollable sheet.
-Follow-up run `30504243649` proved that Compose could scroll to the nodes, but
-Material's modal-sheet clipping still did not satisfy the stronger
-`assertIsDisplayed()` geometry check. The final approved test-only adjustment
-keeps the visible timestamp assertion, verifies lower details exist, and
-verifies Correct/Void exist with click actions. Run `30505232031` then stopped
-at instrumentation-test compilation because `assertExists` was imported as an
-extension even though this Compose version exposes it as a
-`SemanticsNodeInteraction` member. The approved one-line import removal still
-required one more CI run; that follow-up passed and PR #20 was subsequently
-merged at `434d004`.
-
-Not yet performed:
-
-- successful completion of production correction provisioning;
-- a new production backend deployment, disabled-state endpoint verification,
-  correction write enablement, or post-enable verification;
-- a physical-device visual check, screenshot/recording, or live-sandbox APK
-  installation; and
-- signed APK preparation or publication for this feature.
+- The public APK is independently verified as update-compatible by package,
+  higher version code, and signing certificate, but an actual in-place phone
+  installation has not been observed in this release session.
+- The first real production correction lifecycle still requires a deliberate
+  user/device check; no synthetic production correction was created for testing.
 
 ## Current priorities
 
-Complete the focused cosmetic-fallback implementation and regression coverage,
-obtain independent review, and require green CI on the exact final PR head
-before merge. Retry idempotent production provisioning once only from that
-merge-verified and save-verified source, read fresh reconciliation state,
-update the existing deployment in place, and verify the public endpoint while
-writes are still disabled. Enable writes only after the second clean
-reconciliation. Release remains a separate approval gate.
+1. Install or update to v1.2.17 on the intended phone, preferably through
+   Obtainium.
+2. Perform one controlled Correct, Void, and Restore workflow on an eligible
+   History entry and confirm the resulting History state after synchronization.
+3. Record device results in `docs/HANDOFF.md` if they become available.
 
 ## Unresolved questions
 
-- Which protected header causes the live typed-column cosmetic restriction even
-  though the exact `Purchases` table predicate is true?
-- Will the exact-error cosmetic fallback complete idempotent provisioning
-  against the current production sheet layout?
-- Will fresh production reconciliation remain clean immediately before
-  correction writes are enabled?
-- Which supported physical Android device will be used for the final correction
-  workflow check?
+- Does Obtainium detect and install v1.2.17 in place on the intended phone?
+- Does the first real device correction lifecycle remain clear and reliable
+  against the live production backend?
 
-These require external or device evidence and should not be answered from this
-document alone.
+These require device evidence and should not be answered from repository or
+workflow evidence alone.
 
 ## Relevant paths
 
@@ -251,15 +156,9 @@ document alone.
 - `app/src/main/java/com/example/data`
 - `app/src/test`
 - `app/src/androidTest`
-- `app/src/androidTest/java/com/example/ui/QuickLogQuantityEditorTest.kt`
-- `tests`
 - `tests/backend_corrections_test.js`
 - `backend_additions.gs`
 - `sandbox_provisioning.gs`
 - `app/build.gradle.kts`
 - `.github/workflows`
-- `BACKEND_ANALYTICS_REPORT.md`
-- `BACKEND_SYNC_PERFORMANCE_REPORT.md`
-- `AGENTS.md`
-- `GEMINI.md`
-- `.agents/skills/project-handoff/SKILL.md`
+- `docs/HANDOFF.md`
