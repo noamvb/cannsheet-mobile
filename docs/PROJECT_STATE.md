@@ -5,9 +5,11 @@ Last updated: 2026-07-30
 ## Repository state
 
 - Canonical branch: `main`
-- Current documentation follow-up branch: `codex/handoff-v1.2.17`
-- Current `origin/main` and released source tag `v1.2.17`:
+- Released source commit and tag `v1.2.17`:
   `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3`
+- Documentation follow-up
+  [PR #25](https://github.com/noamvb/cannsheet-mobile/pull/25) merged after
+  publication without moving the release tag.
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.17`,
   version code `20`
 - Release [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)

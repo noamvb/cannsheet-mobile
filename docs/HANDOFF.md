@@ -31,6 +31,9 @@ device state.
 - Signed workflow run
   [30514059622](https://github.com/noamvb/cannsheet-mobile/actions/runs/30514059622)
   published [Cannsheet Mobile 1.2.17](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.17).
+- Documentation follow-up
+  [PR #25](https://github.com/noamvb/cannsheet-mobile/pull/25) merged after
+  publication. It updated shared context without moving the release tag.
 
 ## Files and artifacts
 
@@ -58,12 +61,13 @@ checkout.
 
 ### Private source
 
-- `origin/main` and tag `v1.2.17` resolve to
+- Release tag `v1.2.17` resolves to release commit
   `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3`.
 - `app/build.gradle.kts` contains version name `1.2.17` and version code `20`.
-- The documentation follow-up branch was initially clean. At the time this
-  handoff was written, the two documentation files above were modified and
-  unstaged; no unrelated or untracked task file was present.
+- PR #25 merged the evidence-focused documentation after the release commit;
+  that later documentation commit does not change what `v1.2.17` identifies.
+- No unrelated or untracked task file was present during the documentation
+  updates.
 
 ### Production backend
 
@@ -105,6 +109,16 @@ checkout.
   passed exact tag/main/version checks, unit tests, lint, version monotonicity,
   keystore restoration, signed APK build, signature verification, checksum
   generation, publication, and post-publication verification.
+- PR #25 used docs-only head `a05f0407273c79d23edf0c2d879ec44f9b0358a3`.
+  Its PR run
+  [30514663357](https://github.com/noamvb/cannsheet-mobile/actions/runs/30514663357)
+  passed classification/security and aggregate validation while correctly
+  skipping backend, Android, and emulator jobs.
+- Its subsequent automatic main run
+  [30514696023](https://github.com/noamvb/cannsheet-mobile/actions/runs/30514696023)
+  passed classification/security, backend, Android static, API 24, API 36, and
+  aggregate validation at docs commit
+  `7cd31c6b97b874a6972c9eb855ace11e4cdd3b7e`.
 
 ### Passing independent public-artifact evidence
 
