@@ -1,29 +1,32 @@
 # Latest handoff
 
-Last updated: 2026-07-29
+Last updated: 2026-07-30
 
-Branch: `codex/typed-column-cosmetic-fallback`
+Branch: `codex/release-v1.2.17`
 
 Repository position:
 
 - `origin/main` is
-  `76638fb8d84ef38f0c24f39fd2e4c12cca0efe6e`, the squash merge of focused
-  [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22);
+  `71136ae8faa39a2032a05590adfbca137540f57b`, the squash merge of focused
+  [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23);
 - [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21) skips
   unsupported cosmetic formatting on the typed `Purchases` header and requires
   a full recoverable reconciliation before correction writes can be enabled;
 - PR #22 adds exact Advanced Sheets table detection before the header
   formatting/frozen-row operations;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
-- version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
+- release-candidate [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)
+  changes the source metadata to `versionName` `1.2.17`, `versionCode` `20`,
+  while the published release remains v1.2.16.
 
-The Android implementation, PR #21, and PR #22 are merged. Exact-source
-production retries still exposed a typed-column restriction in the shared
-cosmetic header path and were contained as described below. Production remains
-in an additive, disabled-only partial state and its deployment is unchanged. No
-version change, tag, signed APK, or publication has been made.
+The Android implementation and rollout-hardening PRs #21 through #23 are
+merged. Production provisioning and reconciliation completed successfully,
+deployment version 12 is live at the existing URL, and the public endpoint
+reports correction schema version 1 with correction writes enabled. The
+v1.2.17 source version change is pending in PR #24; no v1.2.17 tag, signed APK,
+or publication has been made.
 
-Approximate delivery position: 97% toward a downloadable updated APK. CI built
+Approximate delivery position: 99% toward a downloadable updated APK. CI built
 and uploaded a temporary debug APK, but no signed installable update has been
 prepared.
 
@@ -198,9 +201,10 @@ Modified tracked files:
 - `docs/HANDOFF.md`
 - `docs/PROJECT_STATE.md`
 
-There are no task-related untracked files. No Android source, version, endpoint,
-application ID, namespace/package, signing, credential, secret, workflow, or
-release file is changed on this focused branch.
+There are no task-related untracked files. This focused release branch changes
+only the two version fields in `app/build.gradle.kts` plus these shared-context
+documents. No Android source, endpoint, application ID, namespace/package,
+signing, credential, secret, or workflow file is changed.
 
 ## Validation performed
 
@@ -284,9 +288,9 @@ was added for the final parent validation.
   credit limit was reached, so it was not retried or worked around.
 - The full backend test matrix was not repeated during the Android milestone;
   backend PR CI and the completed live sandbox proof are the relevant evidence.
-- Production validation stopped after the final contained exact-source
-  provisioning failure described above. No successful production provisioning,
-  deployment, enablement validation, or release validation has been completed.
+- No v1.2.17 release validation has been completed yet. Production
+  provisioning, reconciliation, deployment version 12, and correction-write
+  enablement were subsequently completed after PR #23.
 
 ## Independent review findings and residual risks
 
