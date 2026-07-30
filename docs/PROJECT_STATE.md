@@ -15,8 +15,10 @@ Last updated: 2026-07-29
 - The public signed release is published to
   `noamvb/cannsheet-mobile-releases` under tag
   [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
-- The current working tree contains an uncommitted Android History-correction
-  milestone. It has not been pushed, opened as a pull request, or released.
+- The Android History-correction milestone is committed and pushed on the
+  current branch in draft
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20). It has not been
+  merged or released.
 
 ## Project summary
 
@@ -82,7 +84,7 @@ Merged backend
 - strict rejection of nonexistent correction replacement wall times; and
 - lock-held refresh of the independently controlled correction write gate.
 
-The current Android working tree adds:
+The current Android branch adds:
 
 - a forward-only Room 8-to-9 migration and durable pending-correction queue;
 - stable correction/action IDs, unchanged-payload request-ID reuse, and exact
@@ -129,7 +131,7 @@ passed all five required checks. Live sandbox verification then proved:
 - `resetSandboxData()` restored the five seeded original events; and
 - a production-labelled request was rejected with `ENVIRONMENT_MISMATCH`.
 
-Android working-tree evidence:
+Android branch evidence:
 
 - generated JVM XML reports cover 49 tests with zero failures, errors, or
   skips, including the new mapping, queue, retry, and History helper tests;
@@ -140,19 +142,27 @@ Android working-tree evidence:
   overfetch from paginated History; and
 - `git -c core.fsmonitor=false diff --check` currently exits successfully.
 
+Draft PR #20 run `30503688027` passed repository/security classification,
+backend validation, Android JVM tests, instrumentation compilation, lint, debug
+APK assembly, and artifact upload. Its API 24 emulator ran 22 instrumentation
+tests: 20 passed, while two `HistoryContentTest` assertions failed because they
+checked details and buttons below the visible area of the new scrollable sheet.
+The approved test-only follow-up scrolls those nodes into view before asserting
+them; it still requires CI confirmation.
+
 Not yet performed:
 
 - production provisioning, reconciliation, write enablement, or deployment;
-- pull-request CI, Android lint/build, emulator/device validation, or a visual
-  screenshot/recording; and
+- a passing API 24 emulator/aggregate result after the focused test fix;
+- a physical-device visual check, screenshot/recording, or live-sandbox APK
+  installation; and
 - signed APK preparation or publication for this feature.
 
 ## Current priorities
 
-Review the complete Android diff, open the focused pull request, and use its
-single CI run for the authoritative build, lint, JVM, instrumentation, and API
-24 emulator evidence. Merge, production rollout, and release remain separate
-approval gates.
+Commit and push the approved test-only scroll fix, then use the resulting PR
+run for the authoritative API 24 emulator and aggregate evidence. Merge,
+production rollout, and release remain separate approval gates.
 
 ## Unresolved questions
 

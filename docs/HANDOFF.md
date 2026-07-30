@@ -6,22 +6,22 @@ Branch: `codex/history-corrections-android`
 
 Repository position:
 
-- `HEAD` and `origin/main` are
-  `621f9801f907dde9d5315cb5f261bbfc3407f868`;
-- that commit is the squash merge of backend
+- `origin/main` is
+  `621f9801f907dde9d5315cb5f261bbfc3407f868`, the squash merge of backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19);
+- Android commit `ffbec5a` opened draft
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and this handoff
+  accompanies its approved test-only CI follow-up;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
-Working tree status: Android implementation is uncommitted. There are 15
-modified tracked files, including the shared-context documents, and two
-untracked test files.
-Nothing is staged. No Android commit, push, pull request, merge, production
-change, version change, tag, signed APK, or publication has been made.
+The Android implementation is committed and pushed. Draft PR #20 is open.
+No merge, production change, version change, tag, signed APK, or publication
+has been made.
 
-Approximate delivery position: 80% toward a downloadable
-updated APK. This is a progress estimate, not artifact evidence; no updated APK
-has been built yet.
+Approximate delivery position: 87% toward a downloadable updated APK. CI built
+and uploaded a temporary debug APK, but no signed installable update has been
+prepared.
 
 ## Purpose of this session
 
@@ -159,6 +159,19 @@ secret, backend, workflow, or release file is changed in this Android worktree.
 - A Sol/high architecture pass confirmed there is no safe existing single-event
   audit query. It recommended keeping full audit revisions out of ordinary
   History pages until a bounded, non-caching detail endpoint exists.
+- Draft PR #20 run `30503688027` passed:
+  - repository/security classification;
+  - all backend suites;
+  - Android JVM tests and instrumentation compilation;
+  - Android lint and debug APK assembly; and
+  - debug APK artifact upload.
+- The API 24 emulator ran 22 instrumentation tests. Twenty passed. The two
+  failures were `HistoryContentTest` assertions for an event UUID and the
+  Correct button while those nodes were below the visible part of the new
+  scrollable sheet.
+- The approved follow-up uses Compose `performScrollTo()` before checking each
+  off-screen node. That method is already used by the existing instrumentation
+  suite, and the focused diff passes `git diff --check`.
 
 The Gradle invocation was:
 
@@ -180,14 +193,12 @@ was added for the final parent validation.
 
 ## Validation not performed
 
-- `assembleDebug`, `assembleSandbox`, and `lintDebug` were not run.
-- The new Room 8-to-9 instrumentation migration test was not executed on an
-  emulator/device.
-- The updated Compose `HistoryContentTest` was not executed.
-- No emulator or physical-device visual check was performed.
+- `assembleSandbox` was not run.
+- The approved `HistoryContentTest` scroll fix has not yet passed its follow-up
+  API 24 CI run.
+- No manual emulator or physical-device visual check was performed.
 - No screenshot or recording was captured for the visible UI change.
 - No Android build was installed against the live sandbox deployment.
-- No Android branch CI or pull request exists.
 - Direct local ADB/emulator discovery was blocked by local access restrictions.
   The approved elevated route was then unavailable because the Codex execution
   credit limit was reached, so it was not retried or worked around.
@@ -228,13 +239,11 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Review the complete diff, create the focused Android commit, and open a draft
-pull request. Use its one normal CI run for JVM tests, instrumentation
-compilation, lint, debug assembly, and the API 24 emulator instead of repeating
-blocked local attempts. CI should also provide a temporary debug APK artifact;
-it is validation evidence, not the signed production update. After CI passes,
-capture any remaining visual/device evidence that is practical and request the
-separate merge, production-rollout, and release approvals as needed.
+Commit and push the focused `HistoryContentTest` scroll fix, then monitor the
+one resulting PR run. Do not manually rerun already-passing jobs. If API 24 and
+the aggregate pass, update the PR validation summary and request the separate
+merge, production-rollout, and release approvals as needed. The debug artifact
+is validation evidence, not the signed production update.
 
 Do not provision or enable production and do not bump the version, tag, sign,
 or publish an APK without the user's separate approval.

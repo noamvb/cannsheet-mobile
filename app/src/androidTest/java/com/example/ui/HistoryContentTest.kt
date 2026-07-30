@@ -6,6 +6,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.example.data.DataQualityDto
 import com.example.data.HistoryEventDto
 import com.example.data.HistoryFilters
@@ -53,7 +54,9 @@ class HistoryContentTest {
 
         composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
         composeRule.onNode(hasText("2026-07-18 13:30:00 · Toronto time")).assertIsDisplayed()
-        composeRule.onNode(hasText("Event UUID: ${event.eventUuid}")).assertIsDisplayed()
+        composeRule.onNode(hasText("Event UUID: ${event.eventUuid}"))
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test
@@ -112,9 +115,17 @@ class HistoryContentTest {
         }
 
         composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
-        composeRule.onNode(hasText("Correct")).assertIsDisplayed()
-        composeRule.onNode(hasText("Void")).assertIsDisplayed()
-        composeRule.onNode(hasText("Correction state: CORRECTED")).assertIsDisplayed()
-        composeRule.onNode(hasText("Revision: 1")).assertIsDisplayed()
+        composeRule.onNode(hasText("Correction state: CORRECTED"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Revision: 1"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Correct"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Void"))
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 }
