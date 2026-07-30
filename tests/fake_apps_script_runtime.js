@@ -755,6 +755,9 @@ class FakeSheet {
   }
 
   setFrozenRows(count) {
+    if (this.typedColumns.length) {
+      throw new Error('This operation is not allowed on cells in typed columns.');
+    }
     this.frozenRows = Number(count);
     this.runtime.audit.record('structural', { operation: 'setFrozenRows', sheet: this.name, count: this.frozenRows });
     return this;

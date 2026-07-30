@@ -152,6 +152,7 @@ function buildRuntime(options = {}) {
         purchase('*P1', P1_UUID, 'Alpha', 1, 1, ORIGINAL_TIMESTAMP, 1),
         purchase('*P2', P2_UUID, 'Beta', 2, 0, '', ''),
       ]), maxColumns: PURCHASE_HEADERS.length, numberFormats: dateFormats([13, 16, 17]),
+      frozenRows: options.purchasesFrozenRows,
       typedColumns: options.purchasesTypedColumns ? PURCHASE_HEADERS.map((_, index) => index + 1) : [] },
       'Form Responses 1': {
         rows: makeSheetRows(RESPONSE_HEADERS, [baseCompatibilityResponse()]),
@@ -760,6 +761,7 @@ function assertCorrectionProjection(runtime) {
     correctionVersion: 0,
     writesEnabled: false,
     purchasesTypedColumns: true,
+    purchasesFrozenRows: 1,
   });
   const action = correction(29, 'REPLACE');
   const beforeProvision = post(runtime, payload(27, [action]));
@@ -783,11 +785,56 @@ function assertCorrectionProjection(runtime) {
   );
   assert.equal(
     runtime.audit.structural.some(entry => (
-      entry.sheet === 'ConsumptionEventCorrections' &&
+      entry.sheet === 'Purchases' && entry.operation === 'setFrozenRows'
+    )),
+    false,
+    'provision must not reset frozen rows owned by the typed Purchases table',
+  );
+  assert.equal(
+    runtime.peekSheet('Purchases').getFrozenRows(),
+    1,
+    'provision must preserve the typed Purchases table frozen-row state',
+  );
+  assert.equal(
+    runtime.audit.structural.filter(entry => (
+      entry.sheet === 'Purchases' && entry.operation === 'setDataValidation'
+    )).length,
+    3,
+    'provision must retain Purchases data validations',
+  );
+  assert.deepEqual(
+    runtime.peekSheet('Purchases').protections.map(protection => protection.getDescription()).sort(),
+    [
+      'Cannsheet display identities',
+      'Cannsheet immutable identities',
+      'Cannsheet reliability headers',
+    ],
+    'provision must retain Purchases warning protections',
+  );
+  assert.equal(
+    runtime.peekSheet('Purchases').protections.every(protection => protection.warningOnly),
+    true,
+    'Purchases protections must remain warning-only',
+  );
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'ConsumptionEvents' &&
       entry.operation === 'setBackground'
     )),
     true,
-    'provision must retain header safety formatting on ordinary sheets',
+    'provision must retain header safety formatting on ordinary existing sheets',
+  );
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'ConsumptionEvents' && entry.operation === 'setFrozenRows'
+    )),
+    true,
+    'provision must retain frozen headers on ordinary existing sheets',
+  );
+  assert.equal(
+    runtime.peekSheet('ConsumptionEvents').getFrozenRows(),
+    1,
+    'provision must freeze ordinary existing sheets',
   );
   const provisionedButDisabled = post(runtime, payload(28, [action]));
   assert.equal(
@@ -840,6 +887,25 @@ function assertCorrectionProjection(runtime) {
     recoveryUnavailable.rejectedConsumptionCorrections[0].errorCode,
     'BACKEND_UPDATE_REQUIRED',
   );
+}
+
+// Non-table Purchases sheets still become frozen if they were not already.
+{
+  const runtime = buildRuntime({
+    correctionVersion: 0,
+    writesEnabled: false,
+    purchasesFrozenRows: 0,
+  });
+  const provisioned = runtime.context.provisionConsumptionCorrections();
+  assert.equal(provisioned.writesEnabled, false);
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'Purchases' && entry.operation === 'setFrozenRows'
+    )),
+    true,
+    'provision must freeze an ordinary unfrozen Purchases sheet',
+  );
+  assert.equal(runtime.peekSheet('Purchases').getFrozenRows(), 1);
 }
 
 // A correction changes the history snapshot hash, so a page cursor captured

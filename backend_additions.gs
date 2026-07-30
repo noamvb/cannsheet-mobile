@@ -4449,7 +4449,9 @@ function applySheetSafety_(ss) {
         .setFontColor('#000000')
         .setFontWeight('bold');
     }
-    sheet.setFrozenRows(1);
+    // The live typed Purchases table is already frozen and rejects even a
+    // no-op setFrozenRows call. Ordinary or unfrozen sheets still need it.
+    if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
   });
   addWarningProtection_(purchases.getRange(1, 1, 1, purchases.getLastColumn()), 'Cannsheet reliability headers');
   addWarningProtection_(purchases.getRange(2, headers['Product ID'] + 1, Math.max(1, purchases.getMaxRows() - 1), 1), 'Cannsheet display identities');
