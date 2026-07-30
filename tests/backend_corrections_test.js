@@ -108,8 +108,17 @@ function baseEvent() {
     'Local Date': '2026-07-10', 'Local Time': '10:15:00',
     'Product UUID': P1_UUID, 'Legacy Product ID': '*P1', Uses: 1,
     'Weight Code': 'A', Finished: true, Source: 'ANDROID_V2',
-    'Request UUID': deterministicUuid(2001), 'Legacy Source Sheet': '',
-    'Legacy Source Row': '',
+    'Request UUID': deterministicUuid(2001),
+    'Legacy Source Sheet': 'Form Responses 1', 'Legacy Source Row': 2,
+  };
+}
+
+function baseCompatibilityResponse() {
+  return {
+    Timestamp: ORIGINAL_TIMESTAMP, Product: '*P1', Uses: 1,
+    Date: '2026-07-10', Time: '10:15:00', 'Weight code': 'A',
+    'Mark as Finished?': true, 'Cannsheet Event UUID': EVENT_ID,
+    'Cannsheet Request UUID': deterministicUuid(2001),
   };
 }
 
@@ -142,8 +151,12 @@ function buildRuntime(options = {}) {
       Purchases: { rows: makeSheetRows(PURCHASE_HEADERS, [
         purchase('*P1', P1_UUID, 'Alpha', 1, 1, ORIGINAL_TIMESTAMP, 1),
         purchase('*P2', P2_UUID, 'Beta', 2, 0, '', ''),
-      ]), maxColumns: PURCHASE_HEADERS.length, numberFormats: dateFormats([13, 16, 17]) },
-      'Form Responses 1': { rows: [RESPONSE_HEADERS], maxColumns: RESPONSE_HEADERS.length, numberFormats: dateFormats([1]) },
+      ]), maxColumns: PURCHASE_HEADERS.length, numberFormats: dateFormats([13, 16, 17]),
+      typedColumns: options.purchasesTypedColumns ? PURCHASE_HEADERS.map((_, index) => index + 1) : [] },
+      'Form Responses 1': {
+        rows: makeSheetRows(RESPONSE_HEADERS, [baseCompatibilityResponse()]),
+        maxColumns: RESPONSE_HEADERS.length, numberFormats: dateFormats([1]),
+      },
       ConsumptionEvents: { rows: makeSheetRows(EVENT_HEADERS, [baseEvent()]), maxColumns: EVENT_HEADERS.length, numberFormats: dateFormats([2]) },
       SyncLedger: { rows: [LEDGER_HEADERS], maxColumns: LEDGER_HEADERS.length, numberFormats: dateFormats([3]) },
       SyncApplyJournal: {
@@ -746,6 +759,7 @@ function assertCorrectionProjection(runtime) {
   const runtime = buildRuntime({
     correctionVersion: 0,
     writesEnabled: false,
+    purchasesTypedColumns: true,
   });
   const action = correction(29, 'REPLACE');
   const beforeProvision = post(runtime, payload(27, [action]));
@@ -758,6 +772,23 @@ function assertCorrectionProjection(runtime) {
   assert.equal(provisioned.correctionVersion, 1);
   assert.equal(provisioned.writesEnabled, false);
   assert.equal(provisioned.differences.length, 0);
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'Purchases' &&
+      ['setBackground', 'setBackgrounds', 'setFontColor', 'setFontWeight']
+        .includes(entry.operation)
+    )),
+    false,
+    'provision must not format the typed Purchases table header',
+  );
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'ConsumptionEventCorrections' &&
+      entry.operation === 'setBackground'
+    )),
+    true,
+    'provision must retain header safety formatting on ordinary sheets',
+  );
   const provisionedButDisabled = post(runtime, payload(28, [action]));
   assert.equal(
     provisionedButDisabled.rejectedConsumptionCorrections[0].errorCode,
@@ -770,6 +801,19 @@ function assertCorrectionProjection(runtime) {
     /CORRECTION_ENABLE_BLOCKED: recoverable apply is pending/,
   );
   setConfigValue(runtime, 'PENDING_APPLY_KEY', '');
+  const journalRows = rows(runtime, 'SyncApplyJournal');
+  const journalStateIndex = headerIndex(journalRows, 'State');
+  runtime.peekSheet('SyncApplyJournal')
+    .getRange(2, journalStateIndex + 1)
+    .setValue('CORE_COMMITTED');
+  assert.throws(
+    () => runtime.context.enableConsumptionCorrectionWrites(),
+    /CORRECTION_ENABLE_BLOCKED: recoverable sync apply reconciliation must be clean;.*INCOMPLETE_JOURNAL/,
+  );
+  assert.equal(configValue(runtime, 'CONSUMPTION_CORRECTION_WRITES_ENABLED'), false);
+  runtime.peekSheet('SyncApplyJournal')
+    .getRange(2, journalStateIndex + 1)
+    .setValue('COMPLETE');
   const enabled = runtime.context.enableConsumptionCorrectionWrites();
   assert.equal(enabled.writesEnabled, true);
   const committed = post(runtime, payload(29, [action]));

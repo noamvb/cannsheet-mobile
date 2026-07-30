@@ -4440,10 +4440,15 @@ function applySheetSafety_(ss) {
   const corrections = ss.getSheetByName(CANN.SHEETS.CORRECTIONS);
   if (corrections) protectedSheets.push(corrections);
   protectedSheets.forEach(sheet => {
-    sheet.getRange(1, 1, 1, sheet.getLastColumn())
-      .setBackground('#eeeeee')
-      .setFontColor('#000000')
-      .setFontWeight('bold');
+    // The production Purchases sheet is a Google Sheets table. Its typed
+    // columns own the table-header formatting and reject Apps Script styling.
+    // Keep the safety protections below without rewriting that header style.
+    if (sheet.getName() !== CANN.SHEETS.PURCHASES) {
+      sheet.getRange(1, 1, 1, sheet.getLastColumn())
+        .setBackground('#eeeeee')
+        .setFontColor('#000000')
+        .setFontWeight('bold');
+    }
     sheet.setFrozenRows(1);
   });
   addWarningProtection_(purchases.getRange(1, 1, 1, purchases.getLastColumn()), 'Cannsheet reliability headers');
@@ -4871,6 +4876,18 @@ function enableConsumptionCorrectionWrites() {
     }
     if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
       throw new Error('CORRECTION_ENABLE_BLOCKED: recoverable apply is pending');
+    }
+    const recoverableReconciliation = reconcileRecoverableSyncApply_(ss);
+    if (
+      recoverableReconciliation.pendingApplyId ||
+      recoverableReconciliation.incompleteJournalRows ||
+      recoverableReconciliation.differences.length ||
+      recoverableReconciliation.blockingDifferences.length
+    ) {
+      throw new Error(
+        'CORRECTION_ENABLE_BLOCKED: recoverable sync apply reconciliation ' +
+        'must be clean; ' + JSON.stringify(recoverableReconciliation)
+      );
     }
     const reconciliation = reconcileConsumptionCorrections_(ss);
     if (reconciliation.differences.length) {

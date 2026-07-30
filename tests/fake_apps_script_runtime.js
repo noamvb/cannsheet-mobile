@@ -425,12 +425,24 @@ class FakeRange {
     return this;
   }
 
+  _recordFormatting(operation, details = {}) {
+    const lastColumn = this.column + this.numColumns - 1;
+    const touchesTypedHeader = this.row === 1 &&
+      this.sheet.typedColumns.some(column => (
+        column >= this.column && column <= lastColumn
+      ));
+    if (touchesTypedHeader) {
+      throw new Error('This operation is not allowed on cells in typed columns.');
+    }
+    return this._recordStructural(operation, details);
+  }
+
   setDataValidation(rule) { return this._recordStructural('setDataValidation', { rule }); }
   setDataValidations(rules) { return this._recordStructural('setDataValidations', { rules }); }
-  setBackground(value) { return this._recordStructural('setBackground', { value }); }
-  setBackgrounds(values) { return this._recordStructural('setBackgrounds', { values }); }
-  setFontColor(value) { return this._recordStructural('setFontColor', { value }); }
-  setFontWeight(value) { return this._recordStructural('setFontWeight', { value }); }
+  setBackground(value) { return this._recordFormatting('setBackground', { value }); }
+  setBackgrounds(values) { return this._recordFormatting('setBackgrounds', { values }); }
+  setFontColor(value) { return this._recordFormatting('setFontColor', { value }); }
+  setFontWeight(value) { return this._recordFormatting('setFontWeight', { value }); }
   setNumberFormat(value) {
     for (let rowOffset = 0; rowOffset < this.numRows; rowOffset += 1) {
       for (let columnOffset = 0; columnOffset < this.numColumns; columnOffset += 1) {
@@ -581,6 +593,7 @@ class FakeSheet {
     this.maxRows = Math.max(Number(options.maxRows) || 1000, this.rows.length, 1);
     this.maxColumns = Math.max(Number(options.maxColumns) || 26, populatedWidth, 1);
     this.frozenRows = Number(options.frozenRows) || 0;
+    this.typedColumns = Array.from(options.typedColumns || [], Number);
     this.protections = [];
   }
 
