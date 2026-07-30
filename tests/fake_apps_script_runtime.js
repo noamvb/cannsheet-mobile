@@ -426,6 +426,7 @@ class FakeRange {
   }
 
   _recordFormatting(operation, details = {}) {
+    this.sheet._throwConfiguredError('headerCosmeticsError');
     const lastColumn = this.column + this.numColumns - 1;
     const touchesTypedHeader = this.row === 1 &&
       this.sheet.typedColumns.some(column => (
@@ -437,7 +438,10 @@ class FakeRange {
     return this._recordStructural(operation, details);
   }
 
-  setDataValidation(rule) { return this._recordStructural('setDataValidation', { rule }); }
+  setDataValidation(rule) {
+    this.sheet._throwConfiguredError('dataValidationError');
+    return this._recordStructural('setDataValidation', { rule });
+  }
   setDataValidations(rules) { return this._recordStructural('setDataValidations', { rules }); }
   setBackground(value) { return this._recordFormatting('setBackground', { value }); }
   setBackgrounds(values) { return this._recordFormatting('setBackgrounds', { values }); }
@@ -458,6 +462,7 @@ class FakeRange {
   setNote(value) { return this._recordStructural('setNote', { value }); }
 
   protect() {
+    this.sheet._throwConfiguredError('protectionError');
     const protection = new FakeProtection(this.sheet, this);
     this.sheet.protections.push(protection);
     this.sheet.runtime.audit.record('structural', Object.assign(this._descriptor('protect')));
@@ -594,7 +599,10 @@ class FakeSheet {
     this.maxColumns = Math.max(Number(options.maxColumns) || 26, populatedWidth, 1);
     this.frozenRows = Number(options.frozenRows) || 0;
     this.typedColumns = Array.from(options.typedColumns || [], Number);
-    this.tables = cloneValue(options.tables || []);
+    this.headerCosmeticsError = options.headerCosmeticsError || '';
+    this.frozenRowsError = options.frozenRowsError || '';
+    this.dataValidationError = options.dataValidationError || '';
+    this.protectionError = options.protectionError || '';
     this.protections = [];
   }
 
@@ -604,6 +612,10 @@ class FakeSheet {
       method,
       sheet: this.name,
     }, details));
+  }
+
+  _throwConfiguredError(name) {
+    if (this[name]) throw new Error(String(this[name]));
   }
 
   _ensureCapacity(row, column) {
@@ -756,9 +768,7 @@ class FakeSheet {
   }
 
   setFrozenRows(count) {
-    if (this.tables.length) {
-      throw new Error('This operation is not allowed on cells in typed columns.');
-    }
+    this._throwConfiguredError('frozenRowsError');
     this.frozenRows = Number(count);
     this.runtime.audit.record('structural', { operation: 'setFrozenRows', sheet: this.name, count: this.frozenRows });
     return this;
@@ -1212,28 +1222,6 @@ function sheetsValuesGet(runtime, spreadsheetId, range) {
     majorDimension: 'ROWS',
     values: trimmed,
   };
-}
-
-function sheetsSpreadsheetsGet(runtime, spreadsheetId, request = {}, options = {}) {
-  const normalizedSpreadsheetId = String(spreadsheetId);
-  runtime.audit.record('services', {
-    service: 'Sheets',
-    method: 'Spreadsheets.get',
-    spreadsheetId: normalizedSpreadsheetId,
-    fields: request && request.fields == null ? null : String(request.fields),
-  });
-  if (options.sheetsGetError) throw new Error(String(options.sheetsGetError));
-  const spreadsheet = runtime.spreadsheets.get(normalizedSpreadsheetId);
-  if (!spreadsheet) throw new Error('Spreadsheet not found: ' + normalizedSpreadsheetId);
-  const metadataSheets = options.sheetsMetadata === undefined
-    ? spreadsheet.getSheets().map(sheet => ({
-      properties: { sheetId: sheet.getSheetId() },
-      tables: cloneValue(sheet.tables),
-    }))
-    : (typeof options.sheetsMetadata === 'function'
-      ? options.sheetsMetadata(spreadsheet)
-      : options.sheetsMetadata);
-  return { sheets: cloneValue(metadataSheets) };
 }
 
 class FakeTextOutput {
@@ -1707,9 +1695,6 @@ function createAppsScriptRuntime(options = {}) {
     },
     Sheets: {
       Spreadsheets: {
-        get(id, request) {
-          return sheetsSpreadsheetsGet(runtime, id, request, options);
-        },
         batchUpdate(body, id) {
           return sheetsBatchUpdate(runtime, body, id);
         },
@@ -1751,8 +1736,6 @@ function createAppsScriptRuntime(options = {}) {
       },
     },
   };
-
-  if (options.sheetsGetAvailable === false) delete context.Sheets.Spreadsheets.get;
 
   vm.createContext(context);
 

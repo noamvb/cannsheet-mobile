@@ -154,12 +154,20 @@ function buildRuntime(options = {}) {
       ]), maxColumns: PURCHASE_HEADERS.length, numberFormats: dateFormats([13, 16, 17]),
       frozenRows: options.purchasesFrozenRows,
       typedColumns: options.purchasesTypedColumns ? PURCHASE_HEADERS.map((_, index) => index + 1) : [],
-      tables: options.purchasesTables || [] },
+      headerCosmeticsError: options.purchasesHeaderCosmeticsError,
+      frozenRowsError: options.purchasesFrozenRowsError,
+      dataValidationError: options.purchasesDataValidationError,
+      protectionError: options.purchasesProtectionError },
       'Form Responses 1': {
         rows: makeSheetRows(RESPONSE_HEADERS, [baseCompatibilityResponse()]),
         maxColumns: RESPONSE_HEADERS.length, numberFormats: dateFormats([1]),
       },
-      ConsumptionEvents: { rows: makeSheetRows(EVENT_HEADERS, [baseEvent()]), maxColumns: EVENT_HEADERS.length, numberFormats: dateFormats([2]) },
+      ConsumptionEvents: {
+        rows: makeSheetRows(EVENT_HEADERS, [baseEvent()]),
+        maxColumns: EVENT_HEADERS.length,
+        numberFormats: dateFormats([2]),
+        headerCosmeticsError: options.eventsHeaderCosmeticsError,
+      },
       SyncLedger: { rows: [LEDGER_HEADERS], maxColumns: LEDGER_HEADERS.length, numberFormats: dateFormats([3]) },
       SyncApplyJournal: {
         rows: makeSheetRows(JOURNAL_HEADERS, journalRecords),
@@ -176,9 +184,6 @@ function buildRuntime(options = {}) {
     form: { id: 'correction-form', destinationId: 'correction-sheet', items: [{
       title: 'Product', type: 'MULTIPLE_CHOICE', choices: ['*P1'],
     }] },
-    sheetsGetAvailable: options.sheetsGetAvailable,
-    sheetsGetError: options.sheetsGetError,
-    sheetsMetadata: options.sheetsMetadata,
   });
   runtime.loadSource(source, { filename: 'backend_additions.gs' });
   runtime.resetAudit();
@@ -766,7 +771,6 @@ function assertCorrectionProjection(runtime) {
     writesEnabled: false,
     purchasesTypedColumns: true,
     purchasesFrozenRows: 1,
-    purchasesTables: [{ tableId: 'typed-purchases' }],
   });
   const action = correction(29, 'REPLACE');
   const beforeProvision = post(runtime, payload(27, [action]));
@@ -821,6 +825,14 @@ function assertCorrectionProjection(runtime) {
     true,
     'Purchases protections must remain warning-only',
   );
+  assert.deepEqual(runtime.logs.filter(entry => entry.level === 'warn'), [{
+    level: 'warn',
+    args: [JSON.stringify({
+      type: 'sheet_header_cosmetics_skipped',
+      sheet: 'Purchases',
+      reason: 'TYPED_COLUMN_RESTRICTION',
+    })],
+  }]);
   assert.equal(
     runtime.audit.structural.some(entry => (
       entry.sheet === 'ConsumptionEvents' &&
@@ -894,27 +906,65 @@ function assertCorrectionProjection(runtime) {
   );
 }
 
-// A table remains untouched even when it is unfrozen: table ownership, rather
-// than frozen-row count, determines whether header operations are safe.
+// The same narrow cosmetic fallback applies to every protected sheet, not only
+// Purchases. Purchases validations and warning protections still complete.
+{
+  const runtime = buildRuntime({
+    correctionVersion: 0,
+    writesEnabled: false,
+    eventsHeaderCosmeticsError: 'This operation is not allowed on cells in typed columns.',
+  });
+  const provisioned = runtime.context.provisionConsumptionCorrections();
+  assert.equal(provisioned.writesEnabled, false);
+  assert.deepEqual(runtime.logs.filter(entry => entry.level === 'warn'), [{
+    level: 'warn',
+    args: [JSON.stringify({
+      type: 'sheet_header_cosmetics_skipped',
+      sheet: 'ConsumptionEvents',
+      reason: 'TYPED_COLUMN_RESTRICTION',
+    })],
+  }]);
+  assert.equal(
+    runtime.audit.structural.filter(entry => (
+      entry.sheet === 'Purchases' && entry.operation === 'setDataValidation'
+    )).length,
+    3,
+    'a non-Purchases cosmetic restriction must not skip Purchases validations',
+  );
+  assert.equal(
+    runtime.peekSheet('Purchases').protections.every(protection => protection.warningOnly),
+    true,
+    'a non-Purchases cosmetic restriction must not skip Purchases warning protections',
+  );
+}
+
+// A typed-column restriction during frozen-row setup is cosmetic too, even
+// after header styling has already completed.
 {
   const runtime = buildRuntime({
     correctionVersion: 0,
     writesEnabled: false,
     purchasesFrozenRows: 0,
-    purchasesTables: [{ tableId: 'unfrozen-purchases-table' }],
+    purchasesFrozenRowsError: '  Exception: This operation is not allowed on cells in typed columns.  ',
   });
   const provisioned = runtime.context.provisionConsumptionCorrections();
   assert.equal(provisioned.writesEnabled, false);
   assert.equal(runtime.peekSheet('Purchases').getFrozenRows(), 0);
   assert.equal(
     runtime.audit.structural.some(entry => (
-      entry.sheet === 'Purchases' &&
-      ['setBackground', 'setFontColor', 'setFontWeight', 'setFrozenRows']
-        .includes(entry.operation)
+      entry.sheet === 'Purchases' && entry.operation === 'setBackground'
     )),
-    false,
-    'provision must not rewrite table-owned Purchases header operations',
+    true,
+    'provision must style Purchases before a frozen-row-only restriction',
   );
+  assert.deepEqual(runtime.logs.filter(entry => entry.level === 'warn'), [{
+    level: 'warn',
+    args: [JSON.stringify({
+      type: 'sheet_header_cosmetics_skipped',
+      sheet: 'Purchases',
+      reason: 'TYPED_COLUMN_RESTRICTION',
+    })],
+  }]);
 }
 
 // Non-table Purchases sheets retain the ordinary header safety setup.
@@ -923,7 +973,6 @@ function assertCorrectionProjection(runtime) {
     correctionVersion: 0,
     writesEnabled: false,
     purchasesFrozenRows: 0,
-    sheetsMetadata: [{ properties: { sheetId: 1 } }],
   });
   const provisioned = runtime.context.provisionConsumptionCorrections();
   assert.equal(provisioned.writesEnabled, false);
@@ -944,52 +993,37 @@ function assertCorrectionProjection(runtime) {
   );
 }
 
-// Missing table metadata is fail-closed before additive correction schema,
-// configuration, formatting, validation, or protection changes can occur.
+// Cosmetic failures other than the exact typed-column restriction remain
+// fatal, including near matches that must not be silently accepted.
 [
-  { options: { sheetsGetAvailable: false }, label: 'missing Advanced Sheets get' },
-  { options: { sheetsGetError: 'metadata API failed' }, label: 'metadata API failure' },
-  { options: { sheetsMetadata: [] }, label: 'missing Purchases metadata' },
-  {
-    options: {
-      sheetsMetadata: [
-        { properties: { sheetId: 1 }, tables: [] },
-        { properties: { sheetId: 1 }, tables: [] },
-      ],
-    },
-    label: 'duplicate Purchases metadata',
-  },
-].forEach(({ options, label }) => {
+  { purchasesHeaderCosmeticsError: 'HEADER_COSMETICS_FAILED' },
+  { purchasesHeaderCosmeticsError: 'This operation is not allowed on cells in typed columns!' },
+  { purchasesFrozenRowsError: 'FROZEN_ROWS_FAILED' },
+  { purchasesFrozenRowsError: 'This operation is not allowed on cells in typed columns! ' },
+].forEach(options => {
   const runtime = buildRuntime(options);
+  const expected = options.purchasesHeaderCosmeticsError || options.purchasesFrozenRowsError;
   assert.throws(
     () => runtime.context.provisionConsumptionCorrections(),
-    /PURCHASES_TABLE_METADATA_UNAVAILABLE/,
-    label,
-  );
-  assert.equal(
-    runtime.audit.structural.length,
-    0,
-    `${label} must not mutate correction provisioning or sheet safety state`,
+    error => error.message === expected,
+    'unrelated cosmetic errors must be rethrown unchanged',
   );
 });
 
-// Table metadata is fetched with the narrow field mask needed for the exact
-// Purchases sheet identity and table presence.
-{
-  const runtime = buildRuntime({
-    correctionVersion: 0,
-    writesEnabled: false,
-    purchasesTables: [{ tableId: 'metadata-audit' }],
-  });
-  runtime.context.provisionConsumptionCorrections();
-  const metadataRequest = runtime.audit.services.find(entry => (
-    entry.service === 'Sheets' && entry.method === 'Spreadsheets.get'
-  ));
-  assert.equal(metadataRequest.service, 'Sheets');
-  assert.equal(metadataRequest.method, 'Spreadsheets.get');
-  assert.equal(metadataRequest.spreadsheetId, 'correction-sheet');
-  assert.equal(metadataRequest.fields, 'sheets(properties(sheetId),tables(tableId))');
-}
+// Data validation and warning-protection errors are not cosmetic and must
+// continue to block disabled provisioning.
+[
+  { purchasesDataValidationError: 'VALIDATION_WRITE_FAILED' },
+  { purchasesProtectionError: 'PROTECTION_WRITE_FAILED' },
+].forEach(options => {
+  const runtime = buildRuntime(options);
+  const expected = options.purchasesDataValidationError || options.purchasesProtectionError;
+  assert.throws(
+    () => runtime.context.provisionConsumptionCorrections(),
+    error => error.message === expected,
+    'validation and protection errors must remain fatal',
+  );
+});
 
 // A correction changes the history snapshot hash, so a page cursor captured
 // before the revision is deliberately stale rather than mixing revisions.
