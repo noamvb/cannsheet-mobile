@@ -2,24 +2,25 @@
 
 Last updated: 2026-07-29
 
-Branch: `codex/typed-column-provisioning-fix`
+Branch: `codex/typed-table-freeze-fix`
 
 Repository position:
 
 - `origin/main` is
-  `434d0046b9add4c100d6781197d56f81e4d8b58e`, the squash merge of Android
-  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20);
-- focused [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21)
+  `fb3ad6b763a7fab0b9f49f7e4855715eadde6aa6`, the squash merge of focused
+  [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21);
+- PR #21
   skips unsupported cosmetic formatting on the typed `Purchases` header and
   requires a full recoverable reconciliation before correction writes can be
   enabled;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
-The Android implementation is merged. PR #21 is ready except for the review
-thread addressed by this handoff update. Production has the additive,
-disabled-only partial state described below; its deployment is unchanged. No
-version change, tag, signed APK, or publication has been made.
+The Android implementation and PR #21 are merged. The first post-merge
+production retry exposed one additional typed-table restriction and was
+contained as described below. Production remains in an additive, disabled-only
+partial state and its deployment is unchanged. No version change, tag, signed
+APK, or publication has been made.
 
 Approximate delivery position: 94% toward a downloadable updated APK. CI built
 and uploaded a temporary debug APK, but no signed installable update has been
@@ -81,6 +82,24 @@ The Apps Script editor source was restored byte-for-byte to the captured
 pre-attempt source. The same public deployment remains on version 11, and no
 valid production correction request was sent. Production correction writes
 remain disabled.
+
+After PR #21 merged, a second disabled-first attempt passed the table-header
+formatting operation but stopped when Google Sheets rejected
+`setFrozenRows(1)` on the typed `Purchases` table. Live metadata confirms that
+`Purchases` already has one frozen row, so this was an unsupported attempt to
+reapply an existing state, not a missing safety setting.
+
+The editor source was immediately restored to the same exact prior hash again.
+The correction sheet remained header-only, schema version remained `1`, writes
+remained `false`, and a fresh full reconciliation remained clean while ordinary
+production entries continued. No deployment or correction request followed
+the failed attempt.
+
+The current follow-up uses the exact `Purchases` sheet ID and Advanced Sheets
+`tables` metadata before correction provisioning. Table-backed headers are left
+to Google Sheets even if their frozen-row count changes; ordinary sheets retain
+the existing styling and freeze behavior. Unavailable, missing, or ambiguous
+metadata stops before additive correction configuration changes.
 
 ## Merged Android implementation
 
@@ -275,12 +294,12 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Commit and push this factual production-state update to PR #21, monitor its one
-resulting CI run, resolve the review thread, and merge after all required checks
-pass. Then retry idempotent production provisioning from the merge-verified
-source, reconcile fresh, update the same deployment in place, verify its
-disabled state, reconcile again, and only then enable and verify correction
-writes.
+The focused typed-table frozen-row fix and its production-shaped regression
+test are implemented on the current branch. Resolve every PR review thread and
+require green CI on the exact final head before merge. After merge, retry
+idempotent production provisioning from the exact merged source, reconcile
+fresh, update the same deployment in place, verify its disabled state,
+reconcile again, and only then enable and verify correction writes.
 
 The user has approved this contained production rollout. Version changes,
 tagging, signing, and APK publication remain a separate approval gate.

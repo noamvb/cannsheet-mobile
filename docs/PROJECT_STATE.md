@@ -5,9 +5,9 @@ Last updated: 2026-07-29
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/typed-column-provisioning-fix`
+- Current working branch: `codex/typed-table-freeze-fix`
 - Branch base and `origin/main`:
-  `434d0046b9add4c100d6781197d56f81e4d8b58e`
+  `fb3ad6b763a7fab0b9f49f7e4855715eadde6aa6`
 - Released source tag `v1.2.16`:
   `7ee3f3a6995475c25addc712259cc44f8530b7a0`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
@@ -16,8 +16,8 @@ Last updated: 2026-07-29
   `noamvb/cannsheet-mobile-releases` under tag
   [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
 - The Android History-correction milestone was merged through
-  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20). Focused
-  production-rollout hardening is in
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and its first
+  production-rollout hardening was merged through
   [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21). Neither milestone
   has been included in a signed release.
 
@@ -130,10 +130,21 @@ The current Android branch adds:
   expectations because ordinary production entries continue during rollout.
   The editor source was restored exactly to its pre-attempt content, and the
   existing production deployment remained unchanged at version 11.
-- PR #21 contains the focused typed-column provisioning fix and adds the full
-  recoverable reconciliation as an enablement gate. Production provisioning
-  has not yet completed, no correction write has been enabled, and no new
-  backend version has been deployed.
+- PR #21 merged the focused typed-header formatting fix and added the full
+  recoverable reconciliation as an enablement gate. The first post-merge retry
+  passed that operation, then stopped when Google Sheets also rejected
+  reapplying `setFrozenRows(1)` to the typed `Purchases` table. Live metadata
+  confirms that table already has one frozen row.
+- After the second contained failure, the editor source was again restored
+  exactly, the correction sheet remained header-only, schema version remained
+  `1`, writes remained `false`, and a fresh full reconciliation remained clean.
+  Production provisioning has not completed and no new backend version has
+  been deployed.
+- The current follow-up reads the exact `Purchases` sheet's Advanced Sheets
+  table metadata before correction provisioning. Table-backed headers are left
+  to Google Sheets regardless of frozen-row count; ordinary sheets retain
+  styling and frozen-row setup. Missing or ambiguous metadata fails closed
+  before additive correction configuration is changed.
 
 ## Current validation status
 
@@ -185,17 +196,18 @@ Not yet performed:
 
 ## Current priorities
 
-Merge the focused PR #21 only after its review thread and required CI are clear.
-Then retry idempotent production provisioning from the merge-verified source,
-read fresh reconciliation state, update the existing deployment in place, and
-verify the public endpoint while writes are still disabled. Enable writes only
-after the second clean reconciliation. Release remains a separate approval
-gate.
+The focused typed-table frozen-row fix and its production-shaped regression
+coverage are implemented on the current branch. Resolve every PR review thread
+and require green CI on the exact final head before merge. Retry idempotent
+production provisioning only from that merge-verified source, read fresh
+reconciliation state, update the existing deployment in place, and verify the
+public endpoint while writes are still disabled. Enable writes only after the
+second clean reconciliation. Release remains a separate approval gate.
 
 ## Unresolved questions
 
-- Will the merge-verified typed-column fix complete idempotent provisioning
-  against the current production table layout?
+- Will the follow-up typed-table fix complete idempotent provisioning against
+  the current production table layout?
 - Will fresh production reconciliation remain clean immediately before
   correction writes are enabled?
 - Which supported physical Android device will be used for the final correction
