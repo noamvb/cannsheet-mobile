@@ -57,12 +57,14 @@ flowchart LR
    purchase products, reapplies queued finish state, and merges newer product
    interaction data.
 
-### Purchase, consumption, and finish synchronization
+### Purchase, consumption, finish, and correction synchronization
 
 1. A UI action enters a short cancellation countdown.
 2. After confirmation, the action is written to a Room queue with a stable
-   action/event UUID. Consumption and finish transactions also update local
-   product state.
+   action/event UUID. Consumption corrections additionally retain the target
+   event UUID, expected correction head, operation, and immutable replacement
+   snapshot. Consumption and finish transactions also update local product
+   state.
    Version-2 date/time strings represent wall-clock values in
    `CANN.TIME_ZONE`; the backend parses them explicitly in that zone so the
    stored instant cannot change with the Apps Script host or test-runner zone.
@@ -71,6 +73,7 @@ flowchart LR
 5. The client checks the response environment and request identity.
 6. Only items acknowledged with an accepted `committed` or `duplicate` status,
    or covered by the explicit legacy-compatible rule, are deleted locally.
+   Corrections require the exact sent action and target event pair.
 7. Timeouts and uncertain responses leave the items queued for safe retry.
 
 ### Insights and History
@@ -113,11 +116,20 @@ reconcile it, then explicitly enable writes. Sandbox provisioning may enable
 the capability only after read-only environment, spreadsheet, form, and Config
 identity checks pass.
 
+The Android client enables Correct, Void, and Restore only from a fresh
+version-2 History response that advertises the correction capability. It keeps
+pending corrections in Room across restarts and retains rejected or uncertain
+items for review or retry. Paginated History displays lifecycle and revision
+metadata but does not request every audit revision; the complete append-only
+audit remains available at the backend boundary until a bounded single-event
+detail contract is introduced.
+
 ## Persistence and models
 
 Room contains tables for products, purchase actions, consumption actions, finish
-actions, product interactions, sync request state, and analytics cache entries.
-DataStore holds user preferences that do not require relational transactions.
+actions, consumption corrections, product interactions, sync request state, and
+analytics cache entries. DataStore holds user preferences that do not require
+relational transactions.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.

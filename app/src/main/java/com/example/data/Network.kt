@@ -6,11 +6,21 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Url
 
+const val MAX_CONSUMPTION_CORRECTION_REASON_LENGTH = 200
+
+enum class ConsumptionCorrectionOperation {
+    REPLACE,
+    VOID,
+    RESTORE,
+}
+
 @JsonClass(generateAdapter = true)
 data class GasProductResponse(
     val products: List<GasProduct>,
     val apiVersion: Int? = null,
     val environment: String? = null,
+    val correctionVersion: Int? = null,
+    val correctionWritesEnabled: Boolean? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -35,6 +45,7 @@ data class SyncPayload(
     val purchases: List<SyncPurchase>,
     val consumptions: List<SyncConsumption>,
     val finishActions: List<SyncFinishAction> = emptyList(),
+    val consumptionCorrections: List<SyncConsumptionCorrection> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -71,6 +82,28 @@ data class SyncFinishAction(
     val time: String,
     val productId: String,
     val productUuid: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SyncConsumptionCorrection(
+    val actionId: String,
+    val targetEventId: String,
+    val expectedCorrectionHeadId: String,
+    val operation: ConsumptionCorrectionOperation,
+    val reopenProduct: Boolean,
+    val reason: String? = null,
+    val replacement: SyncConsumptionCorrectionReplacement? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SyncConsumptionCorrectionReplacement(
+    val date: String,
+    val time: String,
+    val productUuid: String,
+    val productId: String,
+    val uses: Double,
+    val weightCode: String,
+    val finished: Boolean,
 )
 
 @JsonClass(generateAdapter = true)
@@ -116,6 +149,23 @@ data class RejectedFinishAction(
 )
 
 @JsonClass(generateAdapter = true)
+data class AcknowledgedConsumptionCorrection(
+    val actionId: String,
+    val targetEventId: String,
+    val revision: Int,
+    val status: String,
+)
+
+@JsonClass(generateAdapter = true)
+data class RejectedConsumptionCorrection(
+    val actionId: String? = null,
+    val targetEventId: String? = null,
+    val errorCode: String,
+    val message: String,
+    val currentHeadId: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class SyncResponse(
     val success: Boolean,
     val message: String? = null,
@@ -131,6 +181,10 @@ data class SyncResponse(
     val rejectedConsumptions: List<RejectedConsumption> = emptyList(),
     val acknowledgedFinishActions: List<AcknowledgedFinishAction>? = null,
     val rejectedFinishActions: List<RejectedFinishAction>? = null,
+    val correctionVersion: Int? = null,
+    val correctionWritesEnabled: Boolean? = null,
+    val acknowledgedConsumptionCorrections: List<AcknowledgedConsumptionCorrection>? = null,
+    val rejectedConsumptionCorrections: List<RejectedConsumptionCorrection>? = null,
 )
 
 internal fun environmentMatches(expected: String, actual: String?): Boolean = actual == expected

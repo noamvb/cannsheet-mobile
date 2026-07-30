@@ -9,9 +9,12 @@ import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.IOException
 
-const val ANALYTICS_VERSION = 1
+const val ANALYTICS_VERSION = 2
 const val HISTORY_PAGE_SIZE = 50
 const val HISTORY_CACHE_LIMIT = 200
+const val HISTORY_LIFECYCLE_ORIGINAL = "ORIGINAL"
+const val HISTORY_LIFECYCLE_CORRECTED = "CORRECTED"
+const val HISTORY_LIFECYCLE_VOIDED = "VOIDED"
 
 sealed interface InsightsRange {
     data object Default : InsightsRange
@@ -195,6 +198,9 @@ data class SourceRevisionDto(
     val purchaseRowCount: Int,
     val eventRowCount: Int,
     val ledgerRowCount: Int? = null,
+    val rawEventRowCount: Int? = null,
+    val correctionRowCount: Int = 0,
+    val effectiveEventCount: Int? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -203,6 +209,8 @@ data class InsightsResponseDto(
     val analyticsVersion: Int,
     val resource: String,
     val environment: String,
+    val correctionVersion: Int = 0,
+    val correctionWritesEnabled: Boolean = false,
     val timeZone: String,
     val range: AnalyticsRangeDto,
     val overview: OverviewDto,
@@ -221,6 +229,32 @@ data class InsightsResponseDto(
 )
 
 @JsonClass(generateAdapter = true)
+data class HistoryCorrectionReplacementDto(
+    val occurredAtEpochMillis: Long,
+    val localDate: String,
+    val localTime: String,
+    val productUuid: String? = null,
+    val productId: String,
+    val productName: String,
+    val productType: String,
+    val quantity: Double,
+    val weightCode: String? = null,
+    val finished: Boolean,
+)
+
+@JsonClass(generateAdapter = true)
+data class HistoryAuditRevisionDto(
+    val correctionId: String,
+    val supersedesCorrectionId: String? = null,
+    val revision: Int,
+    val operation: String,
+    val reopenProduct: Boolean,
+    val reason: String? = null,
+    val createdAtEpochMillis: Long,
+    val replacement: HistoryCorrectionReplacementDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class HistoryEventDto(
     val eventUuid: String,
     val occurredAtEpochMillis: Long,
@@ -234,6 +268,11 @@ data class HistoryEventDto(
     val weightCode: String? = null,
     val finished: Boolean,
     val source: String,
+    val lifecycleState: String = HISTORY_LIFECYCLE_ORIGINAL,
+    val correctionHeadId: String? = null,
+    val revision: Int = 0,
+    val reopenEligible: Boolean = false,
+    val auditRevisions: List<HistoryAuditRevisionDto> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -245,6 +284,8 @@ data class HistoryResponseDto(
     val analyticsVersion: Int,
     val resource: String,
     val environment: String,
+    val correctionVersion: Int = 0,
+    val correctionWritesEnabled: Boolean = false,
     val timeZone: String,
     val filters: HistoryFilters,
     val sort: String,
@@ -418,7 +459,15 @@ class AnalyticsRepository(
     private fun validateHistory(value: HistoryResponseDto) {
         requireCommon(value.success, value.analyticsVersion, value.resource, value.environment, "history")
         require(value.sourceRevision.dataVersion.matches(HASH))
-        require(value.events.all { it.eventUuid.isNotBlank() && it.quantity.isFinite() && it.quantity > 0 })
+        require(
+            value.events.all {
+                it.eventUuid.isNotBlank() &&
+                    it.quantity.isFinite() &&
+                    it.quantity > 0 &&
+                    it.revision >= 0 &&
+                    it.lifecycleState in HISTORY_LIFECYCLE_STATES
+            },
+        )
         require(!value.page.hasMore || !value.page.nextCursor.isNullOrBlank())
         require(value.page.nextCursor.orEmpty().length <= 1024)
     }
@@ -488,5 +537,10 @@ class AnalyticsRepository(
     private companion object {
         val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
         val HASH = Regex("""[0-9a-f]{64}""")
+        val HISTORY_LIFECYCLE_STATES = setOf(
+            HISTORY_LIFECYCLE_ORIGINAL,
+            HISTORY_LIFECYCLE_CORRECTED,
+            HISTORY_LIFECYCLE_VOIDED,
+        )
     }
 }

@@ -8,6 +8,7 @@ import androidx.room.Room
 import com.example.data.AppDatabase
 import com.example.data.AnalyticsRepository
 import com.example.data.CannsheetRepository
+import com.example.data.ConsumptionCorrectionOperation
 import com.example.data.ConsumptionAction
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.FinishAction
@@ -19,6 +20,7 @@ import com.example.data.Product
 import com.example.data.ProductInteraction
 import com.example.data.ProductStatus
 import com.example.data.PurchaseAction
+import com.example.data.PendingConsumptionCorrection
 import com.example.data.QueuedSyncSnapshot
 import com.example.data.SyncConsumption
 import com.example.data.SyncFinishAction
@@ -27,6 +29,7 @@ import com.example.data.SyncPurchase
 import com.example.data.SyncResponse
 import com.example.data.buildAcknowledgementPlan
 import com.example.data.productStatus
+import com.example.data.toSyncConsumptionCorrection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,6 +72,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         AppDatabase.MIGRATION_5_6,
         AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8,
+        AppDatabase.MIGRATION_8_9,
     ).build()
 
     private val repository = CannsheetRepository(db)
@@ -141,6 +145,21 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     val pendingActionCount: StateFlow<Int> = repository.pendingActionCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
+    private val pendingCorrectionTargetIds: StateFlow<Set<String>> = repository.pendingCorrectionTargetEventIds
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
+    private val _historyCorrectionStatus = MutableStateFlow<HistoryCorrectionFeedback?>(null)
+    val historyCorrectionState: StateFlow<HistoryCorrectionUiState> = combine(
+        pendingCorrectionTargetIds,
+        _historyCorrectionStatus,
+    ) { targetIds, feedback ->
+        HistoryCorrectionUiState(
+            queuedTargetIds = targetIds,
+            status = feedback?.message,
+            statusTargetEventId = feedback?.targetEventId,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, HistoryCorrectionUiState())
 
     private val _syncStatus = MutableStateFlow<String?>(null)
     val syncStatus: StateFlow<String?> = _syncStatus
@@ -505,6 +524,109 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun queueHistoryCorrection(draft: HistoryCorrectionDraft) {
+        viewModelScope.launch {
+            val event = historyState.value.events.firstOrNull { it.eventUuid == draft.targetEventId }
+            if (event == null) {
+                updateHistoryCorrectionStatus(draft.targetEventId, "Refresh History before editing this entry.")
+                return@launch
+            }
+            val availability = historyCorrectionAvailability(
+                state = historyState.value,
+                event = event,
+                queuedTargetIds = pendingCorrectionTargetIds.value,
+            )
+            if (availability.reason != null) {
+                updateHistoryCorrectionStatus(draft.targetEventId, availability.reason)
+                return@launch
+            }
+            val operationAllowed = when (draft.operation) {
+                HistoryCorrectionOperation.REPLACE -> availability.canCorrect
+                HistoryCorrectionOperation.VOID -> availability.canVoid
+                HistoryCorrectionOperation.RESTORE -> availability.canRestore
+            }
+            if (!operationAllowed) {
+                updateHistoryCorrectionStatus(draft.targetEventId, "Refresh History before making this change.")
+                return@launch
+            }
+            if (draft.expectedHeadId != event.correctionHeadId) {
+                updateHistoryCorrectionStatus(
+                    draft.targetEventId,
+                    "This entry changed while you were editing it. Reopen it from refreshed History before trying again.",
+                )
+                return@launch
+            }
+            if (!isCorrectionDraftValid(draft)) {
+                updateHistoryCorrectionStatus(draft.targetEventId, "Check the correction details before saving it.")
+                return@launch
+            }
+            if (repository.getPendingConsumptionCorrection(draft.targetEventId) != null) {
+                updateHistoryCorrectionStatus(draft.targetEventId,
+                    "A correction for this entry is already queued. Wait for it to sync before making another change."
+                )
+                return@launch
+            }
+
+            val action = PendingConsumptionCorrection(
+                targetEventId = draft.targetEventId,
+                actionId = UUID.randomUUID().toString(),
+                expectedCorrectionHeadId = draft.expectedHeadId.orEmpty(),
+                operation = when (draft.operation) {
+                    HistoryCorrectionOperation.REPLACE -> ConsumptionCorrectionOperation.REPLACE
+                    HistoryCorrectionOperation.VOID -> ConsumptionCorrectionOperation.VOID
+                    HistoryCorrectionOperation.RESTORE -> ConsumptionCorrectionOperation.RESTORE
+                },
+                reopenProduct = draft.reopenProduct,
+                reason = draft.reason,
+                replacementDate = draft.replacementDate,
+                replacementTime = draft.replacementTime,
+                replacementProductUuid = draft.replacementProductUuid,
+                replacementProductId = draft.replacementProductId,
+                replacementUses = draft.replacementQuantity,
+                replacementWeightCode = if (draft.operation == HistoryCorrectionOperation.REPLACE) {
+                    event.weightCode.orEmpty()
+                } else {
+                    null
+                },
+                replacementFinished = draft.replacementFinished,
+            )
+            val enqueueFailure = runCatching { repository.enqueueConsumptionCorrection(action) }.exceptionOrNull()
+            if (enqueueFailure != null) {
+                updateHistoryCorrectionStatus(
+                    draft.targetEventId,
+                    "A correction for this entry is already queued. Wait for it to sync before making another change.",
+                )
+                return@launch
+            }
+            updateHistoryCorrectionStatus(draft.targetEventId,
+                "Correction saved on this phone. It will sync when a connection is available."
+            )
+            syncQueue()
+        }
+    }
+
+    private fun updateHistoryCorrectionStatus(targetEventId: String, message: String) {
+        _historyCorrectionStatus.value = HistoryCorrectionFeedback(targetEventId, message)
+    }
+
+    fun cancelHistoryCorrection(targetEventId: String) {
+        viewModelScope.launch {
+            syncMutex.withLock {
+                if (repository.cancelPendingConsumptionCorrection(targetEventId)) {
+                    updateHistoryCorrectionStatus(
+                        targetEventId,
+                        "Pending correction cancelled on this phone. The original history entry was not changed.",
+                    )
+                } else {
+                    updateHistoryCorrectionStatus(
+                        targetEventId,
+                        "This correction is no longer pending. Refresh History to see its latest state.",
+                    )
+                }
+            }
+        }
+    }
+
     fun syncQueue() {
         val url = _gasUrl.value
         if (url.isBlank()) {
@@ -519,10 +641,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     val pendingPurchases = repository.getPendingPurchases()
                     val pendingConsumptions = repository.getPendingConsumptions()
                     val pendingFinishActions = repository.getPendingFinishActions()
+                    val pendingCorrections = repository.getPendingConsumptionCorrections()
                     if (
                         pendingPurchases.isEmpty() &&
                         pendingConsumptions.isEmpty() &&
-                        pendingFinishActions.isEmpty()
+                        pendingFinishActions.isEmpty() &&
+                        pendingCorrections.isEmpty()
                     ) {
                         _syncStatus.value = "Nothing to sync"
                         return@withLock
@@ -535,8 +659,11 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                         consumptionEventIds = pendingConsumptions.mapTo(linkedSetOf(), ConsumptionAction::eventId),
                         finishActionIds = pendingFinishActions.mapTo(linkedSetOf(), FinishAction::actionId),
                         purchaseActionIdByTempId = pendingPurchases.associate { it.tempId to it.actionId },
+                        correctionActionIdByTargetEventId = pendingCorrections.associate {
+                            it.targetEventId to it.actionId
+                        },
                     )
-                    val requestId = repository.getOrCreateSyncRequestId()
+                    val requestId = repository.getOrCreateSyncRequestId(snapshot)
                     val purchases = pendingPurchases.map { action ->
                         SyncPurchase(
                             actionId = action.actionId,
@@ -572,6 +699,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                             productUuid = action.productUuid,
                         )
                     }
+                    val corrections = pendingCorrections.map(PendingConsumptionCorrection::toSyncConsumptionCorrection)
 
                     val rawString = apiService.syncData(
                         url,
@@ -581,6 +709,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                             purchases = purchases,
                             consumptions = consumptions,
                             finishActions = finishActions,
+                            consumptionCorrections = corrections,
                         ),
                     ).string()
                     if (rawString.trimStart().startsWith("<")) {
@@ -591,10 +720,27 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     val response = moshi.adapter(SyncResponse::class.java).lenient().fromJson(rawString)
                     if (response?.success != true) {
                         _syncStatus.value = "Sync failed: ${response?.errorCode ?: response?.message ?: "Unknown error"}"
+                        if (pendingCorrections.isNotEmpty()) {
+                            val targetEventId = pendingCorrections.first().targetEventId
+                            updateHistoryCorrectionStatus(
+                                targetEventId,
+                                correctionRejectionMessage(
+                                    response?.errorCode.orEmpty(),
+                                    response?.message,
+                                ) + " Your saved correction is still pending.",
+                            )
+                        }
                         return@withLock
                     }
                     if (response.environment != BuildConfig.APP_ENVIRONMENT) {
                         _syncStatus.value = "Configuration error: sync response environment does not match this app"
+                        return@withLock
+                    }
+                    if (
+                        (response.apiVersion == 2 || pendingCorrections.isNotEmpty()) &&
+                        response.requestId != requestId
+                    ) {
+                        _syncStatus.value = "Sync response could not be matched safely. Your entries are still pending."
                         return@withLock
                     }
 
@@ -608,12 +754,45 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     }
 
                     _syncStatus.value = when {
+                        plan.correctionCapabilityMissing ->
+                            "Sync failed: backend update required for history corrections"
                         plan.finishCapabilityMissing ->
                             "Sync failed: backend update required for finish actions"
                         plan.hasRejections ->
-                            "Sync partial: ${plan.rejectedPurchaseCount + plan.rejectedConsumptionCount + plan.rejectedFinishActionCount} item(s) need attention"
+                            "Sync partial: ${
+                                plan.rejectedPurchaseCount +
+                                    plan.rejectedConsumptionCount +
+                                    plan.rejectedFinishActionCount +
+                                    plan.rejectedConsumptionCorrections.size
+                            } item(s) need attention"
                         plan.hasAcknowledgements -> "Sync successful"
                         else -> "Sync completed without acknowledgements"
+                    }
+                    plan.rejectedConsumptionCorrections.firstOrNull()?.let { rejection ->
+                        val targetEventId = rejection.targetEventId ?: pendingCorrections.firstOrNull {
+                            it.actionId == rejection.actionId
+                        }?.targetEventId
+                        if (targetEventId != null) {
+                            updateHistoryCorrectionStatus(
+                                targetEventId,
+                                correctionRejectionMessage(rejection.errorCode, rejection.message) +
+                                    " Your saved correction is still pending.",
+                            )
+                        }
+                    }
+                    if (plan.correctionCapabilityMissing) {
+                        pendingCorrections.firstOrNull()?.targetEventId?.let { targetEventId ->
+                            updateHistoryCorrectionStatus(
+                                targetEventId,
+                                "History corrections are not enabled on this server yet. Your saved correction is still pending.",
+                            )
+                        }
+                    }
+                    plan.acknowledgedConsumptionCorrections.firstOrNull()?.let { acknowledgement ->
+                        updateHistoryCorrectionStatus(
+                            acknowledgement.targetEventId,
+                            "Correction accepted by the server. History is refreshing.",
+                        )
                     }
                     if (plan.hasAcknowledgements) {
                         analyticsCoordinator.markStale()
@@ -624,6 +803,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 } catch (error: Exception) {
                     // No queue rows are removed on network, parsing, or request failure.
                     _syncStatus.value = syncFailureStatus(error)
+                    pendingCorrectionTargetIds.value.firstOrNull()?.let { targetEventId ->
+                        updateHistoryCorrectionStatus(
+                            targetEventId,
+                            "Could not reach the server. Your saved correction is still pending and will retry safely.",
+                        )
+                    }
                 } finally {
                     _isSyncing.value = false
                 }

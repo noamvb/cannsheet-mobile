@@ -5,16 +5,20 @@ Last updated: 2026-07-29
 ## Repository state
 
 - Canonical branch: `main`
-- Current working branch: `codex/history-corrections-backend`
-- Branch base, `origin/main`, and released source tag `v1.2.16`:
+- Current working branch: `codex/history-corrections-android`
+- Branch base and `origin/main`:
+  `621f9801f907dde9d5315cb5f261bbfc3407f868`
+- Released source tag `v1.2.16`:
   `7ee3f3a6995475c25addc712259cc44f8530b7a0`
 - Current release metadata in `app/build.gradle.kts`: version name `1.2.16`,
   version code `19`
 - The public signed release is published to
   `noamvb/cannsheet-mobile-releases` under tag
   [v1.2.16](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.16).
-- The current working tree contains a locally verified, uncommitted backend
-  correction milestone. It has not been pushed, deployed, or released.
+- The Android History-correction milestone is committed and pushed on the
+  current branch in draft
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20). It has not been
+  merged or released.
 
 ## Project summary
 
@@ -58,9 +62,10 @@ Repository code and tests show:
 These statements describe checked-in implementation, not a fresh live-service
 or device verification.
 
-## Current branch implementation
+## Current correction milestone
 
-The backend milestone in PR #19 adds:
+Merged backend
+[PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) provides:
 
 - an append-only `ConsumptionEventCorrections` schema and the `REPLACE`, `VOID`,
   and `RESTORE` correction protocol;
@@ -79,9 +84,18 @@ The backend milestone in PR #19 adds:
 - strict rejection of nonexistent correction replacement wall times; and
 - lock-held refresh of the independently controlled correction write gate.
 
-Android persistence, queueing, History editing UI, and network integration are
-not part of this milestone and remain pending behind the backend PR and sandbox
-verification gates.
+The current Android branch adds:
+
+- a forward-only Room 8-to-9 migration and durable pending-correction queue;
+- stable correction/action IDs, unchanged-payload request-ID reuse, and exact
+  action/target acknowledgement deletion;
+- version-2 correction sync and History contracts with safe legacy defaults;
+- fresh-server and capability gates that prevent editing cached, stale, or
+  already-pending entries;
+- user-facing Correct, Void, Restore, optional reason, safe product-reopen, and
+  explicit pending-correction cancellation flows; and
+- lifecycle and revision details in History while leaving the full append-only
+  audit on the backend instead of adding it to every paginated cache response.
 
 ## Partial areas and known limitations
 
@@ -99,68 +113,69 @@ verification gates.
 - Backend behavior is concentrated in the large `backend_additions.gs` file and
   covered by fake-runtime tests. Live Apps Script and spreadsheet behavior still
   requires separate validation.
-- The checked-in Android client cannot yet create or queue consumption
-  corrections. No user-facing correction control exists in the current APK.
-- The correction schema has not been provisioned in a live sandbox or
-  production workbook, and correction writes have not been enabled in
-  production.
+- The currently published v1.2.16 APK cannot create or queue consumption
+  corrections. The controls exist only in this unmerged working branch.
+- The correction schema is provisioned and correction writes are enabled in the
+  isolated live sandbox. Production has not been provisioned, reconciled,
+  deployed, or enabled for correction writes.
 
 ## Current validation status
 
-The current backend milestone passed:
+The backend foundation is merged at `621f980`. Final PR run `30499192644`
+passed all five required checks. Live sandbox verification then proved:
 
-- all eight checked-in Node backend suites, including the new
-  `backend_corrections_test.js`;
-- correction scale coverage with 3,600 events and 600 corrections;
-- both Apps Script syntax checks through `node --check`;
-- 13 Python backend benchmark tests; and
-- `git diff --check origin/main`.
+- Apps Script deployment version 13 with environment `SANDBOX`, analytics API
+  version 2, correction schema version 1, and correction writes enabled;
+- one `VOID` committed once and returned `duplicate` on identical retry;
+- History exposed the resulting lifecycle, head, and audit revision;
+- `resetSandboxData()` restored the five seeded original events; and
+- a production-labelled request was rejected with `ENVIRONMENT_MISMATCH`.
 
-An independent read-only verifier reviewed the complete diff. Its first pass
-found that sandbox provisioning could mutate a wrongly targeted
-production-marked spreadsheet before rejecting it. The implementation was
-changed to perform the complete target guard first, and a snapshot/no-write
-regression was added. The verifier's second pass found the repaired backend
-milestone ready.
+Android branch evidence:
 
-Pull request
-[PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19) is open. Its first
-GitHub Actions run passed classification, Android static validation, and the API
-24 emulator, but the backend job exposed a host-timezone-dependent retry bug.
-The same failure was reproduced locally under `TZ=UTC`. The backend now parses
-wall-clock input explicitly in `America/New_York`, and the fake runtime and
-affected assertions cover both UTC and New York hosts. Follow-up run
-`30498099177` passed classification/security, backend validation, Android static
-validation, the API 24 emulator, and required aggregate validation for exact
-commit `05c4b58e89b2451f54a566e244f1761c578ca68a`.
+- generated JVM XML reports cover 49 tests with zero failures, errors, or
+  skips, including the new mapping, queue, retry, and History helper tests;
+- the Gradle wrapper timed out before returning its final exit code, so the XML
+  reports are evidence but the command itself is not recorded as successful;
+- independent Terra/medium review found no P0 or P1 correctness issue;
+- a second focused architecture review found and removed unconditional audit
+  overfetch from paginated History; and
+- `git -c core.fsmonitor=false diff --check` currently exits successfully.
 
-Required review then found stale pre-lock correction capability and nonexistent
-spring-forward replacement-time edge cases. Safety-repair commit `a39e199`
-rereads the capability under the script lock and rejects invalid canonical wall
-times without changing consumption history. Focused deterministic regressions
-passed; required checks and resolved review conversations remain the merge gate.
+Draft PR #20 run `30503688027` passed repository/security classification,
+backend validation, Android JVM tests, instrumentation compilation, lint, debug
+APK assembly, and artifact upload. Its API 24 emulator ran 22 instrumentation
+tests: 20 passed, while two `HistoryContentTest` assertions failed because they
+checked details and buttons below the visible area of the new scrollable sheet.
+Follow-up run `30504243649` proved that Compose could scroll to the nodes, but
+Material's modal-sheet clipping still did not satisfy the stronger
+`assertIsDisplayed()` geometry check. The final approved test-only adjustment
+keeps the visible timestamp assertion, verifies lower details exist, and
+verifies Correct/Void exist with click actions. Run `30505232031` then stopped
+at instrumentation-test compilation because `assertExists` was imported as an
+extension even though this Compose version exposes it as a
+`SemanticsNodeInteraction` member. The approved one-line import removal still
+requires CI confirmation.
 
 Not yet performed:
 
-- a real Apps Script deployment or live sandbox workbook verification;
 - production provisioning, reconciliation, write enablement, or deployment;
-- Android implementation, Gradle validation, emulator/device validation; or
+- a passing API 24 emulator/aggregate result after the focused test fix;
+- a physical-device visual check, screenshot/recording, or live-sandbox APK
+  installation; and
 - signed APK preparation or publication for this feature.
 
 ## Current priorities
 
-After user approval, commit and open the focused backend pull request, then pass
-backend CI and review. Merge and live sandbox rollout remain separate approval
-gates. Android implementation begins only after the backend contract is merged
-and verified in the sandbox.
+Commit and push the approved one-line import removal, then use the resulting PR
+run for the authoritative API 24 emulator and aggregate evidence. Merge,
+production rollout, and release remain separate approval gates.
 
 ## Unresolved questions
 
 - What is the current live Apps Script deployment version and trigger state?
 - Do the connected production sheets currently match the contracts and
   reconciliation expectations in the checked-in backend reports?
-- Can the sandbox web app and workbook be reached with the current deployment
-  credentials for end-to-end correction verification?
 - Which supported physical Android device will be used for the final correction
   workflow check?
 
