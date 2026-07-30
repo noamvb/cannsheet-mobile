@@ -95,6 +95,12 @@ remained `false`, and a fresh full reconciliation remained clean while ordinary
 production entries continued. No deployment or correction request followed
 the failed attempt.
 
+The current follow-up uses the exact `Purchases` sheet ID and Advanced Sheets
+`tables` metadata before correction provisioning. Table-backed headers are left
+to Google Sheets even if their frozen-row count changes; ordinary sheets retain
+the existing styling and freeze behavior. Unavailable, missing, or ambiguous
+metadata stops before additive correction configuration changes.
+
 ## Merged Android implementation
 
 ### Persistence and retry safety
@@ -288,10 +294,11 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Implement the focused typed-table frozen-row fix and its production-shaped
-regression test, then use the normal focused PR review and CI workflow. After
-merge, retry idempotent production provisioning from the exact merged source,
-reconcile fresh, update the same deployment in place, verify its disabled state,
+The focused typed-table frozen-row fix and its production-shaped regression
+test are implemented on the current branch. Resolve every PR review thread and
+require green CI on the exact final head before merge. After merge, retry
+idempotent production provisioning from the exact merged source, reconcile
+fresh, update the same deployment in place, verify its disabled state,
 reconcile again, and only then enable and verify correction writes.
 
 The user has approved this contained production rollout. Version changes,

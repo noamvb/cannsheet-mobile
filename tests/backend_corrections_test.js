@@ -153,7 +153,8 @@ function buildRuntime(options = {}) {
         purchase('*P2', P2_UUID, 'Beta', 2, 0, '', ''),
       ]), maxColumns: PURCHASE_HEADERS.length, numberFormats: dateFormats([13, 16, 17]),
       frozenRows: options.purchasesFrozenRows,
-      typedColumns: options.purchasesTypedColumns ? PURCHASE_HEADERS.map((_, index) => index + 1) : [] },
+      typedColumns: options.purchasesTypedColumns ? PURCHASE_HEADERS.map((_, index) => index + 1) : [],
+      tables: options.purchasesTables || [] },
       'Form Responses 1': {
         rows: makeSheetRows(RESPONSE_HEADERS, [baseCompatibilityResponse()]),
         maxColumns: RESPONSE_HEADERS.length, numberFormats: dateFormats([1]),
@@ -175,6 +176,9 @@ function buildRuntime(options = {}) {
     form: { id: 'correction-form', destinationId: 'correction-sheet', items: [{
       title: 'Product', type: 'MULTIPLE_CHOICE', choices: ['*P1'],
     }] },
+    sheetsGetAvailable: options.sheetsGetAvailable,
+    sheetsGetError: options.sheetsGetError,
+    sheetsMetadata: options.sheetsMetadata,
   });
   runtime.loadSource(source, { filename: 'backend_additions.gs' });
   runtime.resetAudit();
@@ -762,6 +766,7 @@ function assertCorrectionProjection(runtime) {
     writesEnabled: false,
     purchasesTypedColumns: true,
     purchasesFrozenRows: 1,
+    purchasesTables: [{ tableId: 'typed-purchases' }],
   });
   const action = correction(29, 'REPLACE');
   const beforeProvision = post(runtime, payload(27, [action]));
@@ -889,12 +894,36 @@ function assertCorrectionProjection(runtime) {
   );
 }
 
-// Non-table Purchases sheets still become frozen if they were not already.
+// A table remains untouched even when it is unfrozen: table ownership, rather
+// than frozen-row count, determines whether header operations are safe.
 {
   const runtime = buildRuntime({
     correctionVersion: 0,
     writesEnabled: false,
     purchasesFrozenRows: 0,
+    purchasesTables: [{ tableId: 'unfrozen-purchases-table' }],
+  });
+  const provisioned = runtime.context.provisionConsumptionCorrections();
+  assert.equal(provisioned.writesEnabled, false);
+  assert.equal(runtime.peekSheet('Purchases').getFrozenRows(), 0);
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'Purchases' &&
+      ['setBackground', 'setFontColor', 'setFontWeight', 'setFrozenRows']
+        .includes(entry.operation)
+    )),
+    false,
+    'provision must not rewrite table-owned Purchases header operations',
+  );
+}
+
+// Non-table Purchases sheets retain the ordinary header safety setup.
+{
+  const runtime = buildRuntime({
+    correctionVersion: 0,
+    writesEnabled: false,
+    purchasesFrozenRows: 0,
+    sheetsMetadata: [{ properties: { sheetId: 1 } }],
   });
   const provisioned = runtime.context.provisionConsumptionCorrections();
   assert.equal(provisioned.writesEnabled, false);
@@ -906,6 +935,60 @@ function assertCorrectionProjection(runtime) {
     'provision must freeze an ordinary unfrozen Purchases sheet',
   );
   assert.equal(runtime.peekSheet('Purchases').getFrozenRows(), 1);
+  assert.equal(
+    runtime.audit.structural.some(entry => (
+      entry.sheet === 'Purchases' && entry.operation === 'setBackground'
+    )),
+    true,
+    'provision must style an ordinary Purchases header',
+  );
+}
+
+// Missing table metadata is fail-closed before additive correction schema,
+// configuration, formatting, validation, or protection changes can occur.
+[
+  { options: { sheetsGetAvailable: false }, label: 'missing Advanced Sheets get' },
+  { options: { sheetsGetError: 'metadata API failed' }, label: 'metadata API failure' },
+  { options: { sheetsMetadata: [] }, label: 'missing Purchases metadata' },
+  {
+    options: {
+      sheetsMetadata: [
+        { properties: { sheetId: 1 }, tables: [] },
+        { properties: { sheetId: 1 }, tables: [] },
+      ],
+    },
+    label: 'duplicate Purchases metadata',
+  },
+].forEach(({ options, label }) => {
+  const runtime = buildRuntime(options);
+  assert.throws(
+    () => runtime.context.provisionConsumptionCorrections(),
+    /PURCHASES_TABLE_METADATA_UNAVAILABLE/,
+    label,
+  );
+  assert.equal(
+    runtime.audit.structural.length,
+    0,
+    `${label} must not mutate correction provisioning or sheet safety state`,
+  );
+});
+
+// Table metadata is fetched with the narrow field mask needed for the exact
+// Purchases sheet identity and table presence.
+{
+  const runtime = buildRuntime({
+    correctionVersion: 0,
+    writesEnabled: false,
+    purchasesTables: [{ tableId: 'metadata-audit' }],
+  });
+  runtime.context.provisionConsumptionCorrections();
+  const metadataRequest = runtime.audit.services.find(entry => (
+    entry.service === 'Sheets' && entry.method === 'Spreadsheets.get'
+  ));
+  assert.equal(metadataRequest.service, 'Sheets');
+  assert.equal(metadataRequest.method, 'Spreadsheets.get');
+  assert.equal(metadataRequest.spreadsheetId, 'correction-sheet');
+  assert.equal(metadataRequest.fields, 'sheets(properties(sheetId),tables(tableId))');
 }
 
 // A correction changes the history snapshot hash, so a page cursor captured

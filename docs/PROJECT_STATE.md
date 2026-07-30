@@ -140,6 +140,11 @@ The current Android branch adds:
   `1`, writes remained `false`, and a fresh full reconciliation remained clean.
   Production provisioning has not completed and no new backend version has
   been deployed.
+- The current follow-up reads the exact `Purchases` sheet's Advanced Sheets
+  table metadata before correction provisioning. Table-backed headers are left
+  to Google Sheets regardless of frozen-row count; ordinary sheets retain
+  styling and frozen-row setup. Missing or ambiguous metadata fails closed
+  before additive correction configuration is changed.
 
 ## Current validation status
 
@@ -191,12 +196,13 @@ Not yet performed:
 
 ## Current priorities
 
-Implement and review the focused typed-table frozen-row fix, then merge it
-through the normal PR checks. Retry idempotent production provisioning only
-from the merge-verified source, read fresh reconciliation state, update the
-existing deployment in place, and verify the public endpoint while writes are
-still disabled. Enable writes only after the second clean reconciliation.
-Release remains a separate approval gate.
+The focused typed-table frozen-row fix and its production-shaped regression
+coverage are implemented on the current branch. Resolve every PR review thread
+and require green CI on the exact final head before merge. Retry idempotent
+production provisioning only from that merge-verified source, read fresh
+reconciliation state, update the existing deployment in place, and verify the
+public endpoint while writes are still disabled. Enable writes only after the
+second clean reconciliation. Release remains a separate approval gate.
 
 ## Unresolved questions
 

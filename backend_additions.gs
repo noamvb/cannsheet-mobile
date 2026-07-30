@@ -4413,7 +4413,56 @@ function ensureHeaders_(sheet, expected) {
   });
 }
 
-function applySheetSafety_(ss) {
+/**
+ * Returns whether the exact Purchases sheet is backed by a Google Sheets
+ * table. This fails closed because treating a table as an ordinary sheet can
+ * trigger rejected header operations after other provisioning work has run.
+ */
+function purchasesSheetTableBacked_(ss) {
+  if (
+    typeof Sheets === 'undefined' ||
+    !Sheets.Spreadsheets ||
+    typeof Sheets.Spreadsheets.get !== 'function'
+  ) {
+    throw new Error('PURCHASES_TABLE_METADATA_UNAVAILABLE: Advanced Sheets get is unavailable');
+  }
+  const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  let metadata;
+  try {
+    metadata = Sheets.Spreadsheets.get(ss.getId(), {
+      fields: 'sheets(properties(sheetId),tables(tableId))'
+    });
+  } catch (error) {
+    throw new Error(
+      'PURCHASES_TABLE_METADATA_UNAVAILABLE: ' +
+      String(error && error.message || error)
+    );
+  }
+  if (!metadata || !Array.isArray(metadata.sheets)) {
+    throw new Error('PURCHASES_TABLE_METADATA_UNAVAILABLE: sheet metadata is missing');
+  }
+  const purchasesSheetId = purchases.getSheetId();
+  const matches = metadata.sheets.filter(sheet => (
+    sheet && sheet.properties && sheet.properties.sheetId === purchasesSheetId
+  ));
+  if (matches.length !== 1) {
+    throw new Error(
+      'PURCHASES_TABLE_METADATA_UNAVAILABLE: expected exactly one Purchases sheet metadata record'
+    );
+  }
+  const tables = matches[0].tables;
+  // The Advanced Sheets API omits tables for an ordinary sheet.
+  if (tables == null) return false;
+  if (!Array.isArray(tables)) {
+    throw new Error('PURCHASES_TABLE_METADATA_UNAVAILABLE: Purchases tables metadata is missing');
+  }
+  return tables.length > 0;
+}
+
+function applySheetSafety_(ss, purchasesTableBacked) {
+  const tableBacked = purchasesTableBacked === undefined
+    ? purchasesSheetTableBacked_(ss)
+    : purchasesTableBacked;
   const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
   const headers = headerMap_(purchases);
   const lastValidationRow = Math.max(purchases.getMaxRows(), 1000);
@@ -4440,18 +4489,19 @@ function applySheetSafety_(ss) {
   const corrections = ss.getSheetByName(CANN.SHEETS.CORRECTIONS);
   if (corrections) protectedSheets.push(corrections);
   protectedSheets.forEach(sheet => {
-    // The production Purchases sheet is a Google Sheets table. Its typed
-    // columns own the table-header formatting and reject Apps Script styling.
-    // Keep the safety protections below without rewriting that header style.
-    if (sheet.getName() !== CANN.SHEETS.PURCHASES) {
+    const tableBackedPurchases = sheet.getName() === CANN.SHEETS.PURCHASES &&
+      tableBacked;
+    // A table owns its Purchases header formatting and frozen-row state.
+    // Ordinary sheets retain the existing safety setup.
+    if (!tableBackedPurchases) {
       sheet.getRange(1, 1, 1, sheet.getLastColumn())
         .setBackground('#eeeeee')
         .setFontColor('#000000')
         .setFontWeight('bold');
     }
-    // The live typed Purchases table is already frozen and rejects even a
-    // no-op setFrozenRows call. Ordinary or unfrozen sheets still need it.
-    if (sheet.getFrozenRows() < 1) sheet.setFrozenRows(1);
+    if (!tableBackedPurchases && sheet.getFrozenRows() < 1) {
+      sheet.setFrozenRows(1);
+    }
   });
   addWarningProtection_(purchases.getRange(1, 1, 1, purchases.getLastColumn()), 'Cannsheet reliability headers');
   addWarningProtection_(purchases.getRange(2, headers['Product ID'] + 1, Math.max(1, purchases.getMaxRows() - 1), 1), 'Cannsheet display identities');
@@ -4810,6 +4860,8 @@ function provisionConsumptionCorrections() {
         'CORRECTION_PROVISION_BLOCKED: recoverable apply is pending'
       );
     }
+    // Preflight table metadata before any additive correction provisioning.
+    const purchasesTableBacked = purchasesSheetTableBacked_(ss);
     ensureConfigKey_(
       ss,
       CANN.CONSUMPTION_CORRECTION_VERSION_KEY,
@@ -4836,7 +4888,7 @@ function provisionConsumptionCorrections() {
       'Append-only consumption correction schema version'
     );
     provisionRecoverableDateFormats_(ss);
-    applySheetSafety_(ss);
+    applySheetSafety_(ss, purchasesTableBacked);
     SpreadsheetApp.flush();
     const reconciliation = reconcileConsumptionCorrections_(ss);
     if (reconciliation.differences.length) {

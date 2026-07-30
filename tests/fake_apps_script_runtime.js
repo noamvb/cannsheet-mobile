@@ -594,6 +594,7 @@ class FakeSheet {
     this.maxColumns = Math.max(Number(options.maxColumns) || 26, populatedWidth, 1);
     this.frozenRows = Number(options.frozenRows) || 0;
     this.typedColumns = Array.from(options.typedColumns || [], Number);
+    this.tables = cloneValue(options.tables || []);
     this.protections = [];
   }
 
@@ -755,7 +756,7 @@ class FakeSheet {
   }
 
   setFrozenRows(count) {
-    if (this.typedColumns.length) {
+    if (this.tables.length) {
       throw new Error('This operation is not allowed on cells in typed columns.');
     }
     this.frozenRows = Number(count);
@@ -1211,6 +1212,28 @@ function sheetsValuesGet(runtime, spreadsheetId, range) {
     majorDimension: 'ROWS',
     values: trimmed,
   };
+}
+
+function sheetsSpreadsheetsGet(runtime, spreadsheetId, request = {}, options = {}) {
+  const normalizedSpreadsheetId = String(spreadsheetId);
+  runtime.audit.record('services', {
+    service: 'Sheets',
+    method: 'Spreadsheets.get',
+    spreadsheetId: normalizedSpreadsheetId,
+    fields: request && request.fields == null ? null : String(request.fields),
+  });
+  if (options.sheetsGetError) throw new Error(String(options.sheetsGetError));
+  const spreadsheet = runtime.spreadsheets.get(normalizedSpreadsheetId);
+  if (!spreadsheet) throw new Error('Spreadsheet not found: ' + normalizedSpreadsheetId);
+  const metadataSheets = options.sheetsMetadata === undefined
+    ? spreadsheet.getSheets().map(sheet => ({
+      properties: { sheetId: sheet.getSheetId() },
+      tables: cloneValue(sheet.tables),
+    }))
+    : (typeof options.sheetsMetadata === 'function'
+      ? options.sheetsMetadata(spreadsheet)
+      : options.sheetsMetadata);
+  return { sheets: cloneValue(metadataSheets) };
 }
 
 class FakeTextOutput {
@@ -1684,6 +1707,9 @@ function createAppsScriptRuntime(options = {}) {
     },
     Sheets: {
       Spreadsheets: {
+        get(id, request) {
+          return sheetsSpreadsheetsGet(runtime, id, request, options);
+        },
         batchUpdate(body, id) {
           return sheetsBatchUpdate(runtime, body, id);
         },
@@ -1725,6 +1751,8 @@ function createAppsScriptRuntime(options = {}) {
       },
     },
   };
+
+  if (options.sheetsGetAvailable === false) delete context.Sheets.Spreadsheets.get;
 
   vm.createContext(context);
 
