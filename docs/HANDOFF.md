@@ -10,8 +10,10 @@ Repository position:
   `621f9801f907dde9d5315cb5f261bbfc3407f868`, the squash merge of backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19);
 - Android commit `ffbec5a` opened draft
-  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and this handoff
-  accompanies its approved test-only CI follow-up;
+  [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20);
+- test-only follow-up `ce1be28` confirmed `performScrollTo()` alone does not
+  satisfy modal-sheet full-visibility assertions on API 24;
+- this handoff accompanies the final approved semantic assertion adjustment;
 - the latest released source tag is `v1.2.16` at `7ee3f3a`; and
 - version metadata remains `versionName` `1.2.16`, `versionCode` `19`.
 
@@ -169,9 +171,13 @@ secret, backend, workflow, or release file is changed in this Android worktree.
   failures were `HistoryContentTest` assertions for an event UUID and the
   Correct button while those nodes were below the visible part of the new
   scrollable sheet.
-- The approved follow-up uses Compose `performScrollTo()` before checking each
-  off-screen node. That method is already used by the existing instrumentation
-  suite, and the focused diff passes `git diff --check`.
+- Follow-up run `30504243649` again passed classification, backend validation,
+  Android compilation/JVM/lint/debug assembly, and artifact upload. Its API 24
+  suite again passed 20 of 22 tests: `performScrollTo()` completed, but the same
+  modal-sheet nodes did not satisfy `assertIsDisplayed()`.
+- The final approved adjustment keeps the visible timestamp assertion, checks
+  lower details with `assertExists()`, and requires Correct/Void to exist with
+  click actions. The focused diff passes `git diff --check`.
 
 The Gradle invocation was:
 
@@ -194,8 +200,8 @@ was added for the final parent validation.
 ## Validation not performed
 
 - `assembleSandbox` was not run.
-- The approved `HistoryContentTest` scroll fix has not yet passed its follow-up
-  API 24 CI run.
+- The final approved `HistoryContentTest` semantic assertion adjustment has not
+  yet passed its follow-up API 24 CI run.
 - No manual emulator or physical-device visual check was performed.
 - No screenshot or recording was captured for the visible UI change.
 - No Android build was installed against the live sandbox deployment.
@@ -239,11 +245,12 @@ was added for the final parent validation.
 
 ## Recommended next action
 
-Commit and push the focused `HistoryContentTest` scroll fix, then monitor the
-one resulting PR run. Do not manually rerun already-passing jobs. If API 24 and
-the aggregate pass, update the PR validation summary and request the separate
-merge, production-rollout, and release approvals as needed. The debug artifact
-is validation evidence, not the signed production update.
+Commit and push the final focused `HistoryContentTest` assertion adjustment,
+then monitor the one resulting PR run. Do not manually rerun already-passing
+jobs. If API 24 and the aggregate pass, update the PR validation summary and
+request the separate merge, production-rollout, and release approvals as
+needed. The debug artifact is validation evidence, not the signed production
+update.
 
 Do not provision or enable production and do not bump the version, tag, sign,
 or publish an APK without the user's separate approval.
