@@ -11,6 +11,7 @@ class CannsheetRepository(private val database: AppDatabase) {
 
     val allProducts: Flow<List<Product>> = dao.getAllProducts()
     val productInteractions: Flow<List<ProductInteraction>> = dao.getAllProductInteractions()
+    val pendingProductUses: Flow<List<PendingProductUses>> = dao.getPendingProductUses()
     val pendingConsumptionCorrections: Flow<List<PendingConsumptionCorrection>> =
         dao.getPendingConsumptionCorrectionsFlow()
     val pendingCorrectionTargetEventIds: Flow<Set<String>> =

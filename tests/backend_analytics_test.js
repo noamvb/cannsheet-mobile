@@ -322,6 +322,10 @@ function assertNoMutation(runtime) {
   assert.equal(bare.apiVersion, 2);
   assert.equal(bare.environment, 'SANDBOX');
   assert.equal(bare.products.length, 4);
+  assert.equal(bare.products.find(product => product.id === '*P1').totalUses, 3.25);
+  assert.equal(bare.products.find(product => product.id === '*E1').totalUses, 1);
+  assert.equal(bare.products.find(product => product.id === '*C1').totalUses, 0);
+  assert.equal(bare.products.find(product => product.id === '*P2').totalUses, 0);
   assert.equal(bodyReads(runtime, 'ConsumptionEvents').length, 0);
   assert.equal(bodyReads(runtime, 'SyncLedger').length, 0);
   assertNoMutation(runtime);
@@ -334,6 +338,44 @@ function assertNoMutation(runtime) {
   assert.equal(bodyReads(runtime, 'ConsumptionEvents').length, 0);
   assert.equal(bodyReads(runtime, 'SyncLedger').length, 0);
   assertNoMutation(runtime);
+}
+
+// The compact catalog treats a blank Uses projection as zero and rejects
+// malformed projected totals without writing any sheet data.
+{
+  const blankUses = basePurchases().map(product => (
+    product['Product ID'] === '*C1' ? { ...product, Uses: '' } : product
+  ));
+  const blankRuntime = buildRuntime({ purchases: blankUses });
+  const blankResponse = blankRuntime.parseTextOutput(blankRuntime.context.doGet());
+  assert.equal(blankResponse.products.find(product => product.id === '*C1').totalUses, 0);
+  assertNoMutation(blankRuntime);
+
+  const invalidUses = basePurchases().map(product => (
+    product['Product ID'] === '*P1' ? { ...product, Uses: -1 } : product
+  ));
+  const invalidRuntime = buildRuntime({ purchases: invalidUses });
+  const invalidResponse = invalidRuntime.parseTextOutput(invalidRuntime.context.doGet());
+  assert.equal(invalidResponse.errorCode, 'INTERNAL_ERROR');
+  assert.match(invalidResponse.error, /Uses must be a finite nonnegative number/);
+  assertNoMutation(invalidRuntime);
+
+  const nonFiniteUses = basePurchases().map(product => (
+    product['Product ID'] === '*P1' ? { ...product, Uses: Number.POSITIVE_INFINITY } : product
+  ));
+  const nonFiniteRuntime = buildRuntime({ purchases: nonFiniteUses });
+  const nonFiniteResponse = nonFiniteRuntime.parseTextOutput(nonFiniteRuntime.context.doGet());
+  assert.equal(nonFiniteResponse.errorCode, 'INTERNAL_ERROR');
+  assert.match(nonFiniteResponse.error, /Uses must be a finite nonnegative number/);
+  assertNoMutation(nonFiniteRuntime);
+
+  const fractionalUses = basePurchases().map(product => (
+    product['Product ID'] === '*P1' ? { ...product, Uses: 0.123456789 } : product
+  ));
+  const fractionalRuntime = buildRuntime({ purchases: fractionalUses });
+  const fractionalResponse = fractionalRuntime.parseTextOutput(fractionalRuntime.context.doGet());
+  assert.equal(fractionalResponse.products.find(product => product.id === '*P1').totalUses, 0.123457);
+  assertNoMutation(fractionalRuntime);
 }
 
 // Insights aggregation, spending separation, lifecycle values, and warnings.

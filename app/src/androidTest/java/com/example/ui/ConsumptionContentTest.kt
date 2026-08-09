@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
@@ -223,7 +224,7 @@ class ConsumptionContentTest {
         composeRule.onNode(hasText("Purchase numbers can remain unknown when logging a borrowed product."))
             .assertIsDisplayed()
         composeRule.onNode(hasText("Cancel") and hasClickAction()).performClick()
-        composeRule.onNode(hasText("Product name") and hasSetTextAction()).assertDoesNotExist()
+        composeRule.onAllNodes(hasText("Product name") and hasSetTextAction()).assertCountEquals(0)
     }
 
     @Test
@@ -307,6 +308,142 @@ class ConsumptionContentTest {
                     (loggedDate == expectedAfterSubmit.date && loggedTime == expectedAfterSubmit.time),
             )
         }
+    }
+
+    @Test
+    fun selectedProductShowsSyncedAndPendingTotals() {
+        val product = Product(
+            id = "p1",
+            name = "Blue Dream",
+            type = "F",
+            status = 0,
+            totalUses = 3.25,
+        )
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    pendingUsesByProduct = mapOf(product.id to 0.5),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Synced total: 3.25 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Pending: +0.5 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun recentProductShowsUnavailableTotalAndPendingUsesWhenNotYetSynced() {
+        val product = Product("p1", "Blue Dream", "F", 0)
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = listOf(RecentProduct(product, 0.75)),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(),
+                    pendingUsesByProduct = mapOf(product.id to 0.75),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Synced: unavailable"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(hasText("Pending: +0.75 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun zeroSyncedTotalIsDisplayedAndPendingLineIsOmitted() {
+        val product = Product(
+            id = "p1",
+            name = "Blue Dream",
+            type = "F",
+            status = 0,
+            totalUses = 0.0,
+        )
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Synced total: 0 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onAllNodes(hasText("Pending:")).assertCountEquals(0)
+    }
+
+    @Test
+    fun changingProductDataReplacesDisplayedSyncedTotal() {
+        var product by mutableStateOf(
+            Product("p1", "Blue Dream", "F", 0, totalUses = 1.0),
+        )
+
+        composeRule.setContent {
+            MaterialTheme {
+                ConsumptionContent(
+                    allProducts = listOf(product),
+                    recentProducts = emptyList(),
+                    quantityPresets = listOf(0.5, 1.0),
+                    includeUnopened = false,
+                    formState = ConsumptionFormState(selectedProductId = product.id),
+                    onSelectProduct = {},
+                    onQuantityChange = {},
+                    onIncludeUnopenedChange = {},
+                    onLog = { _, _, _, _, _ -> },
+                    onLogBorrowed = { _, _, _, _, _ -> },
+                    onFinishWithoutConsumption = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Synced total: 1 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.runOnIdle { product = product.copy(totalUses = 2.5) }
+        composeRule.onNode(hasText("Synced total: 2.5 uses"))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onAllNodes(hasText("Synced total: 1 uses")).assertCountEquals(0)
     }
 }
 

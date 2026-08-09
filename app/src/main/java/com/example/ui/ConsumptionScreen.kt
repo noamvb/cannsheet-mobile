@@ -63,6 +63,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +75,7 @@ import com.example.data.Product
 import com.example.data.ProductStatus
 import com.example.data.productStatus
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Calendar
 
 private val categoryColors = mapOf(
@@ -91,6 +95,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
     val quantityPresets by viewModel.quantityPresets.collectAsStateWithLifecycle()
     val includeUnopened by viewModel.includeUnopened.collectAsStateWithLifecycle()
     val formState by viewModel.consumptionFormState.collectAsStateWithLifecycle()
+    val pendingUsesByProduct by viewModel.pendingUsesByProduct.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -107,6 +112,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         quantityPresets = quantityPresets,
         includeUnopened = includeUnopened,
         formState = formState,
+        pendingUsesByProduct = pendingUsesByProduct,
         onSelectProduct = viewModel::selectConsumptionProduct,
         onQuantityChange = viewModel::updateConsumptionQuantity,
         onIncludeUnopenedChange = viewModel::setIncludeUnopened,
@@ -124,6 +130,7 @@ fun ConsumptionContent(
     quantityPresets: List<Double>,
     includeUnopened: Boolean,
     formState: ConsumptionFormState,
+    pendingUsesByProduct: Map<String, Double> = emptyMap(),
     onSelectProduct: (String) -> Unit,
     onQuantityChange: (String) -> Unit,
     onIncludeUnopenedChange: (Boolean) -> Unit,
@@ -371,6 +378,7 @@ fun ConsumptionContent(
                                 RecentProductCard(
                                     recent = recent,
                                     selected = recent.product.id == formState.selectedProductId,
+                                    pendingUses = pendingUsesByProduct[recent.product.id] ?: 0.0,
                                     onClick = {
                                         onSelectProduct(recent.product.id)
                                         validationMessage = null
@@ -385,6 +393,7 @@ fun ConsumptionContent(
             item {
                 ProductSelectionCard(
                     product = selectedProduct,
+                    pendingUses = selectedProduct?.let { pendingUsesByProduct[it.id] } ?: 0.0,
                     onClick = { showProductPicker = true },
                 )
             }
@@ -530,12 +539,13 @@ fun ConsumptionContent(
 private fun RecentProductCard(
     recent: RecentProduct,
     selected: Boolean,
+    pendingUses: Double,
     onClick: () -> Unit,
 ) {
     Card(
         modifier = Modifier
-            .width(156.dp)
-            .heightIn(min = 104.dp)
+            .width(184.dp)
+            .heightIn(min = 132.dp)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = if (selected) {
@@ -563,12 +573,24 @@ private fun RecentProductCard(
                 "Last: ${formatQuantity(recent.lastQuantity)}",
                 style = MaterialTheme.typography.labelMedium,
             )
+            Text(
+                recent.product.totalUses?.takeIf { it.isFinite() && it >= 0.0 }
+                    ?.let { "Synced: ${formatUsageAmount(it)} uses" }
+                    ?: "Synced: unavailable",
+                style = MaterialTheme.typography.labelMedium,
+            )
+            if (pendingUses.isFinite() && pendingUses > 0.0) {
+                Text(
+                    "Pending: +${formatUsageAmount(pendingUses)} uses",
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun ProductSelectionCard(product: Product?, onClick: () -> Unit) {
+private fun ProductSelectionCard(product: Product?, pendingUses: Double, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -599,6 +621,27 @@ private fun ProductSelectionCard(product: Product?, onClick: () -> Unit) {
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                product?.let { selected ->
+                    Column(
+                        modifier = Modifier.semantics {
+                            liveRegion = LiveRegionMode.Polite
+                        },
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            selected.totalUses?.takeIf { it.isFinite() && it >= 0.0 }
+                                ?.let { "Synced total: ${formatUsageAmount(it)} uses" }
+                                ?: "Synced total: unavailable",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (pendingUses.isFinite() && pendingUses > 0.0) {
+                            Text(
+                                "Pending: +${formatUsageAmount(pendingUses)} uses",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
             }
             Icon(Icons.Default.Search, contentDescription = "Search products")
         }
@@ -804,6 +847,16 @@ private fun ProductPickerSheet(
 
 private fun formatQuantity(quantity: Double): String =
     BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()
+
+internal fun formatUsageAmount(quantity: Double): String {
+    require(quantity.isFinite() && quantity >= 0.0) {
+        "Usage totals must be finite and nonnegative"
+    }
+    return BigDecimal.valueOf(if (quantity == -0.0) 0.0 else quantity)
+        .setScale(6, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}
 
 internal fun filterSelectableProducts(
     products: List<Product>,

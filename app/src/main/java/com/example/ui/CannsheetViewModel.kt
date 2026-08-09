@@ -29,6 +29,7 @@ import com.example.data.SyncPurchase
 import com.example.data.SyncResponse
 import com.example.data.buildAcknowledgementPlan
 import com.example.data.productStatus
+import com.example.data.toProductEntity
 import com.example.data.toSyncConsumptionCorrection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -73,6 +75,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         AppDatabase.MIGRATION_6_7,
         AppDatabase.MIGRATION_7_8,
         AppDatabase.MIGRATION_8_9,
+        AppDatabase.MIGRATION_9_10,
     ).build()
 
     private val repository = CannsheetRepository(db)
@@ -139,6 +142,14 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             limit = RECENT_PRODUCT_LIMIT,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val pendingUsesByProduct: StateFlow<Map<String, Double>> = repository.pendingProductUses
+        .map { totals ->
+            totals.asSequence()
+                .filter { it.pendingUses.isFinite() && it.pendingUses > 0.0 }
+                .associate { it.productId to it.pendingUses }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
     private val _consumptionFormState = MutableStateFlow(ConsumptionFormState())
     val consumptionFormState: StateFlow<ConsumptionFormState> = _consumptionFormState
@@ -250,18 +261,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     return@launch
                 }
 
-                val entities = response.products.map { product ->
-                    Product(
-                        id = product.id,
-                        name = product.name,
-                        type = product.type,
-                        status = product.status,
-                        cost = product.cost ?: 0.0,
-                        thc = product.thc ?: 0.0,
-                        grams = product.grams ?: 0.0,
-                        productUuid = product.productUuid,
-                    )
-                }
+                val entities = response.products.map { it.toProductEntity() }
                 val remoteInteractions = response.products.mapNotNull { product ->
                     val timestamp = product.lastLoggedAtEpochMillis
                     val quantity = product.lastQuantity
