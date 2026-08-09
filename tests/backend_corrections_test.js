@@ -357,6 +357,9 @@ function assertCorrectionProjection(runtime) {
   assert.equal(productValue(runtime, '*P1', 'Uses'), 0);
   assert.equal(productValue(runtime, '*P2', 'Uses'), 2.5);
   assert.equal(productValue(runtime, '*P2', 'Finished'), 0);
+  const replacedCatalog = get(runtime, {});
+  assert.equal(replacedCatalog.products.find(product => product.id === '*P1').totalUses, 0);
+  assert.equal(replacedCatalog.products.find(product => product.id === '*P2').totalUses, 2.5);
 
   const sameRequestRetry = post(runtime, firstPayload);
   assert.equal(
@@ -425,6 +428,10 @@ function assertCorrectionProjection(runtime) {
   const insights = get(runtime, { resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX', from: '2026-07-01', to: '2026-07-20' });
   assert.equal(insights.overview.logCount, 1);
   assert.equal(insights.products.find(product => product.productId === '*P2').allTime.quantity, 2.5);
+  assert.equal(
+    replacedCatalog.products.find(product => product.id === '*P2').totalUses,
+    insights.products.find(product => product.productId === '*P2').allTime.quantity,
+  );
   assertReadOnlyGet(runtime, {
     resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX',
     from: '2026-07-01', to: '2026-07-20',
@@ -589,11 +596,15 @@ function assertCorrectionProjection(runtime) {
   const voidAction = correction(11, 'VOID', { expectedCorrectionHeadId: replace.actionId, reason: 'void it' });
   const voidResponse = post(runtime, payload(11, [voidAction]));
   assert.equal(voidResponse.acknowledgedConsumptionCorrections[0].revision, 2);
+  const voidCatalog = get(runtime, {});
+  assert.equal(voidCatalog.products.find(product => product.id === '*P1').totalUses, 0);
   const voidHistory = get(runtime, { resource: 'history', analyticsVersion: 2, environment: 'SANDBOX', limit: 10 });
   assert.equal(voidHistory.events.length, 0);
   const restore = correction(12, 'RESTORE', { expectedCorrectionHeadId: voidAction.actionId, reason: 'restore original' });
   const restoreResponse = post(runtime, payload(12, [restore]));
   assert.equal(restoreResponse.acknowledgedConsumptionCorrections[0].revision, 3);
+  const restoredCatalog = get(runtime, {});
+  assert.equal(restoredCatalog.products.find(product => product.id === '*P1').totalUses, 1);
   const restored = get(runtime, { resource: 'history', analyticsVersion: 2, includeAudit: true, environment: 'SANDBOX', limit: 10 });
   assert.equal(restored.events.length, 1);
   assert.equal(restored.events[0].productId, '*P1');
@@ -696,6 +707,16 @@ function assertCorrectionProjection(runtime) {
     eventId: ordinary.eventId, status: 'committed',
   }]);
   assert.deepEqual(mixed.rejectedConsumptions, []);
+  const ordinaryCatalog = get(runtime, {});
+  assert.equal(ordinaryCatalog.products.find(product => product.id === '*P2').totalUses, 0.5);
+  const ordinaryInsights = get(runtime, {
+    resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX',
+    from: '2026-07-01', to: '2026-07-20',
+  });
+  assert.equal(
+    ordinaryCatalog.products.find(product => product.id === '*P2').totalUses,
+    ordinaryInsights.products.find(product => product.productId === '*P2').allTime.quantity,
+  );
   assert.deepEqual(mixed.acknowledgedConsumptionCorrections, []);
   assert.deepEqual(
     mixed.rejectedConsumptionCorrections.map(item => ({

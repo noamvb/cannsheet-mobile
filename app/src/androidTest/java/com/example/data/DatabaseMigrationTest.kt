@@ -8,6 +8,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -529,6 +530,66 @@ class DatabaseMigrationTest {
             assertTrue(foundUniqueActionIndex)
         }
         version9.close()
+    }
+
+    @Test
+    fun migrationFrom9To10PreservesProductsAndQueuedConsumptions() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version9 = factory.create(configuration(9, object : SupportSQLiteOpenHelper.Callback(9) {
+            override fun onCreate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE products (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, " +
+                        "type TEXT NOT NULL, status INTEGER NOT NULL, cost REAL NOT NULL, " +
+                        "thc REAL NOT NULL, grams REAL NOT NULL, productUuid TEXT)",
+                )
+                db.execSQL(
+                    "CREATE TABLE consumption_actions (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "eventId TEXT NOT NULL, date TEXT NOT NULL, time TEXT NOT NULL, " +
+                        "productId TEXT NOT NULL, uses REAL NOT NULL, isFinished INTEGER NOT NULL, " +
+                        "productUuid TEXT)",
+                )
+                db.execSQL(
+                    "INSERT INTO products VALUES ('p1', 'Keep me', 'F', 0, 10.0, 0.2, 3.5, 'uuid-p1')",
+                )
+                db.execSQL(
+                    "INSERT INTO consumption_actions " +
+                        "(eventId, date, time, productId, uses, isFinished, productUuid) VALUES " +
+                        "('event-1', '2026-08-09', '12:00', 'p1', 0.5, 0, 'uuid-p1')",
+                )
+            }
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+        }))
+        version9.writableDatabase
+        version9.close()
+
+        val version10 = factory.create(configuration(10, object : SupportSQLiteOpenHelper.Callback(10) {
+            override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+            override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                AppDatabase.MIGRATION_9_10.migrate(db)
+            }
+        }))
+        val migrated = version10.writableDatabase
+
+        migrated.query("SELECT name, totalUses FROM products WHERE id = 'p1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Keep me", cursor.getString(0))
+            assertNull(cursor.getString(1))
+        }
+        migrated.query("PRAGMA table_info('products')").use { cursor ->
+            val nameIndex = cursor.getColumnIndexOrThrow("name")
+            var foundTotalUses = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(nameIndex) == "totalUses") foundTotalUses = true
+            }
+            assertTrue(foundTotalUses)
+        }
+        migrated.query("SELECT uses FROM consumption_actions WHERE eventId = 'event-1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0.5, cursor.getDouble(0), 0.0)
+        }
+        version10.close()
     }
 
     private fun configuration(

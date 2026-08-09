@@ -112,5 +112,43 @@ historical rationale.
   `tests/backend_corrections_test.js`,
   `tests/sandbox_provisioning_test.js`, `docs/ARCHITECTURE.md`
 
+## ADR-006: Keep confirmed and pending product usage totals separate
+
+- Status: Accepted
+- Date: 2026-08-09
+- Context: The Log screen needs to show how much of a product has been used,
+  including logs that are still offline, without bypassing correction semantics
+  or treating the local queue as complete history.
+- Decision:
+  1. Extend the existing ordinary product GET response with nullable
+     `totalUses`, sourced only from the correction-maintained `Purchases.Uses`
+     projection. Validate finite, nonnegative values and round the response to
+     six decimal places; do not add a new endpoint, spreadsheet column, API
+     version, or History/Insights scan.
+  2. Store the confirmed value in nullable `Product.totalUses` through Room
+     migration 9-to-10. Invalid values reject the refresh before the cached
+     catalog is replaced; missing values remain unavailable rather than zero.
+  3. Derive `pendingUsesByProduct` from grouped durable `consumption_actions`
+     rows. Existing acknowledgement/remapping rules remain the only way queue
+     rows disappear or borrowed temporary IDs become final IDs.
+  4. Render confirmed and pending values as separate lines on the selected and
+     Recent Products cards. Never add pending values optimistically into the
+     confirmed total, and leave the picker unchanged.
+- Rationale: The projection is already updated for ordinary logs and
+  Correct/Void/Restore operations, while the queue aggregate gives immediate
+  offline feedback without claiming unconfirmed backend state. Keeping the
+  values separate makes retry, failure, and correction behavior auditable.
+- Consequences: A new app against an older backend shows an unavailable
+  confirmed value but still shows local pending consumption. After an accepted
+  sync, Pending can disappear before the follow-up catalog refresh supplies the
+  new confirmed value. Room schema changes are forward-only.
+- Related files: `backend_additions.gs`, `app/src/main/java/com/example/data/Network.kt`,
+  `app/src/main/java/com/example/data/Database.kt`,
+  `app/src/main/java/com/example/data/ProductMapping.kt`,
+  `app/src/main/java/com/example/data/Repository.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/main/java/com/example/ui/ConsumptionScreen.kt`,
+  `tests/backend_analytics_test.js`, `tests/backend_corrections_test.js`
+
 
 

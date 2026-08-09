@@ -27,6 +27,7 @@ data class Product(
     val thc: Double = 0.0,
     val grams: Double = 0.0,
     val productUuid: String? = null,
+    val totalUses: Double? = null,
 )
 
 @Entity(
@@ -134,6 +135,11 @@ data class AnalyticsCacheEntity(
     val cachedAtEpochMillis: Long,
 )
 
+data class PendingProductUses(
+    val productId: String,
+    val pendingUses: Double,
+)
+
 @Dao
 interface CannsheetDao {
     @Query("SELECT * FROM products ORDER BY name ASC")
@@ -162,6 +168,12 @@ interface CannsheetDao {
 
     @Query("SELECT * FROM consumption_actions")
     suspend fun getPendingConsumptions(): List<ConsumptionAction>
+
+    @Query(
+        "SELECT productId, SUM(uses) AS pendingUses " +
+            "FROM consumption_actions GROUP BY productId",
+    )
+    fun getPendingProductUses(): Flow<List<PendingProductUses>>
 
     @Query("DELETE FROM consumption_actions WHERE eventId IN (:eventIds)")
     suspend fun deleteConsumptionsByEventIds(eventIds: List<String>)
@@ -369,7 +381,7 @@ interface CannsheetDao {
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(CannsheetTypeConverters::class)
@@ -578,6 +590,12 @@ abstract class AppDatabase : RoomDatabase() {
                     "ALTER TABLE `sync_request_state` ADD COLUMN " +
                         "`payloadFingerprint` TEXT NOT NULL DEFAULT ''",
                 )
+            }
+        }
+
+        val MIGRATION_9_10: Migration = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `products` ADD COLUMN `totalUses` REAL")
             }
         }
     }

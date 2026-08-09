@@ -157,6 +157,10 @@ function doGet(e) {
         const rawLastQuantity = summaryReady
           ? value_(row, headers, 'Last quantity')
           : '';
+        const rawTotalUses = value_(row, headers, 'Uses');
+        const totalUses = text_(rawTotalUses) === ''
+          ? 0
+          : optionalFiniteNumber_(rawTotalUses);
         const recentMillis = summaryReady
           ? timestampMillisOrNull_(rawRecent)
           : (fallback ? fallback.lastLoggedAtEpochMillis : null);
@@ -173,6 +177,12 @@ function doGet(e) {
             legacyId
           );
         }
+        if (totalUses == null || totalUses < 0) {
+          throw new Error(
+            'INTERACTION_SUMMARY_INVALID: Uses must be a finite nonnegative number for ' +
+            legacyId
+          );
+        }
         const product = {
           id: legacyId,
           name: text_(value_(row, headers, 'Product name')),
@@ -180,7 +190,8 @@ function doGet(e) {
           cost: finiteNumberOr_(value_(row, headers, 'Pre-tax cost'), 0),
           thc: finiteNumberOr_(value_(row, headers, 'THC%'), 0),
           grams: finiteNumberOr_(value_(row, headers, 'Grams'), 0),
-          status: allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE)
+          status: allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE),
+          totalUses: analyticsRounded_(totalUses)
         };
         if (headers['Product UUID'] !== undefined) {
           const productUuid = text_(value_(row, headers, 'Product UUID'));

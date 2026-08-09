@@ -35,6 +35,7 @@ data class GasProduct(
     val productUuid: String? = null,
     val lastLoggedAtEpochMillis: Long? = null,
     val lastQuantity: Double? = null,
+    val totalUses: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)

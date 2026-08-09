@@ -35,8 +35,8 @@ flowchart LR
 - `app/src/main/java/com/example/data/Repository.kt` mediates Room operations
   and coordinates product refresh.
 - `app/src/main/java/com/example/data/Database.kt` defines the Room schema, DAO,
-  transactions, and migrations. The checked-in schema version is 8, with
-  explicit migrations 2-to-3 through 7-to-8.
+  transactions, and migrations. The checked-in schema version is 10, with
+  explicit migrations 2-to-3 through 9-to-10.
 - `app/src/main/java/com/example/data/Network.kt` defines Apps Script
   request/response DTOs and Retrofit endpoints.
 - `app/src/main/java/com/example/data/SyncQueueLogic.kt` decides which immutable
@@ -55,7 +55,28 @@ flowchart LR
 3. Network products are mapped to Room entities.
 4. A Room transaction replaces server-backed products, restores pending
    purchase products, reapplies queued finish state, and merges newer product
-   interaction data.
+   interaction data. The nullable `totalUses` value is the backend-confirmed
+   cumulative quantity from the correction-safe `Purchases.Uses` projection.
+
+### Product usage totals on Log
+
+The ordinary product GET response carries `totalUses` from the existing
+`Purchases.Uses` projection. The backend validates that projection as finite and
+nonnegative and rounds the response to six decimal places; it does not scan
+`ConsumptionEvents` or calculate a second legacy total during catalog refresh.
+Android stores the value as nullable `Product.totalUses` so older deployments and
+products without a compatible confirmed value remain explicitly unavailable.
+
+The Log screen keeps confirmed and local values separate. A Room query groups
+durable, unsynced `consumption_actions` rows by `productId` and exposes their
+`uses` sum as `pendingUsesByProduct`. Temporary borrowed-product IDs are remapped
+by the existing acknowledgement transaction, so pending values follow the final
+product ID. Acknowledgement deletes queue rows; the subsequent product refresh
+supplies the new confirmed projection. Pending purchases, finish actions, the
+undo countdown, and pending History corrections are not included in this sum.
+The selected product card and Recent Products cards display both values when
+available; the product picker does not. The app never adds pending values into
+`totalUses` locally or presents a combined provisional total.
 
 ### Purchase, consumption, finish, and correction synchronization
 
@@ -128,8 +149,10 @@ detail contract is introduced.
 
 Room contains tables for products, purchase actions, consumption actions, finish
 actions, consumption corrections, product interactions, sync request state, and
-analytics cache entries. DataStore holds user preferences that do not require
-relational transactions.
+analytics cache entries. `products.totalUses` was added by the forward 9-to-10
+migration and is nullable. The `consumption_actions` aggregate is a live view of
+the pending queue only, not a replacement for server history. DataStore holds
+user preferences that do not require relational transactions.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
@@ -165,10 +188,11 @@ source values.
 ## Testing approach
 
 - `app/src/test`: JVM unit tests for UI helpers/coordinators, environment
-  contracts, queue acknowledgement logic, preferences, filtering, and status
-  handling.
+  contracts, queue acknowledgement logic, preferences, filtering, product
+  mapping, usage formatting, and status handling.
 - `app/src/androidTest`: Room migration/queue tests and Compose UI tests that
-  require a device or emulator.
+  require a device or emulator, including pending-usage aggregation, the 9-to-10
+  migration, and selected/recent usage-total rendering.
 - `tests`: Node scripts execute the checked-in Apps Script source against fake
   Apps Script/Sheets implementations; a Python unittest covers deterministic
   backend benchmark tooling.

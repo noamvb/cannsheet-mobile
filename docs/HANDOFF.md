@@ -1,6 +1,6 @@
 # Latest handoff
 
-Last updated: 2026-07-30
+Last updated: 2026-08-09
 
 ## Purpose of this session
 
@@ -8,6 +8,24 @@ Complete the editable consumption-History rollout, publish Cannsheet Mobile
 v1.2.17, independently verify the public APK, and leave an evidence-based
 handoff that separates repository, CI, production-backend, public-artifact, and
 device state.
+
+## Product usage totals feature branch
+
+This working branch, `codex/product-usage-totals`, implements the Log Consumption
+usage-total feature on top of the local `origin/main` correction-aware source.
+The backend catalog response now exposes nullable `totalUses` from the existing
+`Purchases.Uses` projection, and Android stores it in Room schema version 10.
+The app separately groups durable pending consumption rows by product and shows
+confirmed and pending values on the selected and Recent Products cards only.
+No endpoint, API version, spreadsheet column, release metadata, signing setup,
+or queue acknowledgement rule was changed. See ADR-006 and the architecture
+section on product usage totals for the durable contract.
+
+The branch is not merged or deployed. Local JVM tests, instrumentation-test
+compilation, lint, debug assembly, and the complete checked-in backend suite
+passed. No emulator was connected for `connectedDebugAndroidTest`, and no
+manual screenshots or recording were captured; those acceptance checks remain
+required before release.
 
 ## Work completed
 

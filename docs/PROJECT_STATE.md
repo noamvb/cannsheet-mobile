@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-07-30
+Last updated: 2026-08-09
 
 ## Repository state
 
@@ -27,6 +27,30 @@ Last updated: 2026-07-30
   [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21),
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
+
+## Product usage totals feature branch
+
+The focused branch `codex/product-usage-totals` is based on the local
+`origin/main` correction-aware source. It adds correction-safe product usage
+totals to the Log screen without changing the API version, endpoint, release
+metadata, or spreadsheet schema:
+
+- The ordinary catalog GET exposes `totalUses` from the existing
+  `Purchases.Uses` projection. Blank cells become confirmed zero; invalid,
+  negative, or non-finite values fail the refresh rather than replacing Room
+  data.
+- Room schema version 10 stores the nullable confirmed value. A 9-to-10
+  migration leaves existing products and pending queues intact.
+- A reactive grouped query exposes pending durable consumption quantities by
+  product. Existing acknowledgement and borrowed-product ID remapping rules
+  remain unchanged.
+- The selected product and Recent Products cards show separate `Synced` and
+  `Pending` lines; the picker is unchanged. Pending is never added into the
+  confirmed value locally.
+
+This branch is not merged, deployed, tagged, or released. Device/emulator
+manual acceptance and screenshots remain outstanding until a booted test device
+is available.
 
 ## Project summary
 
