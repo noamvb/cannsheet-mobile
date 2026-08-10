@@ -1,23 +1,23 @@
 # Project state
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and annotated tag `v1.2.18`:
-  `e93883b5a3cb7e98160a59489677fd87e0bb217a`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.18`,
-  version code `21`
-- Product usage totals [PR #27](https://github.com/noamvb/cannsheet-mobile/pull/27)
-  and version-only release [PR #28](https://github.com/noamvb/cannsheet-mobile/pull/28)
+- Released source commit and annotated tag `v1.2.19`:
+  `009d38cc00642c323015958160b768661c13036d`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.19`,
+  version code `22`
+- Background synchronization [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30)
+  and version-only release [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31)
   were squash-merged after their required validation passed.
 - The public signed release is
-  [Cannsheet Mobile 1.2.18](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.18).
-  Its release assets are `Cannsheet-Mobile-1.2.18.apk` and
-  `Cannsheet-Mobile-1.2.18.apk.sha256` (in addition to GitHub's automatic source archives).
+  [Cannsheet Mobile 1.2.19](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.19).
+  Its release assets are `Cannsheet-Mobile-1.2.19.apk` and
+  `Cannsheet-Mobile-1.2.19.apk.sha256` (in addition to GitHub's automatic source archives).
 - Public APK SHA-256:
-  `70cdc24f3a5dea63701b5fbbc2b2adadaaa18d46a665a76af13cb3f8350d5792`
+  `86773a13c4633034fda8e67b033b2e2ec924333442ad5401ef2ae7d31bd2a747`
 - The editable History milestone was delivered through backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and production
@@ -28,11 +28,10 @@ Last updated: 2026-08-09
 
 ## Background synchronization feature work
 
-Background synchronization is in progress on feature branch
-`agent/background-sync` in
-[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
-commit `9b71cab`. It is not merged, released, deployed, or included in
-Cannsheet Mobile v1.2.18.
+Background synchronization was delivered in
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30) and released in
+Cannsheet Mobile v1.2.19. It is Android-only: it does not change the Apps
+Script backend, Room schema, or Room version.
 
 The approved feature uses a process-wide `CannsheetGraph` with a shared mutex
 and routes foreground and WorkManager queue attempts through one `SyncEngine`.
@@ -43,12 +42,12 @@ Room schema/version.
 
 Local validation passed 85 JVM tests, Android-test Kotlin compilation, lint
 with no errors, debug APK assembly, and the unchanged backend analytics test.
-PR run
-[31347066238](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347066238)
-also passed repository safety, backend and Android static validation, API 24
-emulator instrumentation, and aggregate validation. Exact commit `d523c28`
-then passed the same complete branch checks in
-[run 31347378448](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347378448).
+The exact merged feature commit `4da427d` passed full main validation in
+[run 31350500266](https://github.com/noamvb/cannsheet-mobile/actions/runs/31350500266),
+including API 24, API 36, and the aggregate check. The version-only PR passed
+[run 31351238565](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351238565),
+and exact release commit `009d38c` passed the same full main matrix in
+[run 31351485515](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351485515).
 
 Physical-device validation used an isolated test application ID on a Samsung
 SM-F966W running Android 16 / API 36; the installed production and older
@@ -61,9 +60,9 @@ one accepted request with no duplicate. The disabled switch kept a second
 action local through reconnect; re-enabling drained it once. A final three-item
 offline batch produced exactly three event rows sharing one request UUID and
 one accepted ledger row with consumption count 3; delayed row counts remained
-unchanged. Existing v1.2.18 release
-evidence below remains the current released-state evidence because the feature
-is still unmerged and unreleased.
+unchanged. The signed publication workflow
+[31351814290](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351814290)
+published v1.2.19 after confirming that exact validated main commit.
 
 ## Product usage totals release
 
@@ -164,8 +163,16 @@ Private-source evidence:
 
 Signed-publication evidence:
 
-- Annotated tag `v1.2.18` resolves to the exact release commit above.
+- Annotated tag `v1.2.19` resolves to the exact release commit above.
 - Signed release workflow run
+  [31351814290](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351814290)
+  passed the exact-main/tag/version gate, tests, lint, signed build, signature
+  verification, checksum generation, public upload, and post-publication
+  verification.
+- The public release contains exactly one APK (13,493,018 bytes) and its
+  `.sha256` file, plus GitHub's automatic source archives.
+- The preceding v1.2.18 release remains historical evidence only; its signed
+  release workflow run
   [31343252239](https://github.com/noamvb/cannsheet-mobile/actions/runs/31343252239)
   passed tag/main/version checks, tests, lint, signed build, signature
   verification, checksum generation, publication, and post-publication
@@ -175,10 +182,10 @@ Signed-publication evidence:
 
 Independent public-artifact evidence:
 
-- The downloaded checksum file matched the APK:
-  `70cdc24f3a5dea63701b5fbbc2b2adadaaa18d46a665a76af13cb3f8350d5792`.
+- The independently downloaded v1.2.19 checksum file matched the APK:
+  `86773a13c4633034fda8e67b033b2e2ec924333442ad5401ef2ae7d31bd2a747`.
 - Android `aapt` reported application ID `com.noamv.cannsheet.mobile`,
-  version code `21`, and version name `1.2.18`.
+  version code `22`, and version name `1.2.19`.
 - Android `apksigner` verified APK Signature Scheme v2 with one signer.
 - Signing certificate SHA-256:
   `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`
@@ -209,20 +216,18 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Complete focused review and required CI for the unmerged background-sync
-   feature branch; do not treat it as deployed or released.
-2. Install or update to v1.2.18 on the intended phone, preferably through
+1. Install or update to v1.2.19 on the intended phone, preferably through
    Obtainium.
-3. Verify selected and recent product cards for zero, integer, fractional,
+2. Verify selected and recent product cards for zero, integer, fractional,
    offline pending, successful sync, failed sync, and borrowed-product cases.
-4. Perform one controlled correction and confirm that the synced total changes
+3. Perform one controlled correction and confirm that the synced total changes
    only after backend acknowledgement, without creating pending consumption.
-5. Retain the local background-sync screenshot with the task evidence; do not
+4. Retain the local background-sync screenshot with the task evidence; do not
    commit device captures that contain private data.
 
 ## Unresolved questions
 
-- Does Obtainium detect and install v1.2.18 in place on the intended phone?
+- Does Obtainium detect and install v1.2.19 in place on the intended phone?
 - Do the confirmed-versus-pending totals remain clear during real offline,
   retry, borrowed-product, and correction workflows on the intended phone?
 
