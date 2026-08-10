@@ -1,20 +1,18 @@
 # Latest handoff
 
-Last updated: 2026-08-09
+Last updated: 2026-08-10
 
 ## Outcome
 
-Product usage totals are merged, deployed, signed, and publicly available in
-Cannsheet Mobile v1.2.18. The Log Consumption screen shows correction-aware
+Product usage totals and background synchronization are merged, signed, and
+publicly available in Cannsheet Mobile v1.2.19. The Log Consumption screen
+shows correction-aware
 synced totals from the existing `Purchases.Uses` projection and separately
 shows durable locally pending consumption. Totals appear on the selected and
 Recent Products cards, not in the product picker.
 
-Background synchronization is separate feature-branch work on
-`agent/background-sync` in
-[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
-commit `9b71cab`. It is not merged, released, deployed, or included in v1.2.18.
-The implementation uses a
+Background synchronization was delivered through
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30). The implementation uses a
 process-wide graph and shared mutex so `SyncEngine` serializes foreground and
 WorkManager queue attempts. It schedules connected immediate work with
 `APPEND_OR_REPLACE`, periodic six-hour work with `UPDATE`, leaves default
@@ -22,21 +20,21 @@ WorkManager initialization in place, does not use expedited work, and provides
 a DataStore kill switch. It does not change the backend or Room schema/version.
 
 Public release:
-[Cannsheet Mobile 1.2.18](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.18)
+[Cannsheet Mobile 1.2.19](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.19)
 
 Direct APK:
-[Cannsheet-Mobile-1.2.18.apk](https://github.com/noamvb/cannsheet-mobile-releases/releases/download/v1.2.18/Cannsheet-Mobile-1.2.18.apk)
+[Cannsheet-Mobile-1.2.19.apk](https://github.com/noamvb/cannsheet-mobile-releases/releases/download/v1.2.19/Cannsheet-Mobile-1.2.19.apk)
 
 ## Source and release state
 
-- Product usage totals were delivered through
-  [PR #27](https://github.com/noamvb/cannsheet-mobile/pull/27).
+- Background synchronization was delivered through
+  [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30).
 - Version-only release
-  [PR #28](https://github.com/noamvb/cannsheet-mobile/pull/28) changed
-  `versionName` to `1.2.18` and `versionCode` to `21`.
+  [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31) changed
+  `versionName` to `1.2.19` and `versionCode` to `22`.
 - Exact release commit:
-  `e93883b5a3cb7e98160a59489677fd87e0bb217a`.
-- Annotated tag `v1.2.18` targets that exact commit.
+  `009d38cc00642c323015958160b768661c13036d`.
+- Annotated tag `v1.2.19` targets that exact commit.
 - No endpoint, API version, signing identity, spreadsheet column, or release
   workflow was changed for this feature.
 
@@ -128,17 +126,29 @@ Direct APK:
 - `node tests/backend_analytics_test.js` passed without changing backend source.
 - The merged debug manifest retains default WorkManager initialization and the
   `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, and `FOREGROUND_SERVICE` permissions.
+- Exact merged feature main run
+  [31350500266](https://github.com/noamvb/cannsheet-mobile/actions/runs/31350500266)
+  passed safety, backend, Android static, API 24, API 36, and aggregate checks.
+- Version-only PR run
+  [31351238565](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351238565)
+  passed its required checks. Exact version-bump main run
+  [31351485515](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351485515)
+  passed the full API 24/API 36 matrix and aggregate check.
+- Signed publication run
+  [31351814290](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351814290)
+  passed exact-main/tag/version validation, signed build, signature and checksum
+  verification, public upload, and post-publication verification.
 
 ## Independent public APK verification
 
-- APK size: 13,241,161 bytes.
+- APK size: 13,493,018 bytes.
 - APK SHA-256:
-  `70cdc24f3a5dea63701b5fbbc2b2adadaaa18d46a665a76af13cb3f8350d5792`.
+  `86773a13c4633034fda8e67b033b2e2ec924333442ad5401ef2ae7d31bd2a747`.
 - The downloaded checksum file exactly matched the downloaded APK.
 - Android `aapt` reported:
   - application ID `com.noamv.cannsheet.mobile`;
-  - version code `21`;
-  - version name `1.2.18`.
+  - version code `22`;
+  - version name `1.2.19`.
 - Android `apksigner` reported a valid APK Signature Scheme v2 signature with
   one signer.
 - Signing certificate SHA-256:
@@ -147,8 +157,8 @@ Direct APK:
 ## Not yet verified
 
 - The isolated background-sync package was installed directly with ADB. No
-  in-place Obtainium update or installation of the feature into the production
-  package was attempted.
+  in-place Obtainium update to v1.2.19 or installation of the production
+  package was observed.
 - The complete manual offline, countdown-cancellation, failed-sync persistence,
   borrowed-product remapping, large-font, and live correction scenarios were
   not performed on the intended phone.
@@ -157,10 +167,9 @@ Direct APK:
 
 ## Recommended next action
 
-Review the focused background-sync PR and its new documentation-only CI run;
-do not treat the feature as released or deployed. Separately, install or update
-the production package to v1.2.18 through Obtainium or the direct APK link and
-complete the remaining product-total and correction scenarios when desired.
+Install or update the production package to v1.2.19 through Obtainium or the
+direct APK link, then complete the remaining product-total and correction
+scenarios when desired.
 
 ## Safety review
 
@@ -168,4 +177,4 @@ complete the remaining product-total and correction scenarios when desired.
   personal absolute path, runtime database, build output, or downloaded APK is
   committed.
 - The documentation follow-up occurs after the immutable release tag and does
-  not change what v1.2.18 identifies.
+  not change what v1.2.19 identifies.
