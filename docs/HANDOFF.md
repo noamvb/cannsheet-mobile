@@ -4,12 +4,7 @@ Last updated: 2026-08-10
 
 ## Outcome
 
-Working branch `claude/background-sync-history-insights-2owoab` adds a
-best-effort Insights/History analytics cache prefetch to the existing
-six-hour periodic `SyncWorker` run. It is implemented and self-reviewed
-against the current source, but **not merged, not released, and not
-validated by any test run, build, or device check in this session** — see
-"What could not be validated" below before relying on it.
+Analytics prefetch (best-effort Insights/History cache warming from the periodic `SyncWorker` run) is **merged, released, and CI-validated**: [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) are both merged into `main`, and Cannsheet Mobile **v1.2.20** is published and signed. The code was implemented and self-reviewed without local test execution (this session's environment had no JDK 17+, Android SDK, or Node.js runtime — see "What could not be validated" below), so PR #33 was opened as a draft specifically for that reason. CI then validated everything before any tag was created: PR-level checks, two full push-to-main API 24/API 36 matrix runs (one per merge), and the signed release workflow all passed. See `docs/PROJECT_STATE.md` for the exact run IDs and commit SHAs. No manual device validation was performed.
 
 The prior release state (Cannsheet Mobile v1.2.19, background synchronization
 via [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), and product
@@ -57,7 +52,7 @@ branch.
   skipping prefetch, and a prefetch failure not affecting the reported queue
   result.
 
-None of these were executed in this session — see below.
+None of these were executed in this session — see below. (Update: CI subsequently ran the equivalent checks — unit tests, lint, `compileDebugAndroidTestKotlin`, and two full API 24/API 36 matrix runs — and all passed before the release was tagged; see `docs/PROJECT_STATE.md` for exact run IDs. This section is kept as-is for an accurate record of what this session itself could verify.)
 
 ## What could not be validated
 
@@ -88,20 +83,12 @@ validation this change will receive.
 
 ## Recommended next action
 
-1. Let CI run on the draft PR and read its result before treating this
-   change as working — do not assume the code above is correct until CI (or
-   a local environment with JDK 17+ and the Android SDK) confirms it
-   compiles and the new tests pass.
-2. If CI passes, perform the manual validation steps described in the
-   original task plan (trigger the periodic `WorkManager` job via
-   `adb shell cmd jobscheduler run -f`, confirm one `resource=insights` and
-   one `resource=history` GET in `adb logcat`, confirm airplane-mode cold
-   open shows the warmed cache, confirm the 2-hour floor skips a second
-   immediate run, confirm the "Background sync" switch off skips prefetch,
-   and confirm a filtered History cache is refetched with the same filters)
-   using the sandbox build type so no production write path is touched.
-3. Convert the draft PR to ready for review once CI and manual validation
-   both pass, and record the exact results in `docs/PROJECT_STATE.md`.
+All of this has now happened: CI passed, PR #33 and PR #34 were merged, and v1.2.20 was tagged and published. The remaining recommended actions are the manual device validation steps that were never run in this session and have no CI substitute:
+
+1. Trigger the periodic `WorkManager` job on a device (`adb shell cmd jobscheduler run -f`), confirm one `resource=insights` and one `resource=history` GET fire via `adb logcat`, and confirm a cold airplane-mode open shows the warmed cache with correction affordances still disabled.
+2. Re-run the worker immediately after and confirm both resources are skipped (inside the 2-hour freshness floor).
+3. Confirm the "Background sync" switch off skips prefetch, and confirm a filtered History cache is refetched with the same filters — using the sandbox build type so no production write path is touched.
+4. Update this file and `docs/PROJECT_STATE.md`'s "Current priorities"/"Unresolved questions" once that device evidence exists.
 
 ## Safety review
 
