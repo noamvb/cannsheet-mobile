@@ -4,35 +4,27 @@ import android.app.Application
 import com.example.BuildConfig
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.room.Room
-import com.example.data.AppDatabase
-import com.example.data.AnalyticsRepository
-import com.example.data.CannsheetRepository
+import com.example.data.BackgroundSyncEvent
+import com.example.data.CannsheetGraph
 import com.example.data.ConsumptionCorrectionOperation
 import com.example.data.ConsumptionAction
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.FinishAction
-import com.example.data.GasApiService
-import com.example.data.GasProductResponse
 import com.example.data.HistoryFilters
 import com.example.data.InsightsRange
 import com.example.data.Product
 import com.example.data.ProductInteraction
+import com.example.data.ProductCatalogRefreshResult
 import com.example.data.ProductStatus
 import com.example.data.PurchaseAction
 import com.example.data.PendingConsumptionCorrection
-import com.example.data.QueuedSyncSnapshot
-import com.example.data.SyncConsumption
-import com.example.data.SyncFinishAction
-import com.example.data.SyncPayload
-import com.example.data.SyncPurchase
-import com.example.data.SyncResponse
-import com.example.data.buildAcknowledgementPlan
+import com.example.data.SyncOutcome
+import com.example.data.SyncPreferences
+import com.example.data.sync.SyncScheduler
 import com.example.data.productStatus
-import com.example.data.toProductEntity
-import com.example.data.toSyncConsumptionCorrection
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -41,15 +33,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
-import retrofit2.Retrofit
-import retrofit2.converter.moshi.MoshiConverterFactory
 import java.math.BigDecimal
 import java.net.SocketTimeoutException
-import java.util.concurrent.TimeUnit
 import java.util.UUID
 
 data class ConsumptionFormState(
@@ -63,48 +49,12 @@ data class RecentProduct(
 )
 
 class CannsheetViewModel(application: Application) : AndroidViewModel(application) {
-    private val db = Room.databaseBuilder(
-        application,
-        AppDatabase::class.java,
-        "cannsheet_db",
-    ).addMigrations(
-        AppDatabase.MIGRATION_2_3,
-        AppDatabase.MIGRATION_3_4,
-        AppDatabase.MIGRATION_4_5,
-        AppDatabase.MIGRATION_5_6,
-        AppDatabase.MIGRATION_6_7,
-        AppDatabase.MIGRATION_7_8,
-        AppDatabase.MIGRATION_8_9,
-        AppDatabase.MIGRATION_9_10,
-    ).build()
-
-    private val repository = CannsheetRepository(db)
+    private val graph = CannsheetGraph.get(application)
+    private val repository = graph.repository
     private val consumptionPreferences = ConsumptionPreferencesRepository(application)
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
-        .build()
-
-    private val moshi = com.squareup.moshi.Moshi.Builder().build()
-
-    private val apiService = Retrofit.Builder()
-        .baseUrl("https://example.com/")
-        .client(client)
-        .addConverterFactory(MoshiConverterFactory.create(moshi))
-        .build()
-        .create(GasApiService::class.java)
-
     private val analyticsCoordinator = AnalyticsCoordinator(
-        repository = AnalyticsRepository(
-            api = apiService,
-            dao = db.cannsheetDao(),
-            moshi = moshi,
-            endpoint = BuildConfig.GAS_URL,
-            environment = BuildConfig.APP_ENVIRONMENT,
-        ),
+        repository = graph.analyticsRepository,
         scope = viewModelScope,
     )
 
@@ -129,6 +79,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     val includeUnopened: StateFlow<Boolean> = consumptionPreferences.includeUnopened
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    val backgroundSyncPreferences: StateFlow<SyncPreferences> = graph.syncPreferences.preferences
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            SyncPreferences(),
+        )
 
     val recentProducts: StateFlow<List<RecentProduct>> = combine(
         allProducts,
@@ -189,9 +146,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private var pendingConsumptionAction: (() -> Unit)? = null
     private var pendingBorrowedConsumptionAction: (() -> Unit)? = null
     private var pendingFinishAction: (() -> Unit)? = null
-    private val syncMutex = Mutex()
+    private val syncMutex = graph.syncMutex
 
     init {
+        viewModelScope.launch {
+            graph.backgroundSyncEvents.collect(::applyBackgroundSyncEvent)
+        }
         fetchProducts()
     }
 
@@ -209,6 +169,15 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     fun setIncludeUnopened(include: Boolean) {
         viewModelScope.launch {
             consumptionPreferences.setIncludeUnopened(include)
+        }
+    }
+
+    fun setBackgroundSyncEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            runCatching { graph.syncPreferences.setEnabled(enabled) }
+                .onFailure { error ->
+                    _syncStatus.value = error.message ?: "Could not update background sync"
+                }
         }
     }
 
@@ -242,40 +211,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             _syncStatus.value = "Fetching products..."
-            try {
-                val rawString = apiService.getProducts(url).string()
-                if (rawString.trimStart().startsWith("<")) {
-                    _syncStatus.value = "Error: HTML received. Ensure URL is correct and deployed for 'Anyone'."
-                    return@launch
-                }
-
-                val response = moshi.adapter(GasProductResponse::class.java)
-                    .lenient()
-                    .fromJson(rawString)
-                if (response == null) {
-                    _syncStatus.value = "Error: Null response"
-                    return@launch
-                }
-                if (response.environment != BuildConfig.APP_ENVIRONMENT) {
-                    _syncStatus.value = "Configuration error: server environment does not match this app"
-                    return@launch
-                }
-
-                val entities = response.products.map { it.toProductEntity() }
-                val remoteInteractions = response.products.mapNotNull { product ->
-                    val timestamp = product.lastLoggedAtEpochMillis
-                    val quantity = product.lastQuantity
-                    if (timestamp != null && quantity != null && quantity.isFinite() && quantity > 0.0) {
-                        ProductInteraction(product.id, timestamp, quantity)
-                    } else {
-                        null
-                    }
-                }
-                repository.refreshProducts(entities, remoteInteractions)
-                _syncStatus.value = "Products updated"
-            } catch (error: Exception) {
-                _syncStatus.value = "Error fetching products: ${error.message}"
-            }
+            _syncStatus.value = productCatalogStatus(graph.catalogRefresher.refresh(url))
         }
     }
 
@@ -428,6 +364,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             repository.addPurchase(action)
             _syncStatus.value = "Purchase saved offline"
             syncQueue()
+            SyncScheduler.enqueueImmediate(getApplication())
         }
     }
 
@@ -454,6 +391,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             }
             _syncStatus.value = "Consumption saved offline"
             syncQueue()
+            SyncScheduler.enqueueImmediate(getApplication())
         }
     }
 
@@ -497,6 +435,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             )
             _syncStatus.value = "Borrowed consumption saved offline"
             syncQueue()
+            SyncScheduler.enqueueImmediate(getApplication())
         }
     }
 
@@ -521,6 +460,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             }
             _syncStatus.value = "Product marked finished offline"
             syncQueue()
+            SyncScheduler.enqueueImmediate(getApplication())
         }
     }
 
@@ -602,6 +542,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 "Correction saved on this phone. It will sync when a connection is available."
             )
             syncQueue()
+            SyncScheduler.enqueueImmediate(getApplication())
         }
     }
 
@@ -634,185 +575,103 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         viewModelScope.launch {
-            syncMutex.withLock {
-                _isSyncing.value = true
-                _syncStatus.value = "Syncing..."
-                try {
-                    val pendingPurchases = repository.getPendingPurchases()
-                    val pendingConsumptions = repository.getPendingConsumptions()
-                    val pendingFinishActions = repository.getPendingFinishActions()
-                    val pendingCorrections = repository.getPendingConsumptionCorrections()
-                    if (
-                        pendingPurchases.isEmpty() &&
-                        pendingConsumptions.isEmpty() &&
-                        pendingFinishActions.isEmpty() &&
-                        pendingCorrections.isEmpty()
-                    ) {
-                        _syncStatus.value = "Nothing to sync"
-                        return@withLock
-                    }
+            graph.syncEngine.sync(
+                endpoint = url,
+                onLockAcquired = {
+                    _isSyncing.value = true
+                    _syncStatus.value = "Syncing..."
+                },
+                onOutcome = ::applySyncOutcome,
+                onLockReleasing = { _isSyncing.value = false },
+            )
+        }
+    }
 
-                    // These exact UUIDs are the immutable request snapshot. Anything
-                    // queued after this point is intentionally left for the next sync.
-                    val snapshot = QueuedSyncSnapshot(
-                        purchaseActionIds = pendingPurchases.mapTo(linkedSetOf(), PurchaseAction::actionId),
-                        consumptionEventIds = pendingConsumptions.mapTo(linkedSetOf(), ConsumptionAction::eventId),
-                        finishActionIds = pendingFinishActions.mapTo(linkedSetOf(), FinishAction::actionId),
-                        purchaseActionIdByTempId = pendingPurchases.associate { it.tempId to it.actionId },
-                        correctionActionIdByTargetEventId = pendingCorrections.associate {
-                            it.targetEventId to it.actionId
-                        },
-                    )
-                    val requestId = repository.getOrCreateSyncRequestId(snapshot)
-                    val purchases = pendingPurchases.map { action ->
-                        SyncPurchase(
-                            actionId = action.actionId,
-                            tempId = action.tempId,
-                            date = action.date,
-                            type = action.type,
-                            name = action.name,
-                            cost = action.cost,
-                            thc = action.thc,
-                            grams = action.grams,
-                            borrowed = action.borrowed,
-                            postTax = action.postTax,
-                            productUuid = action.productUuid,
-                        )
+    private fun applySyncOutcome(outcome: SyncOutcome) {
+        when (outcome) {
+            is SyncOutcome.Applied -> {
+                applyPurchaseRemaps(outcome)
+                _syncStatus.value = syncStatusMessage(outcome)
+                applyCorrectionFeedback(outcome)
+                if (outcome.plan.hasAcknowledgements) {
+                    analyticsCoordinator.markStale()
+                    if (!outcome.plan.finishCapabilityMissing) {
+                        fetchProducts()
                     }
-                    val consumptions = pendingConsumptions.map { action ->
-                        SyncConsumption(
-                            eventId = action.eventId,
-                            date = action.date,
-                            time = action.time,
-                            productId = action.productId,
-                            uses = action.uses,
-                            isFinished = action.isFinished,
-                            productUuid = action.productUuid,
-                        )
-                    }
-                    val finishActions = pendingFinishActions.map { action ->
-                        SyncFinishAction(
-                            actionId = action.actionId,
-                            date = action.date,
-                            time = action.time,
-                            productId = action.productId,
-                            productUuid = action.productUuid,
-                        )
-                    }
-                    val corrections = pendingCorrections.map(PendingConsumptionCorrection::toSyncConsumptionCorrection)
-
-                    val rawString = apiService.syncData(
-                        url,
-                        SyncPayload(
-                            requestId = requestId,
-                            environment = BuildConfig.APP_ENVIRONMENT,
-                            purchases = purchases,
-                            consumptions = consumptions,
-                            finishActions = finishActions,
-                            consumptionCorrections = corrections,
-                        ),
-                    ).string()
-                    if (rawString.trimStart().startsWith("<")) {
-                        _syncStatus.value = "Error: HTML received. Ensure URL is correct and deployed for 'Anyone'."
-                        return@withLock
-                    }
-
-                    val response = moshi.adapter(SyncResponse::class.java).lenient().fromJson(rawString)
-                    if (response?.success != true) {
-                        _syncStatus.value = "Sync failed: ${response?.errorCode ?: response?.message ?: "Unknown error"}"
-                        if (pendingCorrections.isNotEmpty()) {
-                            val targetEventId = pendingCorrections.first().targetEventId
-                            updateHistoryCorrectionStatus(
-                                targetEventId,
-                                correctionRejectionMessage(
-                                    response?.errorCode.orEmpty(),
-                                    response?.message,
-                                ) + " Your saved correction is still pending.",
-                            )
-                        }
-                        return@withLock
-                    }
-                    if (response.environment != BuildConfig.APP_ENVIRONMENT) {
-                        _syncStatus.value = "Configuration error: sync response environment does not match this app"
-                        return@withLock
-                    }
-                    if (
-                        (response.apiVersion == 2 || pendingCorrections.isNotEmpty()) &&
-                        response.requestId != requestId
-                    ) {
-                        _syncStatus.value = "Sync response could not be matched safely. Your entries are still pending."
-                        return@withLock
-                    }
-
-                    val plan = buildAcknowledgementPlan(snapshot, response)
-                    repository.applyAcknowledgements(plan)
-                    val idMappings = plan.purchaseRemaps.associate { it.tempId to it.legacyProductId }
-                    val selectedId = _consumptionFormState.value.selectedProductId
-                    val remappedId = selectedId?.let(idMappings::get)
-                    if (remappedId != null) {
-                        _consumptionFormState.update { it.copy(selectedProductId = remappedId) }
-                    }
-
-                    _syncStatus.value = when {
-                        plan.correctionCapabilityMissing ->
-                            "Sync failed: backend update required for history corrections"
-                        plan.finishCapabilityMissing ->
-                            "Sync failed: backend update required for finish actions"
-                        plan.hasRejections ->
-                            "Sync partial: ${
-                                plan.rejectedPurchaseCount +
-                                    plan.rejectedConsumptionCount +
-                                    plan.rejectedFinishActionCount +
-                                    plan.rejectedConsumptionCorrections.size
-                            } item(s) need attention"
-                        plan.hasAcknowledgements -> "Sync successful"
-                        else -> "Sync completed without acknowledgements"
-                    }
-                    plan.rejectedConsumptionCorrections.firstOrNull()?.let { rejection ->
-                        val targetEventId = rejection.targetEventId ?: pendingCorrections.firstOrNull {
-                            it.actionId == rejection.actionId
-                        }?.targetEventId
-                        if (targetEventId != null) {
-                            updateHistoryCorrectionStatus(
-                                targetEventId,
-                                correctionRejectionMessage(rejection.errorCode, rejection.message) +
-                                    " Your saved correction is still pending.",
-                            )
-                        }
-                    }
-                    if (plan.correctionCapabilityMissing) {
-                        pendingCorrections.firstOrNull()?.targetEventId?.let { targetEventId ->
-                            updateHistoryCorrectionStatus(
-                                targetEventId,
-                                "History corrections are not enabled on this server yet. Your saved correction is still pending.",
-                            )
-                        }
-                    }
-                    plan.acknowledgedConsumptionCorrections.firstOrNull()?.let { acknowledgement ->
-                        updateHistoryCorrectionStatus(
-                            acknowledgement.targetEventId,
-                            "Correction accepted by the server. History is refreshing.",
-                        )
-                    }
-                    if (plan.hasAcknowledgements) {
-                        analyticsCoordinator.markStale()
-                        if (!plan.finishCapabilityMissing) {
-                            fetchProducts()
-                        }
-                    }
-                } catch (error: Exception) {
-                    // No queue rows are removed on network, parsing, or request failure.
-                    _syncStatus.value = syncFailureStatus(error)
-                    pendingCorrectionTargetIds.value.firstOrNull()?.let { targetEventId ->
-                        updateHistoryCorrectionStatus(
-                            targetEventId,
-                            "Could not reach the server. Your saved correction is still pending and will retry safely.",
-                        )
-                    }
-                } finally {
-                    _isSyncing.value = false
                 }
             }
+
+            is SyncOutcome.Failed -> {
+                _syncStatus.value = syncStatusMessage(outcome)
+                outcome.pendingCorrectionsAtSnapshot.firstOrNull()?.let { correction ->
+                    updateHistoryCorrectionStatus(
+                        correction.targetEventId,
+                        correctionRejectionMessage(outcome.errorCode.orEmpty(), outcome.message) +
+                            " Your saved correction is still pending.",
+                    )
+                }
+            }
+
+            is SyncOutcome.TransportError -> {
+                _syncStatus.value = syncStatusMessage(outcome)
+                // Preserve the existing behavior: transport feedback reads the
+                // live StateFlow, rather than the engine's queue snapshot.
+                pendingCorrectionTargetIds.value.firstOrNull()?.let { targetEventId ->
+                    updateHistoryCorrectionStatus(
+                        targetEventId,
+                        "Could not reach the server. Your saved correction is still pending and will retry safely.",
+                    )
+                }
+            }
+
+            else -> _syncStatus.value = syncStatusMessage(outcome)
+        }
+    }
+
+    private fun applyBackgroundSyncEvent(event: BackgroundSyncEvent) {
+        applyPurchaseRemaps(event.outcome)
+        applyCorrectionFeedback(event.outcome)
+        if (event.outcome.plan.hasAcknowledgements) {
+            analyticsCoordinator.markStale()
+        }
+    }
+
+    private fun applyPurchaseRemaps(outcome: SyncOutcome.Applied) {
+        val idMappings = outcome.plan.purchaseRemaps.associate { it.tempId to it.legacyProductId }
+        val selectedId = _consumptionFormState.value.selectedProductId
+        val remappedId = selectedId?.let(idMappings::get)
+        if (remappedId != null) {
+            _consumptionFormState.update { it.copy(selectedProductId = remappedId) }
+        }
+    }
+
+    private fun applyCorrectionFeedback(outcome: SyncOutcome.Applied) {
+        val pendingCorrections = outcome.pendingCorrectionsAtSnapshot
+        outcome.plan.rejectedConsumptionCorrections.firstOrNull()?.let { rejection ->
+            val targetEventId = rejection.targetEventId ?: pendingCorrections.firstOrNull {
+                it.actionId == rejection.actionId
+            }?.targetEventId
+            if (targetEventId != null) {
+                updateHistoryCorrectionStatus(
+                    targetEventId,
+                    correctionRejectionMessage(rejection.errorCode, rejection.message) +
+                        " Your saved correction is still pending.",
+                )
+            }
+        }
+        if (outcome.plan.correctionCapabilityMissing) {
+            pendingCorrections.firstOrNull()?.targetEventId?.let { targetEventId ->
+                updateHistoryCorrectionStatus(
+                    targetEventId,
+                    "History corrections are not enabled on this server yet. Your saved correction is still pending.",
+                )
+            }
+        }
+        outcome.plan.acknowledgedConsumptionCorrections.firstOrNull()?.let { acknowledgement ->
+            updateHistoryCorrectionStatus(
+                acknowledgement.targetEventId,
+                "Correction accepted by the server. History is refreshing.",
+            )
         }
     }
 
@@ -847,6 +706,44 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private companion object {
         const val RECENT_PRODUCT_LIMIT = 6
     }
+}
+
+internal fun syncStatusMessage(outcome: SyncOutcome): String = when (outcome) {
+    is SyncOutcome.NothingToSync -> "Nothing to sync"
+    is SyncOutcome.HtmlResponse ->
+        "Error: HTML received. Ensure URL is correct and deployed for 'Anyone'."
+    is SyncOutcome.EnvironmentMismatch ->
+        "Configuration error: sync response environment does not match this app"
+    is SyncOutcome.RequestIdMismatch ->
+        "Sync response could not be matched safely. Your entries are still pending."
+    is SyncOutcome.Failed ->
+        "Sync failed: ${outcome.errorCode ?: outcome.message ?: "Unknown error"}"
+    is SyncOutcome.TransportError -> syncFailureStatus(outcome.error)
+    is SyncOutcome.Applied -> when {
+        outcome.plan.correctionCapabilityMissing ->
+            "Sync failed: backend update required for history corrections"
+        outcome.plan.finishCapabilityMissing ->
+            "Sync failed: backend update required for finish actions"
+        outcome.plan.hasRejections ->
+            "Sync partial: ${
+                outcome.plan.rejectedPurchaseCount +
+                    outcome.plan.rejectedConsumptionCount +
+                    outcome.plan.rejectedFinishActionCount +
+                    outcome.plan.rejectedConsumptionCorrections.size
+            } item(s) need attention"
+        outcome.plan.hasAcknowledgements -> "Sync successful"
+        else -> "Sync completed without acknowledgements"
+    }
+}
+
+internal fun productCatalogStatus(result: ProductCatalogRefreshResult): String = when (result) {
+    ProductCatalogRefreshResult.Updated -> "Products updated"
+    ProductCatalogRefreshResult.HtmlResponse ->
+        "Error: HTML received. Ensure URL is correct and deployed for 'Anyone'."
+    ProductCatalogRefreshResult.NullResponse -> "Error: Null response"
+    ProductCatalogRefreshResult.EnvironmentMismatch ->
+        "Configuration error: server environment does not match this app"
+    is ProductCatalogRefreshResult.Failure -> "Error fetching products: ${result.error.message}"
 }
 
 internal fun syncFailureStatus(error: Exception): String =

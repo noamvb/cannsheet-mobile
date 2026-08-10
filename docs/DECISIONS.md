@@ -150,5 +150,46 @@ historical rationale.
   `app/src/main/java/com/example/ui/ConsumptionScreen.kt`,
   `tests/backend_analytics_test.js`, `tests/backend_corrections_test.js`
 
+## ADR-007: Serialize background queue synchronization in one app graph
+
+- Status: Accepted for feature-branch implementation; not merged, released, or
+  deployed
+- Date: 2026-08-09
+- Context: Pending actions already have a safe, acknowledgement-based sync
+  protocol, but they need a retry path when the app is not in the foreground.
+  A foreground attempt and a WorkManager attempt must not create competing
+  queue snapshots, Room instances, or request lifecycles.
+- Decision:
+  1. Create one process-wide `CannsheetGraph` from the application. It owns the
+     single Room instance and one shared `syncMutex`; all queue synchronization
+     goes through `SyncEngine` while holding that mutex.
+  2. Reuse the existing queue snapshot, persisted request ID, environment,
+     response-identity, acknowledgement, and duplicate-safe retry rules.
+     Background work is a trigger for the same engine, not a backend protocol
+     change.
+  3. Schedule connected immediate work as one serial unique chain using
+     `APPEND_OR_REPLACE`, and schedule one periodic retry every six hours using
+     `UPDATE`.
+  4. Keep standard WorkManager initialization and do not request expedited
+     work. This feature must not add a custom initializer solely to alter
+     WorkManager startup behavior.
+  5. Store a DataStore background-sync toggle as a kill switch: disabled work
+     exits before it sends queued actions, while keeping those rows available
+     for a later foreground or re-enabled retry.
+  6. Do not change the Apps Script backend, Room schema, or Room version.
+- Rationale: A single application graph and mutex make foreground and
+  background attempts cooperate while retaining the proven idempotent queue
+  protocol. Unique work policies prevent an unbounded set of retries, and the
+  preference provides a local stop control without data loss.
+- Consequences: New sync callers must use `SyncEngine`; they must not construct
+  separate Room or Retrofit synchronization paths. The feature requires Android
+  scheduling and device validation before any claim about background execution,
+  spreadsheet writes, or user-visible behavior.
+- Related files: `app/src/main/java/com/example/CannsheetApplication.kt`,
+  `app/src/main/java/com/example/data/SyncPreferencesRepository.kt`,
+  `app/src/main/java/com/example/data/sync`,
+  `app/src/main/java/com/example/ui`, `app/build.gradle.kts`,
+  `docs/ARCHITECTURE.md`
+
 
 

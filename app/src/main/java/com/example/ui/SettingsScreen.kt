@@ -28,6 +28,12 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val pendingCount by viewModel.pendingActionCount.collectAsState()
     val quantityPresets by viewModel.quantityPresets.collectAsState()
     val timerValue by viewModel.submissionTimer.collectAsState()
+    val backgroundSyncPreferences by viewModel.backgroundSyncPreferences.collectAsState()
+    val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
+        lastRunEpochMillis = backgroundSyncPreferences.lastMeaningfulSyncAtEpochMillis,
+        lastResult = backgroundSyncPreferences.lastResult,
+        nowEpochMillis = System.currentTimeMillis(),
+    )
 
     Column(
         modifier = Modifier
@@ -67,6 +73,29 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         Text("Offline Queue", style = MaterialTheme.typography.titleLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text("Pending Actions: $pendingCount")
+
+        Spacer(modifier = Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Background sync")
+            Switch(
+                checked = backgroundSyncPreferences.enabled,
+                onCheckedChange = viewModel::setBackgroundSyncEnabled,
+                modifier = Modifier
+                    .testTag(BackgroundSyncSettingsTestTags.SWITCH)
+                    .semantics { contentDescription = "Background sync" },
+            )
+        }
+        Text(
+            text = backgroundSyncLastRunLabel,
+            modifier = Modifier
+                .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
+                .semantics { contentDescription = backgroundSyncLastRunLabel },
+            style = MaterialTheme.typography.bodyMedium,
+        )
 
         Spacer(modifier = Modifier.height(16.dp))
         Button(
@@ -243,6 +272,61 @@ internal object QuickLogQuantityEditorTestTags {
 
     fun removePreset(position: Int) = "quick-log-remove-preset-$position"
 }
+
+internal object BackgroundSyncSettingsTestTags {
+    const val SWITCH = "settings-background-sync-switch"
+    const val LAST_RUN = "settings-background-sync-last-run"
+}
+
+internal fun backgroundSyncLastRunText(
+    lastRunEpochMillis: Long?,
+    lastResult: Enum<*>?,
+    nowEpochMillis: Long,
+): String {
+    if (lastRunEpochMillis == null) {
+        return "Not run yet"
+    }
+
+    val elapsedMillis = (nowEpochMillis - lastRunEpochMillis).coerceAtLeast(0L)
+    val relativeTime = when {
+        elapsedMillis < MILLIS_PER_MINUTE -> "just now"
+        elapsedMillis < MILLIS_PER_HOUR -> elapsedText(
+            elapsedMillis / MILLIS_PER_MINUTE,
+            "minute",
+        )
+        elapsedMillis < MILLIS_PER_DAY -> elapsedText(
+            elapsedMillis / MILLIS_PER_HOUR,
+            "hour",
+        )
+        else -> elapsedText(elapsedMillis / MILLIS_PER_DAY, "day")
+    }
+
+    return "Last run: $relativeTime — ${backgroundSyncResultText(lastResult)}"
+}
+
+private fun elapsedText(amount: Long, unit: String): String =
+    "$amount $unit${if (amount == 1L) "" else "s"} ago"
+
+private fun backgroundSyncResultText(result: Enum<*>?): String = when (result?.name) {
+    "APPLIED", "SUCCESS", "SUCCEEDED", "COMPLETED" -> "Sync successful"
+    "FAILURE", "FAILED", "ERROR" -> "Failed"
+    "PARTIAL_REJECTIONS" -> "Some actions need attention"
+    "BACKEND_CAPABILITY_PENDING" -> "Server update needed; actions still pending"
+    "COMPLETED_WITHOUT_ACK" -> "Completed without confirmation"
+    "RETRY_EXHAUSTED" -> "Could not sync; actions still pending"
+    "ENVIRONMENT_MISMATCH" -> "Sync setup needs attention"
+    "CANCELLED", "CANCELED" -> "Cancelled"
+    "SKIPPED" -> "Skipped"
+    null -> "Unknown result"
+    else -> requireNotNull(result).name
+        .lowercase()
+        .replace('_', ' ')
+        .replaceFirstChar(Char::uppercase)
+}
+
+private const val MILLIS_PER_MINUTE = 60_000L
+private const val MILLIS_PER_HOUR = 60 * MILLIS_PER_MINUTE
+private const val MILLIS_PER_DAY = 24 * MILLIS_PER_HOUR
 
 internal fun endpointDiagnostic(url: String): String = runCatching {
     val uri = URI(url)

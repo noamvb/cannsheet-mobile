@@ -26,6 +26,45 @@ Last updated: 2026-08-09
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
 
+## Background synchronization feature work
+
+Background synchronization is in progress on feature branch
+`agent/background-sync` in
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
+commit `9b71cab`. It is not merged, released, deployed, or included in
+Cannsheet Mobile v1.2.18.
+
+The approved feature uses a process-wide `CannsheetGraph` with a shared mutex
+and routes foreground and WorkManager queue attempts through one `SyncEngine`.
+Connected immediate work is a serial unique `APPEND_OR_REPLACE` chain; periodic
+retry is one six-hour unique `UPDATE` request. A DataStore toggle is a local
+kill switch. The implementation does not change the Apps Script backend or the
+Room schema/version.
+
+Local validation passed 85 JVM tests, Android-test Kotlin compilation, lint
+with no errors, debug APK assembly, and the unchanged backend analytics test.
+PR run
+[31347066238](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347066238)
+also passed repository safety, backend and Android static validation, API 24
+emulator instrumentation, and aggregate validation. Exact commit `d523c28`
+then passed the same complete branch checks in
+[run 31347378448](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347378448).
+
+Physical-device validation used an isolated test application ID on a Samsung
+SM-F966W running Android 16 / API 36; the installed production and older
+sandbox apps were untouched. All 39 connected sandbox instrumentation tests
+passed. A process-dead airplane-mode test moved one queued action to the
+sandbox Sheet within seconds of reconnect, left zero pending actions, and
+showed a just-now successful Settings result. JobScheduler showed the periodic
+and connected-only immediate jobs. Bounded event and ledger readbacks proved
+one accepted request with no duplicate. The disabled switch kept a second
+action local through reconnect; re-enabling drained it once. A final three-item
+offline batch produced exactly three event rows sharing one request UUID and
+one accepted ledger row with consumption count 3; delayed row counts remained
+unchanged. Existing v1.2.18 release
+evidence below remains the current released-state evidence because the feature
+is still unmerged and unreleased.
+
 ## Product usage totals release
 
 Release v1.2.18 adds correction-safe product usage totals to the Log screen
@@ -148,8 +187,11 @@ Local and device evidence:
 
 - The exact local Android static command passed:
   `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
-- No physical-device installation, Obtainium update, screenshot, recording, or
-  full manual product-total acceptance workflow was performed.
+- The background-sync branch passed the isolated physical-device checks
+  described above; a local screenshot captured its enabled, zero-pending,
+  just-now-successful Settings state.
+- No production-package feature installation, Obtainium update, or full manual
+  product-total acceptance workflow was performed.
 
 ## Known limitations
 
@@ -167,13 +209,16 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Install or update to v1.2.18 on the intended phone, preferably through
+1. Complete focused review and required CI for the unmerged background-sync
+   feature branch; do not treat it as deployed or released.
+2. Install or update to v1.2.18 on the intended phone, preferably through
    Obtainium.
-2. Verify selected and recent product cards for zero, integer, fractional,
+3. Verify selected and recent product cards for zero, integer, fractional,
    offline pending, successful sync, failed sync, and borrowed-product cases.
-3. Perform one controlled correction and confirm that the synced total changes
+4. Perform one controlled correction and confirm that the synced total changes
    only after backend acknowledgement, without creating pending consumption.
-4. Record device screenshots and results in `docs/HANDOFF.md` if available.
+5. Retain the local background-sync screenshot with the task evidence; do not
+   commit device captures that contain private data.
 
 ## Unresolved questions
 

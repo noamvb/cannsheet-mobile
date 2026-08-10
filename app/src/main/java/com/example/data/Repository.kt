@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
-class CannsheetRepository(private val database: AppDatabase) {
+class CannsheetRepository(
+    private val database: AppDatabase,
+) : SyncQueueGateway, ProductCatalogGateway {
     private val dao = database.cannsheetDao()
 
     val allProducts: Flow<List<Product>> = dao.getAllProducts()
@@ -28,9 +30,9 @@ class CannsheetRepository(private val database: AppDatabase) {
         purchases + consumptions + finishes + corrections
     }
 
-    suspend fun refreshProducts(
+    override suspend fun refreshProducts(
         products: List<Product>,
-        remoteInteractions: List<ProductInteraction> = emptyList(),
+        remoteInteractions: List<ProductInteraction>,
     ) {
         dao.replaceProductsAndMergeInteractions(products, remoteInteractions)
     }
@@ -109,14 +111,20 @@ class CannsheetRepository(private val database: AppDatabase) {
         dao.insertPendingConsumptionCorrection(action)
     }
 
-    suspend fun getPendingPurchases(): List<PurchaseAction> = dao.getPendingPurchases()
+    override suspend fun getPendingPurchases(): List<PurchaseAction> = dao.getPendingPurchases()
 
-    suspend fun getPendingConsumptions(): List<ConsumptionAction> = dao.getPendingConsumptions()
+    override suspend fun getPendingConsumptions(): List<ConsumptionAction> = dao.getPendingConsumptions()
 
-    suspend fun getPendingFinishActions(): List<FinishAction> = dao.getPendingFinishActions()
+    override suspend fun getPendingFinishActions(): List<FinishAction> = dao.getPendingFinishActions()
 
-    suspend fun getPendingConsumptionCorrections(): List<PendingConsumptionCorrection> =
+    override suspend fun getPendingConsumptionCorrections(): List<PendingConsumptionCorrection> =
         dao.getPendingConsumptionCorrections()
+
+    suspend fun hasPendingActions(): Boolean =
+        getPendingPurchases().isNotEmpty() ||
+            getPendingConsumptions().isNotEmpty() ||
+            getPendingFinishActions().isNotEmpty() ||
+            getPendingConsumptionCorrections().isNotEmpty()
 
     suspend fun getPendingConsumptionCorrection(targetEventId: String): PendingConsumptionCorrection? =
         dao.getPendingConsumptionCorrection(targetEventId)
@@ -124,7 +132,7 @@ class CannsheetRepository(private val database: AppDatabase) {
     suspend fun cancelPendingConsumptionCorrection(targetEventId: String): Boolean =
         dao.cancelPendingConsumptionCorrection(targetEventId) > 0
 
-    suspend fun getOrCreateSyncRequestId(snapshot: QueuedSyncSnapshot): String = database.withTransaction {
+    override suspend fun getOrCreateSyncRequestId(snapshot: QueuedSyncSnapshot): String = database.withTransaction {
         val fingerprint = snapshot.payloadFingerprint()
         val current = dao.getSyncRequestState()
         if (current?.payloadFingerprint == fingerprint) {
@@ -142,7 +150,7 @@ class CannsheetRepository(private val database: AppDatabase) {
         }
     }
 
-    suspend fun applyAcknowledgements(plan: SyncAcknowledgementPlan) {
+    override suspend fun applyAcknowledgements(plan: SyncAcknowledgementPlan) {
         database.withTransaction {
             plan.purchaseRemaps.forEach { remap ->
                 dao.remapPendingConsumptions(

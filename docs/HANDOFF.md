@@ -10,6 +10,17 @@ synced totals from the existing `Purchases.Uses` projection and separately
 shows durable locally pending consumption. Totals appear on the selected and
 Recent Products cards, not in the product picker.
 
+Background synchronization is separate feature-branch work on
+`agent/background-sync` in
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
+commit `9b71cab`. It is not merged, released, deployed, or included in v1.2.18.
+The implementation uses a
+process-wide graph and shared mutex so `SyncEngine` serializes foreground and
+WorkManager queue attempts. It schedules connected immediate work with
+`APPEND_OR_REPLACE`, periodic six-hour work with `UPDATE`, leaves default
+WorkManager initialization in place, does not use expedited work, and provides
+a DataStore kill switch. It does not change the backend or Room schema/version.
+
 Public release:
 [Cannsheet Mobile 1.2.18](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.18)
 
@@ -68,6 +79,55 @@ Direct APK:
 - The local command
   `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
   completed successfully on the release source.
+- On `agent/background-sync`, the same local command completed successfully:
+  85 JVM tests passed with zero failures, Android-test Kotlin compiled, lint
+  reported no errors, and a debug APK was assembled. Focused tests cover every
+  `SyncEngine` outcome, status-message parity, request-ID reuse, shared-mutex
+  serialization, scheduler constraints, bounded worker passes, and Settings
+  last-run wording.
+- The worker instrumentation source compiles and uses an in-memory Room queue
+  with a fake API to check empty, transport, acknowledgement, and environment
+  mismatch paths.
+- Exact feature-branch PR run
+  [31347066238](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347066238)
+  passed repository safety, backend validation, Android static validation,
+  the API 24 emulator instrumentation suite, and aggregate validation.
+- Exact pre-device-evidence branch run
+  [31347378448](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347378448)
+  passed the same repository safety, backend, Android static, API 24, and
+  aggregate checks at commit `d523c28`.
+- A Samsung SM-F966W running Android 16 / API 36 completed the isolated
+  physical-device validation. The temporary test application ID was
+  `com.noamv.cannsheet.mobile.backgroundsynctest`; the installed v1.2.18
+  production app and older sandbox app were not overwritten or cleared.
+- The physical phone ran 39 sandbox instrumentation tests with zero failures,
+  including the process-wide graph and injected in-memory Room worker tests.
+- With airplane mode enabled, one 1.5-use action remained durable as
+  `Pending Actions: 1`. After the UI process was killed without force-stop and
+  connectivity returned, Android started the process within five seconds,
+  `SyncWorker` succeeded, the queue became zero, and Settings showed
+  `Last run: just now — Sync successful`.
+- JobScheduler showed both the six-hour periodic job and an immediate
+  connected-only job with exponential 30-second backoff. The immediate job
+  was held specifically by the missing connectivity constraint while the
+  phone was offline.
+- Bounded sandbox Sheet readback showed exactly one new `ANDROID_V2`
+  consumption and one `ACCEPTED` ledger entry for the same request UUID. A
+  delayed second read showed no duplicate.
+- With background sync disabled, a separate 0.5-use action stayed pending
+  through process death and reconnect, and both bounded Sheet row counts stayed
+  unchanged. Re-enabling the switch drained it once and restored the enabled,
+  successful state.
+- A three-action offline batch reached `Pending Actions: 3`, then synchronized
+  after process death as exactly three consumption rows sharing one request
+  UUID. The single corresponding ledger row recorded consumption count 3 and
+  `ACCEPTED`; a delayed read left both row counts unchanged.
+- The final physical-device screen showed background sync enabled,
+  `Pending Actions: 0`, and a just-now successful result. A screenshot was
+  reviewed locally but was not committed.
+- `node tests/backend_analytics_test.js` passed without changing backend source.
+- The merged debug manifest retains default WorkManager initialization and the
+  `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, and `FOREGROUND_SERVICE` permissions.
 
 ## Independent public APK verification
 
@@ -86,8 +146,9 @@ Direct APK:
 
 ## Not yet verified
 
-- No physical-phone installation or in-place Obtainium update was observed.
-- No screenshot or recording was captured on a physical device.
+- The isolated background-sync package was installed directly with ADB. No
+  in-place Obtainium update or installation of the feature into the production
+  package was attempted.
 - The complete manual offline, countdown-cancellation, failed-sync persistence,
   borrowed-product remapping, large-font, and live correction scenarios were
   not performed on the intended phone.
@@ -96,10 +157,10 @@ Direct APK:
 
 ## Recommended next action
 
-Install or update to v1.2.18 through Obtainium or the direct APK link. Then
-verify a selected product and Recent Products card with synced and pending
-totals, including one offline log followed by successful synchronization. If
-possible, capture the phone screenshots and add the results to this handoff.
+Review the focused background-sync PR and its new documentation-only CI run;
+do not treat the feature as released or deployed. Separately, install or update
+the production package to v1.2.18 through Obtainium or the direct APK link and
+complete the remaining product-total and correction scenarios when desired.
 
 ## Safety review
 
