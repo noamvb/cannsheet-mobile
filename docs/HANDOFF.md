@@ -10,6 +10,15 @@ synced totals from the existing `Purchases.Uses` projection and separately
 shows durable locally pending consumption. Totals appear on the selected and
 Recent Products cards, not in the product picker.
 
+Background synchronization is separate feature-branch work on
+`agent/background-sync`, based on main commit `9b71cab`. It is not merged,
+released, deployed, or included in v1.2.18. The implementation uses a
+process-wide graph and shared mutex so `SyncEngine` serializes foreground and
+WorkManager queue attempts. It schedules connected immediate work with
+`APPEND_OR_REPLACE`, periodic six-hour work with `UPDATE`, leaves default
+WorkManager initialization in place, does not use expedited work, and provides
+a DataStore kill switch. It does not change the backend or Room schema/version.
+
 Public release:
 [Cannsheet Mobile 1.2.18](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.18)
 
@@ -68,6 +77,19 @@ Direct APK:
 - The local command
   `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
   completed successfully on the release source.
+- On `agent/background-sync`, the same local command completed successfully:
+  85 JVM tests passed with zero failures, Android-test Kotlin compiled, lint
+  reported no errors, and a debug APK was assembled. Focused tests cover every
+  `SyncEngine` outcome, status-message parity, request-ID reuse, shared-mutex
+  serialization, scheduler constraints, bounded worker passes, and Settings
+  last-run wording.
+- The worker instrumentation source compiles and uses an in-memory Room queue
+  with a fake API to check empty, transport, acknowledgement, and environment
+  mismatch paths. It was not executed because `adb devices -l` reported no
+  connected device or emulator.
+- `node tests/backend_analytics_test.js` passed without changing backend source.
+- The merged debug manifest retains default WorkManager initialization and the
+  `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, and `FOREGROUND_SERVICE` permissions.
 
 ## Independent public APK verification
 
@@ -86,6 +108,10 @@ Direct APK:
 
 ## Not yet verified
 
+- The background-sync feature has no physical-device execution, live Sheet
+  readback, or screenshot/recording. Killed-process reconnect timing, actual
+  job-scheduler state, the disabled toggle on a device, and exactly-once Sheet
+  delivery remain pending before merge or release.
 - No physical-phone installation or in-place Obtainium update was observed.
 - No screenshot or recording was captured on a physical device.
 - The complete manual offline, countdown-cancellation, failed-sync persistence,
@@ -96,10 +122,12 @@ Direct APK:
 
 ## Recommended next action
 
-Install or update to v1.2.18 through Obtainium or the direct APK link. Then
-verify a selected product and Recent Products card with synced and pending
-totals, including one offline log followed by successful synchronization. If
-possible, capture the phone screenshots and add the results to this handoff.
+Complete CI plus manual device/Sheet/UI checks for background synchronization
+without treating that work as a release. Then
+install or update to v1.2.18 through Obtainium or the direct APK link. Verify
+a selected product and Recent Products card with synced and pending totals,
+including one offline log followed by successful synchronization. If possible,
+capture the phone screenshots and add the results to this handoff.
 
 ## Safety review
 

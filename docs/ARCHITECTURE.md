@@ -21,6 +21,10 @@ flowchart LR
 
 ## Android components
 
+- `app/src/main/java/com/example/CannsheetApplication.kt` performs process-wide
+  dependency initialization and work scheduling. Its `CannsheetGraph` owns the
+  one Room database, repositories, preferences, sync engine, catalog refresher,
+  and the shared `syncMutex` that serializes every queue synchronization attempt.
 - `app/src/main/java/com/example/MainActivity.kt` starts the Compose application.
 - `app/src/main/java/com/example/ui/AppNavigation.kt` owns the bottom navigation
   between Log, Purchase, Insights, and Settings.
@@ -45,6 +49,47 @@ flowchart LR
   analytics/history contract, repository, and cache serialization.
 - `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
   stores quick-log presets and the unopened-product preference in DataStore.
+
+### Background queue synchronization
+
+The app schedules safe retry of the existing pending queues without changing
+their backend contract. `SyncEngine` is the only component allowed to send a
+queue snapshot, and it holds `CannsheetGraph.syncMutex` for the complete
+attempt. The foreground view model and the background worker therefore cannot
+send competing snapshots from separate Room or Retrofit instances.
+
+```mermaid
+flowchart TD
+    App["CannsheetApplication"] --> Graph["CannsheetGraph\nprocess-wide Room, Retrofit, and syncMutex"]
+    Graph --> Prefs["DataStore background-sync preference"]
+    Graph --> Engine["SyncEngine\nacknowledgement and idempotency rules"]
+    Graph --> Refresher["Catalog refresher"]
+    App --> Scheduler["SyncScheduler"]
+    UI["Compose / CannsheetViewModel"] --> Refresher
+    UI --> Engine
+    Scheduler --> Immediate["Connected immediate work\nunique serial APPEND_OR_REPLACE"]
+    Scheduler --> Periodic["6-hour periodic work\nunique UPDATE"]
+    Immediate --> Worker["SyncWorker"]
+    Periodic --> Worker
+    Prefs --> Worker
+    Worker -->|enabled| Runner["BackgroundSyncRunner"]
+    Worker -->|disabled| Stop["No background sync"]
+    Runner --> Engine
+    Runner --> Refresher
+    Engine --> Mutex["CannsheetGraph.syncMutex"]
+    Mutex --> Queue["Room pending queues and request state"]
+    Engine --> HTTP["Apps Script"]
+    HTTP --> Ack["committed / duplicate acknowledgement"]
+    Ack --> Engine
+    Engine -->|only accepted acknowledgement deletes rows| Queue
+```
+
+`CannsheetApplication` keeps ordinary default WorkManager initialization; the
+feature does not use expedited work. The scheduler enqueues connected immediate
+work with `APPEND_OR_REPLACE` so requests remain serial, and updates the one
+six-hour periodic work request with `UPDATE`. A DataStore preference is a kill
+switch: when off, work exits without sending queued actions. It does not delete
+queued rows or alter foreground acknowledgement behavior.
 
 ## Important data flows
 
@@ -96,6 +141,11 @@ available; the product picker does not. The app never adds pending values into
    or covered by the explicit legacy-compatible rule, are deleted locally.
    Corrections require the exact sent action and target event pair.
 7. Timeouts and uncertain responses leave the items queued for safe retry.
+
+Background work follows the same flow, including the persisted request ID,
+environment and response-identity checks, and acknowledgement-only deletion.
+It is a second trigger for the existing idempotent protocol, not a new backend
+write path or a second source of truth.
 
 ### Insights and History
 
@@ -221,6 +271,8 @@ validation.
 - Repository/database operations own local persistence and transaction safety.
 - Network DTOs and environment checks form a compatibility boundary.
 - Pending queue rows are removed only through the acknowledgement rules.
+- `SyncEngine`, protected by `CannsheetGraph.syncMutex`, is the sole queue
+  synchronization boundary for foreground and WorkManager-triggered attempts.
 - Android source, Apps Script source, live deployment state, spreadsheet state,
   CI state, and published APK state are separate evidence boundaries.
 

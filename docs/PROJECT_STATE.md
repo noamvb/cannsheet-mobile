@@ -26,6 +26,27 @@ Last updated: 2026-08-09
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
 
+## Background synchronization feature work
+
+Background synchronization is in progress on feature branch
+`agent/background-sync`, based on main commit `9b71cab`. It is not merged,
+released, deployed, or included in Cannsheet Mobile v1.2.18.
+
+The approved feature uses a process-wide `CannsheetGraph` with a shared mutex
+and routes foreground and WorkManager queue attempts through one `SyncEngine`.
+Connected immediate work is a serial unique `APPEND_OR_REPLACE` chain; periodic
+retry is one six-hour unique `UPDATE` request. A DataStore toggle is a local
+kill switch. The implementation does not change the Apps Script backend or the
+Room schema/version.
+
+Local validation passed 85 JVM tests, Android-test Kotlin compilation, lint
+with no errors, debug APK assembly, and the unchanged backend analytics test.
+The compiled worker instrumentation covers a real in-memory Room queue and fake
+API, but it was not executed because no device or emulator was connected.
+Physical-device behavior, job-scheduler inspection, screenshots, and live Sheet
+exactly-once readback remain unverified. Existing v1.2.18 release evidence below
+remains the current released-state evidence.
+
 ## Product usage totals release
 
 Release v1.2.18 adds correction-safe product usage totals to the Log screen
@@ -167,13 +188,18 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Install or update to v1.2.18 on the intended phone, preferably through
+1. Complete focused validation and review for the unmerged background-sync
+   feature branch; do not treat it as deployed or released.
+2. Verify background synchronization on a physical device, including the
+   DataStore kill switch and a safe Sheet readback, before making any live
+   execution claim.
+3. Install or update to v1.2.18 on the intended phone, preferably through
    Obtainium.
-2. Verify selected and recent product cards for zero, integer, fractional,
+4. Verify selected and recent product cards for zero, integer, fractional,
    offline pending, successful sync, failed sync, and borrowed-product cases.
-3. Perform one controlled correction and confirm that the synced total changes
+5. Perform one controlled correction and confirm that the synced total changes
    only after backend acknowledgement, without creating pending consumption.
-4. Record device screenshots and results in `docs/HANDOFF.md` if available.
+6. Record device screenshots and results in `docs/HANDOFF.md` if available.
 
 ## Unresolved questions
 

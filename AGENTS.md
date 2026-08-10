@@ -100,6 +100,7 @@ For a visible UI change, include screenshots or a short recording in the pull re
 ## Data safety and regression coverage
 
 - Treat Room migrations and the offline purchase, consumption, and finish queues as user data. Preserve existing rows and stable IDs unless an explicitly approved migration requires otherwise.
+- All queue synchronization must go through `SyncEngine` under `CannsheetGraph.syncMutex`.
 - Never use destructive database fallback as a shortcut. Add a forward migration and test upgrades from every supported prior schema when the schema changes.
 - Preserve synchronization idempotency, request/action/event UUIDs, environment checks, acknowledgement handling, locking, and retry behavior. A timeout must not cause duplicate spreadsheet rows or silently discard a queued action.
 - Delete a pending purchase, consumption, or finish action only after the existing acknowledgement rules prove that the server committed it or already has the same immutable ID.
