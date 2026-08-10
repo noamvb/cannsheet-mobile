@@ -5,21 +5,19 @@ Last updated: 2026-08-09
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and tag `v1.2.17`:
-  `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3`
-- Documentation follow-up
-  [PR #25](https://github.com/noamvb/cannsheet-mobile/pull/25) merged after
-  publication without moving the release tag.
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.17`,
-  version code `20`
-- Release [PR #24](https://github.com/noamvb/cannsheet-mobile/pull/24)
-  was squash-merged after its required validation passed.
+- Released source commit and annotated tag `v1.2.18`:
+  `e93883b5a3cb7e98160a59489677fd87e0bb217a`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.18`,
+  version code `21`
+- Product usage totals [PR #27](https://github.com/noamvb/cannsheet-mobile/pull/27)
+  and version-only release [PR #28](https://github.com/noamvb/cannsheet-mobile/pull/28)
+  were squash-merged after their required validation passed.
 - The public signed release is
-  [Cannsheet Mobile 1.2.17](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.17).
-  It contains exactly `Cannsheet-Mobile-1.2.17.apk` and
-  `Cannsheet-Mobile-1.2.17.apk.sha256`.
+  [Cannsheet Mobile 1.2.18](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.18).
+  Its release assets are `Cannsheet-Mobile-1.2.18.apk` and
+  `Cannsheet-Mobile-1.2.18.apk.sha256` (in addition to GitHub's automatic source archives).
 - Public APK SHA-256:
-  `8ffa67a223963459e8b5bd71a4f186e26cb7cacf84468121ad20d6dcecd5e938`
+  `70cdc24f3a5dea63701b5fbbc2b2adadaaa18d46a665a76af13cb3f8350d5792`
 - The editable History milestone was delivered through backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and production
@@ -28,12 +26,11 @@ Last updated: 2026-08-09
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
 
-## Product usage totals feature branch
+## Product usage totals release
 
-The focused branch `codex/product-usage-totals` is based on the local
-`origin/main` correction-aware source. It adds correction-safe product usage
-totals to the Log screen without changing the API version, endpoint, release
-metadata, or spreadsheet schema:
+Release v1.2.18 adds correction-safe product usage totals to the Log screen
+without changing the API version, endpoint, signing identity, or spreadsheet
+schema:
 
 - The ordinary catalog GET exposes `totalUses` from the existing
   `Purchases.Uses` projection. Blank cells become confirmed zero; invalid,
@@ -48,9 +45,14 @@ metadata, or spreadsheet schema:
   `Pending` lines; the picker is unchanged. Pending is never added into the
   confirmed value locally.
 
-This branch is not merged, deployed, tagged, or released. Device/emulator
-manual acceptance and screenshots remain outstanding until a booted test device
-is available.
+The backend response was validated in sandbox deployment version 14, then
+promoted to production deployment version 13 after a verified full-spreadsheet
+backup. Catalog totals matched both `Purchases.Uses` and Insights
+`allTime.quantity` for every product, and bounded before/after readbacks showed
+that validation GETs did not modify the projection. The Android feature is
+merged, tagged, signed, published, and covered by API 24 and API 36 emulator
+tests. Physical-phone installation, screenshots, and the manual offline/borrowed
+acceptance scenarios remain unverified.
 
 ## Project summary
 
@@ -89,8 +91,8 @@ Repository code and validation show:
 
 - Production provisioning and full recoverable reconciliation completed from
   the merge-verified PR #23 source.
-- The existing production Apps Script deployment was updated in place to
-  version 12.
+- The existing production Apps Script deployment is version 13. Version 12
+  remains the rollback point from before the additive `totalUses` response.
 - The public production endpoint reports API version 2, production environment,
   correction schema version 1, and correction writes enabled.
 - Reconciliation was clean immediately before and after provisioning and before
@@ -105,45 +107,49 @@ Repository code and validation show:
 
 Private-source evidence:
 
-- PR #24 head `e69df9dcb6da90ad1431cc8350b03223ba374d17`
-  passed required PR workflow run
-  [30513183284](https://github.com/noamvb/cannsheet-mobile/actions/runs/30513183284):
-  classification/security, backend validation, Android static validation,
-  API 24 emulator, and aggregate validation.
-- Exact merged-main commit
-  `b49f15fbc6319db7ae47d94cbdd71ccee6fcabb3` passed push workflow run
-  [30513760246](https://github.com/noamvb/cannsheet-mobile/actions/runs/30513760246):
+- Product usage totals PR #27 and its explicit full feature-branch run
+  [31335057894](https://github.com/noamvb/cannsheet-mobile/actions/runs/31335057894)
+  passed backend, Android static, API 24, API 36, and aggregate validation.
+- Exact merged feature commit
+  `039259117d231620b21a37136130de122239537c` passed push workflow run
+  [31335500140](https://github.com/noamvb/cannsheet-mobile/actions/runs/31335500140).
+- Version-only PR #28 passed required workflow run
+  [31337182904](https://github.com/noamvb/cannsheet-mobile/actions/runs/31337182904)
+  after retrying one external Android SDK archive HTTP 404; no code change was
+  required for the retry.
+- Exact release commit
+  `e93883b5a3cb7e98160a59489677fd87e0bb217a` passed push workflow run
+  [31337505912](https://github.com/noamvb/cannsheet-mobile/actions/runs/31337505912):
   classification/security, backend validation, Android static validation,
   API 24, API 36, and aggregate validation.
 
 Signed-publication evidence:
 
-- Tag `v1.2.17` resolves to the exact merged-main commit above.
+- Annotated tag `v1.2.18` resolves to the exact release commit above.
 - Signed release workflow run
-  [30514059622](https://github.com/noamvb/cannsheet-mobile/actions/runs/30514059622)
+  [31343252239](https://github.com/noamvb/cannsheet-mobile/actions/runs/31343252239)
   passed tag/main/version checks, tests, lint, signed build, signature
   verification, checksum generation, publication, and post-publication
   verification.
-- The public release contains exactly one APK (13,241,161 bytes) and its
-  `.sha256` file.
+- The public release contains one APK (13,241,161 bytes) and its `.sha256`
+  release asset, plus GitHub's automatic source archives.
 
 Independent public-artifact evidence:
 
 - The downloaded checksum file matched the APK:
-  `8ffa67a223963459e8b5bd71a4f186e26cb7cacf84468121ad20d6dcecd5e938`.
+  `70cdc24f3a5dea63701b5fbbc2b2adadaaa18d46a665a76af13cb3f8350d5792`.
 - Android `aapt` reported application ID `com.noamv.cannsheet.mobile`,
-  version code `20`, and version name `1.2.17`.
+  version code `21`, and version name `1.2.18`.
 - Android `apksigner` verified APK Signature Scheme v2 with one signer.
 - Signing certificate SHA-256:
   `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`
 
 Local and device evidence:
 
-- One isolated local Gradle run failed before tests executed with
-  `GeneratedClassCompilationException: Unable to compile generated classes`;
-  no passing local build or test result is claimed.
+- The exact local Android static command passed:
+  `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
 - No physical-device installation, Obtainium update, screenshot, recording, or
-  end-to-end correction action using the released APK was performed.
+  full manual product-total acceptance workflow was performed.
 
 ## Known limitations
 
@@ -161,17 +167,19 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Install or update to v1.2.17 on the intended phone, preferably through
+1. Install or update to v1.2.18 on the intended phone, preferably through
    Obtainium.
-2. Perform one controlled Correct, Void, and Restore workflow on an eligible
-   History entry and confirm the resulting History state after synchronization.
-3. Record device results in `docs/HANDOFF.md` if they become available.
+2. Verify selected and recent product cards for zero, integer, fractional,
+   offline pending, successful sync, failed sync, and borrowed-product cases.
+3. Perform one controlled correction and confirm that the synced total changes
+   only after backend acknowledgement, without creating pending consumption.
+4. Record device screenshots and results in `docs/HANDOFF.md` if available.
 
 ## Unresolved questions
 
-- Does Obtainium detect and install v1.2.17 in place on the intended phone?
-- Does the first real device correction lifecycle remain clear and reliable
-  against the live production backend?
+- Does Obtainium detect and install v1.2.18 in place on the intended phone?
+- Do the confirmed-versus-pending totals remain clear during real offline,
+  retry, borrowed-product, and correction workflows on the intended phone?
 
 These require device evidence and should not be answered from repository or
 workflow evidence alone.
