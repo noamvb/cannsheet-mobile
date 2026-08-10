@@ -4,10 +4,12 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.work.Data
 import androidx.work.ListenableWorker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
+import androidx.work.workDataOf
 import com.example.data.AppDatabase
 import com.example.data.BackgroundSyncResult
 import com.example.data.CannsheetRepository
@@ -175,12 +177,114 @@ class SyncWorkerTest {
         )
     }
 
+    @Test
+    fun periodicWorkPrefetchesAfterAnEmptyQueue() = runBlocking {
+        val runtime = FakeRuntime(result = BackgroundSyncRunResult.NothingToSync)
+
+        val result = worker(runtime, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(1, runtime.prefetchCalls)
+    }
+
+    @Test
+    fun periodicWorkPrefetchesAfterAnAppliedAcknowledgement() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.Applied(
+                SyncOutcome.Applied(
+                    plan = SyncAcknowledgementPlan(
+                        acknowledgedPurchaseActionIds = setOf("purchase-action"),
+                    ),
+                    pendingCorrectionsAtSnapshot = emptyList(),
+                    snapshot = QueuedSyncSnapshot(emptySet(), emptySet()),
+                ),
+                completedPasses = 1,
+            ),
+        )
+
+        val result = worker(runtime, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(1, runtime.prefetchCalls)
+        assertEquals(listOf(BackgroundSyncResult.SUCCESS), runtime.recordedResults)
+    }
+
+    @Test
+    fun immediateWorkDoesNotPrefetch() = runBlocking {
+        val runtime = FakeRuntime(result = BackgroundSyncRunResult.NothingToSync)
+
+        val result = worker(runtime).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(0, runtime.prefetchCalls)
+    }
+
+    @Test
+    fun retryResultSkipsPrefetch() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.Retry(SyncOutcome.HtmlResponse(emptyList())),
+        )
+
+        val result = worker(runtime, runAttemptCount = 0, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.retry(), result)
+        assertEquals(0, runtime.prefetchCalls)
+    }
+
+    @Test
+    fun environmentMismatchSkipsPrefetch() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.EnvironmentMismatch(
+                SyncOutcome.EnvironmentMismatch(emptyList()),
+            ),
+        )
+
+        val result = worker(runtime, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.failure(), result)
+        assertEquals(0, runtime.prefetchCalls)
+    }
+
+    @Test
+    fun disabledWorkerDoesNotPrefetch() = runBlocking {
+        val runtime = FakeRuntime(enabled = false, result = BackgroundSyncRunResult.NothingToSync)
+
+        val result = worker(runtime, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(0, runtime.prefetchCalls)
+    }
+
+    @Test
+    fun prefetchFailureStillReportsQueueSuccess() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.Applied(
+                SyncOutcome.Applied(
+                    plan = SyncAcknowledgementPlan(
+                        acknowledgedPurchaseActionIds = setOf("purchase-action"),
+                    ),
+                    pendingCorrectionsAtSnapshot = emptyList(),
+                    snapshot = QueuedSyncSnapshot(emptySet(), emptySet()),
+                ),
+                completedPasses = 1,
+            ),
+            prefetchError = IllegalStateException("prefetch boom"),
+        )
+
+        val result = worker(runtime, inputData = PREFETCH_INPUT_DATA).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(listOf(BackgroundSyncResult.SUCCESS), runtime.recordedResults)
+    }
+
     private fun worker(
         runtime: BackgroundSyncWorkerRuntime,
         runAttemptCount: Int = 0,
+        inputData: Data = Data.EMPTY,
     ): SyncWorker = TestListenableWorkerBuilder<SyncWorker>(applicationContext)
         .setWorkerFactory(InjectedSyncWorkerFactory(runtime))
         .setRunAttemptCount(runAttemptCount)
+        .setInputData(inputData)
         .build()
 
     private class InjectedSyncWorkerFactory(
@@ -200,8 +304,10 @@ class SyncWorkerTest {
     private class FakeRuntime(
         private val enabled: Boolean = true,
         private val result: BackgroundSyncRunResult,
+        private val prefetchError: Throwable? = null,
     ) : BackgroundSyncWorkerRuntime {
         var runCalls = 0
+        var prefetchCalls = 0
         val recordedResults = mutableListOf<BackgroundSyncResult>()
 
         override suspend fun isEnabled(): Boolean = enabled
@@ -213,6 +319,15 @@ class SyncWorkerTest {
 
         override suspend fun recordMeaningfulResult(result: BackgroundSyncResult) {
             recordedResults += result
+        }
+
+        override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome {
+            prefetchCalls += 1
+            prefetchError?.let { throw it }
+            return AnalyticsPrefetchOutcome(
+                insights = AnalyticsPrefetchStatus.REFRESHED,
+                history = AnalyticsPrefetchStatus.REFRESHED,
+            )
         }
     }
 
@@ -245,6 +360,7 @@ class SyncWorkerTest {
         private val runner: BackgroundSyncRunner,
     ) : BackgroundSyncWorkerRuntime {
         val recordedResults = mutableListOf<BackgroundSyncResult>()
+        var prefetchCalls = 0
 
         override suspend fun isEnabled(): Boolean = true
 
@@ -252,6 +368,14 @@ class SyncWorkerTest {
 
         override suspend fun recordMeaningfulResult(result: BackgroundSyncResult) {
             recordedResults += result
+        }
+
+        override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome {
+            prefetchCalls += 1
+            return AnalyticsPrefetchOutcome(
+                insights = AnalyticsPrefetchStatus.REFRESHED,
+                history = AnalyticsPrefetchStatus.REFRESHED,
+            )
         }
     }
 
@@ -275,6 +399,7 @@ class SyncWorkerTest {
         const val ENVIRONMENT = "PRODUCTION"
         const val PURCHASE_ACTION_ID = "purchase-action"
         val JSON = "application/json".toMediaType()
+        val PREFETCH_INPUT_DATA = workDataOf(SyncScheduler.PREFETCH_ANALYTICS_KEY to true)
 
         val applicationContext: Context
             get() = ApplicationProvider.getApplicationContext()

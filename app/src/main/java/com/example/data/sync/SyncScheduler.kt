@@ -9,11 +9,13 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import androidx.work.workDataOf
 import java.util.concurrent.TimeUnit
 
 object SyncScheduler {
     const val IMMEDIATE_SYNC_WORK_NAME = "cannsheet-sync-now"
     const val PERIODIC_SYNC_WORK_NAME = "cannsheet-sync-periodic"
+    const val PREFETCH_ANALYTICS_KEY = "prefetch_analytics"
 
     fun enqueueImmediate(context: Context) {
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
@@ -52,6 +54,7 @@ object SyncScheduler {
     )
         .setConstraints(networkConstraints())
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_DELAY_SECONDS, TimeUnit.SECONDS)
+        .setInputData(workDataOf(PREFETCH_ANALYTICS_KEY to true))
         .build()
 
     private fun networkConstraints() = Constraints.Builder()

@@ -7,9 +7,14 @@ import com.example.BuildConfig
 import com.example.data.BackgroundSyncEvent
 import com.example.data.BackgroundSyncResult
 import com.example.data.CannsheetGraph
+import com.example.data.HistoryFilters
+import com.example.data.HistoryResponseDto
+import com.example.data.InsightsRange
+import com.example.data.InsightsResponseDto
 import com.example.data.ProductCatalogRefreshResult
 import com.example.data.SyncAcknowledgementPlan
 import com.example.data.SyncOutcome
+import kotlinx.coroutines.CancellationException
 
 /**
  * Injectable bridge around the real graph. A test worker factory can create [SyncWorker] with a fake
@@ -21,6 +26,8 @@ interface BackgroundSyncWorkerRuntime {
     suspend fun run(): BackgroundSyncRunResult
 
     suspend fun recordMeaningfulResult(result: BackgroundSyncResult)
+
+    suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome
 }
 
 class SyncWorker(
@@ -37,7 +44,8 @@ class SyncWorker(
     override suspend fun doWork(): Result {
         if (!runtime.isEnabled()) return Result.success()
 
-        return when (val result = runtime.run()) {
+        val result = runtime.run()
+        val workerResult = when (result) {
             BackgroundSyncRunResult.NothingToSync -> Result.success()
 
             is BackgroundSyncRunResult.Applied -> {
@@ -59,11 +67,50 @@ class SyncWorker(
                 }
             }
         }
+
+        val requested = inputData.getBoolean(SyncScheduler.PREFETCH_ANALYTICS_KEY, false)
+        if (shouldPrefetchAnalytics(result, requested)) prefetchAnalyticsBestEffort()
+        return workerResult
+    }
+
+    /**
+     * The guard is deliberately total: an exception escaping here would turn a queue delivery
+     * that already succeeded into a failed Worker run.
+     */
+    private suspend fun prefetchAnalyticsBestEffort() {
+        try {
+            runtime.prefetchAnalytics()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // Best effort only. The next periodic run tries again.
+        }
     }
 
     private companion object {
         const val MAX_RETRY_ATTEMPTS = 5
     }
+}
+
+/**
+ * Only the periodic chain warms analytics: the one-shot chain runs after user actions, and paying
+ * for two Apps Script reads on every logged entry is not worth a warmer cache. A retry means the
+ * network is unhealthy and an environment mismatch means analytics would mismatch too, so neither
+ * is worth a request.
+ *
+ * Kept as a pure function so the full gating truth table is testable on the JVM without a device.
+ */
+internal fun shouldPrefetchAnalytics(
+    result: BackgroundSyncRunResult,
+    prefetchRequested: Boolean,
+): Boolean = prefetchRequested && when (result) {
+    BackgroundSyncRunResult.NothingToSync,
+    is BackgroundSyncRunResult.Applied,
+    -> true
+
+    is BackgroundSyncRunResult.EnvironmentMismatch,
+    is BackgroundSyncRunResult.Retry,
+    -> false
 }
 
 private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyncWorkerRuntime {
@@ -83,6 +130,28 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
             }
         },
     )
+    private val prefetcher = AnalyticsPrefetcher(
+        operations = object : AnalyticsPrefetchOperations {
+            override suspend fun readCachedInsights(): InsightsResponseDto? =
+                graph.analyticsRepository.readCachedInsights()
+
+            override suspend fun readCachedHistory(): HistoryResponseDto? =
+                graph.analyticsRepository.readCachedHistory()
+
+            override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto =
+                graph.analyticsRepository.fetchInsights(range)
+
+            override suspend fun fetchHistory(filters: HistoryFilters): HistoryResponseDto =
+                graph.analyticsRepository.fetchHistory(filters)
+
+            override suspend fun saveHistory(
+                filters: HistoryFilters,
+                response: HistoryResponseDto,
+            ) {
+                graph.analyticsRepository.saveHistory(filters, response)
+            }
+        },
+    )
 
     override suspend fun isEnabled(): Boolean = graph.syncPreferences.isEnabled()
 
@@ -91,6 +160,8 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     override suspend fun recordMeaningfulResult(result: BackgroundSyncResult) {
         graph.syncPreferences.recordMeaningfulResult(result)
     }
+
+    override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome = prefetcher.prefetch()
 }
 
 private fun SyncAcknowledgementPlan.toBackgroundSyncResult(): BackgroundSyncResult = when {
