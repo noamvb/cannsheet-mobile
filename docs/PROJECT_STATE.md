@@ -43,11 +43,13 @@ Room schema/version.
 
 Local validation passed 85 JVM tests, Android-test Kotlin compilation, lint
 with no errors, debug APK assembly, and the unchanged backend analytics test.
-The compiled worker instrumentation covers a real in-memory Room queue and fake
-API, but it was not executed because no device or emulator was connected.
-Physical-device behavior, job-scheduler inspection, screenshots, and live Sheet
-exactly-once readback remain unverified. Existing v1.2.18 release evidence below
-remains the current released-state evidence.
+PR run
+[31347066238](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347066238)
+also passed repository safety, backend and Android static validation, API 24
+emulator instrumentation, and aggregate validation. No local device was
+connected. Physical-device behavior, job-scheduler inspection, screenshots,
+and live Sheet exactly-once readback remain unverified. Existing v1.2.18 release
+evidence below remains the current released-state evidence.
 
 ## Product usage totals release
 

@@ -87,8 +87,13 @@ Direct APK:
   last-run wording.
 - The worker instrumentation source compiles and uses an in-memory Room queue
   with a fake API to check empty, transport, acknowledgement, and environment
-  mismatch paths. It was not executed because `adb devices -l` reported no
-  connected device or emulator.
+  mismatch paths.
+- Exact feature-branch PR run
+  [31347066238](https://github.com/noamvb/cannsheet-mobile/actions/runs/31347066238)
+  passed repository safety, backend validation, Android static validation,
+  the API 24 emulator instrumentation suite, and aggregate validation.
+- No local device was available: `adb devices -l` reported no connected device
+  or emulator.
 - `node tests/backend_analytics_test.js` passed without changing backend source.
 - The merged debug manifest retains default WorkManager initialization and the
   `RECEIVE_BOOT_COMPLETED`, `WAKE_LOCK`, and `FOREGROUND_SERVICE` permissions.
@@ -124,8 +129,8 @@ Direct APK:
 
 ## Recommended next action
 
-Complete CI plus manual device/Sheet/UI checks for background synchronization
-without treating that work as a release. Then
+Complete manual device/Sheet/UI checks for background synchronization without
+treating that work as a release. Then
 install or update to v1.2.18 through Obtainium or the direct APK link. Verify
 a selected product and Recent Products card with synced and pending totals,
 including one offline log followed by successful synchronization. If possible,
