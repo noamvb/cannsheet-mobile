@@ -9,6 +9,8 @@ import com.example.data.HistoryResponseDto
 import com.example.data.InsightsRange
 import com.example.data.InsightsResponseDto
 import com.example.data.MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
+import com.example.data.cachedInsightsRange
+import com.example.data.runCatchingCancellable
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
@@ -16,7 +18,6 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -376,11 +377,7 @@ class AnalyticsCoordinator(
         scope.launch {
             _insights.update { it.copy(isInitialLoading = true) }
             repository.readCachedInsights()?.let { cached ->
-                val range = when (cached.range.scope) {
-                    "ALL" -> InsightsRange.All
-                    "CUSTOM" -> InsightsRange.Custom(cached.range.from, cached.range.to)
-                    else -> InsightsRange.Default
-                }
+                val range = cached.cachedInsightsRange()
                 _insights.value = InsightsUiState(
                     data = cached,
                     displayedRange = range,
@@ -446,15 +443,6 @@ class AnalyticsCoordinator(
         )
     }
 }
-
-private suspend inline fun <T> runCatchingCancellable(block: suspend () -> T): Result<T> =
-    try {
-        Result.success(block())
-    } catch (error: CancellationException) {
-        throw error
-    } catch (error: Throwable) {
-        Result.failure(error)
-    }
 
 fun analyticsUiError(error: Throwable): AnalyticsUiError {
     if (error is AnalyticsApiException) {

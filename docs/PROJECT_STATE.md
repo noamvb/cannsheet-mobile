@@ -64,6 +64,39 @@ unchanged. The signed publication workflow
 [31351814290](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351814290)
 published v1.2.19 after confirming that exact validated main commit.
 
+A working branch (`claude/background-sync-history-insights-2owoab`, not merged)
+adds a best-effort Insights/History cache prefetch to the same periodic
+`SyncWorker` run, gated by a new `prefetch_analytics` WorkManager input-data
+flag that only `SyncScheduler.periodicRequest()` sets. `AnalyticsPrefetcher`
+runs after the existing queue sync only when that run result is
+`NothingToSync` or `Applied` (never after `Retry` or `EnvironmentMismatch`),
+and only when the existing "Background sync" DataStore switch is on; no new
+Settings control was added. It re-reads whichever Insights range or History
+filters the current Room `analytics_cache` row was generated for (falling back
+to the default range and unfiltered History when no cache row exists) so it
+never resets a user's last-viewed scope, and it skips a resource entirely when
+its cache is already less than two hours old. The History write merges the
+fresh first page with cached events strictly older than the fresh page's
+oldest event, rather than replacing deeper cached pages with a single page 1,
+so a user who has paged further into History does not lose that depth on a
+refresh. `Database.kt`'s Room schema, version, and the `BackgroundSyncRunner`
+queue path are unchanged; `AnalyticsRepository`/`AnalyticsDataSource` gained no
+new methods. The three accepted trade-offs (a foreground/background write race
+resolved by Room `REPLACE` last-writer-wins, retained History events not
+re-validated against a corrected `sourceRevision.dataVersion` until the next
+live refresh, and a REPLACE correction that moves an event earlier than the
+fresh page's oldest event being unrecoverable without a full refetch) are
+recorded in [ADR-008](DECISIONS.md#adr-008-warm-the-analytics-cache-from-periodic-background-sync).
+
+This environment had no JDK 17+, no Android SDK, and no Node.js runtime
+available, so none of `testDebugUnitTest`, `compileDebugAndroidTestKotlin`,
+`lintDebug`, `assembleDebug`, or `node tests/backend_analytics_test.js` could
+be executed locally; `./gradlew` itself refused to run under the only
+available JDK (1.8). The change was implemented and manually re-read against
+the existing `AnalyticsRepository`, `CannsheetGraph`, `SyncScheduler`, and
+`SyncWorker` source, but is otherwise unvalidated pending CI on the pull
+request. No manual device validation was performed.
+
 ## Product usage totals release
 
 Release v1.2.18 adds correction-safe product usage totals to the Log screen

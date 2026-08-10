@@ -3,6 +3,7 @@ package com.example.data
 import com.squareup.moshi.JsonClass
 import com.squareup.moshi.Json
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -302,6 +303,22 @@ class AnalyticsApiException(
     override val message: String,
     val retryable: Boolean,
 ) : IOException(message)
+
+/** The range a cached Insights payload was generated for. */
+fun InsightsResponseDto.cachedInsightsRange(): InsightsRange = when (range.scope) {
+    "ALL" -> InsightsRange.All
+    "CUSTOM" -> InsightsRange.Custom(range.from, range.to)
+    else -> InsightsRange.Default
+}
+
+internal suspend inline fun <T> runCatchingCancellable(block: suspend () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
 
 interface AnalyticsDataSource {
     suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto

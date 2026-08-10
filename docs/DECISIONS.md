@@ -191,5 +191,77 @@ historical rationale.
   `app/src/main/java/com/example/ui`, `app/build.gradle.kts`,
   `docs/ARCHITECTURE.md`
 
+## ADR-008: Warm the analytics cache from periodic background sync
 
-
+- Status: Accepted for feature-branch implementation; not merged, released, or
+  deployed
+- Date: 2026-08-10
+- Context: `AnalyticsCoordinator.loadInsightsCacheThenRefresh()` and
+  `loadHistoryCacheThenRefresh()` show whatever Room `analytics_cache` row
+  already exists, then always issue a live Apps Script refresh. On a cold
+  open, that cached row can be many hours old, and it is the only thing an
+  offline user ever sees. The existing periodic `SyncWorker` run already wakes
+  up every six hours but does nothing when the offline action queue is empty.
+- Decision:
+  1. Add `AnalyticsPrefetcher`, driven from `SyncWorker.doWork()` as a step
+     beside the existing queue sync, not inside `BackgroundSyncRunner`. The
+     runner's queue semantics are data-sensitive and its existing test fake
+     drives `hasPendingActions()` from a queue consumed by `removeFirst()`, so
+     an extra call from inside the runner would break it.
+  2. Reuse whichever request shape the current cache row was generated for:
+     the cached Insights payload's `range.scope`, or the cached History
+     response's `filters`. The `analytics_cache` row is keyed by
+     `(environment, resource)` only, so a hardcoded default-range prefetch
+     would silently reset a user whose last view was "All" or a filtered
+     History. With no cache at all, fetch `InsightsRange.Default` /
+     `HistoryFilters()`.
+  3. Gate prefetch to periodic runs only, via a `prefetch_analytics`
+     WorkManager input-data flag that only `SyncScheduler.periodicRequest()`
+     sets. The one-shot chain fires after user actions; prefetching there
+     would pay for two extra Apps Script reads on every logged entry for no
+     benefit. Prefetch also only runs when the queue-sync result was
+     `NothingToSync` or `Applied`, never after `Retry` or
+     `EnvironmentMismatch`, and only when the existing "Background sync"
+     DataStore switch is on. No new Settings control was added.
+  4. Skip a resource whose cache is already less than two hours old, so a
+     recently-refreshed cache is not re-fetched on every six-hour wake.
+  5. Merge History writes to preserve paged depth: keep cached events
+     strictly older than the fresh first page's oldest event, and drop
+     everything else, rather than replacing a deeper cached page set with a
+     single fresh page 1.
+  6. Treat every prefetch step as best effort. A failure must never redeliver
+     the queue, overwrite the background-sync status shown in Settings, or
+     stop the other resource's prefetch; Insights and History are fetched and
+     failed independently.
+  7. Accept three trade-offs rather than engineering around them: a
+     foreground/background write race where Room `OnConflictStrategy.REPLACE`
+     makes the last write win (the two-hour floor keeps the window narrow and
+     the next foreground refresh self-corrects); retained History events are
+     not re-validated against a corrected `sourceRevision.dataVersion` until
+     the next live refresh (no worse than today's staleness, and the UI
+     already flags `isFromCache`/`isStale` and refuses correction affordances
+     from stale state); and a `REPLACE` correction that moves a retained event
+     to an earlier timestamp can leave a stale copy off the fresh first page
+     until a full refetch.
+- Rationale: Reusing the existing periodic worker and the existing cache
+  read/write paths warms the same data the UI already trusts, without a new
+  endpoint, Room migration, or Settings surface, and without changing what the
+  coordinator does on `onVisible`.
+- Consequences: `BackgroundSyncWorkerRuntime` gained a
+  `prefetchAnalytics()` method that both the production
+  `GraphBackgroundSyncWorkerRuntime` and every test fake must implement.
+  `AnalyticsRepository`/`AnalyticsDataSource` gained no new methods; the
+  prefetcher depends only on the existing `fetchInsights`, `fetchHistory`,
+  `saveHistory`, `readCachedInsights`, and `readCachedHistory` operations
+  through a narrow `AnalyticsPrefetchOperations` boundary. The Room schema and
+  version are unchanged. The coordinator's own live refresh on every
+  `onVisible` is unchanged and must not be "optimised away" by this cache
+  being warmer.
+- Related files: `app/src/main/java/com/example/data/sync/AnalyticsPrefetcher.kt`,
+  `app/src/main/java/com/example/data/sync/SyncWorker.kt`,
+  `app/src/main/java/com/example/data/sync/SyncScheduler.kt`,
+  `app/src/main/java/com/example/data/AnalyticsData.kt`,
+  `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/test/java/com/example/data/sync/AnalyticsPrefetcherTest.kt`,
+  `app/src/test/java/com/example/data/sync/SyncWorkerPrefetchGateTest.kt`,
+  `docs/ARCHITECTURE.md`

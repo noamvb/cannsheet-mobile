@@ -82,6 +82,8 @@ flowchart TD
     HTTP --> Ack["committed / duplicate acknowledgement"]
     Ack --> Engine
     Engine -->|only accepted acknowledgement deletes rows| Queue
+    Worker -->|periodic input data| Prefetcher["AnalyticsPrefetcher"]
+    Prefetcher --> Cache["Room analytics_cache"]
 ```
 
 `CannsheetApplication` keeps ordinary default WorkManager initialization; the
@@ -155,6 +157,12 @@ write path or a second source of truth.
 4. Cached data can be shown when a refresh fails.
 5. History uses cursor pagination and permits a bounded stale-cursor recovery
    rather than mixing incompatible pages.
+6. The periodic background worker can also warm the same Room cache. It reuses
+   whichever Insights range or History filters the existing cache row was last
+   generated for (falling back to the default range/unfiltered History when no
+   cache exists yet) rather than resetting a user's last-viewed scope. This
+   only changes the freshness of the first paint on a cold open; the
+   coordinator still performs its own live refresh on every `onVisible`.
 
 ### Consumption history corrections
 
