@@ -11,8 +11,10 @@ shows durable locally pending consumption. Totals appear on the selected and
 Recent Products cards, not in the product picker.
 
 Background synchronization is separate feature-branch work on
-`agent/background-sync`, based on main commit `9b71cab`. It is not merged,
-released, deployed, or included in v1.2.18. The implementation uses a
+`agent/background-sync` in
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
+commit `9b71cab`. It is not merged, released, deployed, or included in v1.2.18.
+The implementation uses a
 process-wide graph and shared mutex so `SyncEngine` serializes foreground and
 WorkManager queue attempts. It schedules connected immediate work with
 `APPEND_OR_REPLACE`, periodic six-hour work with `UPDATE`, leaves default

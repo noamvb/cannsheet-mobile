@@ -29,8 +29,10 @@ Last updated: 2026-08-09
 ## Background synchronization feature work
 
 Background synchronization is in progress on feature branch
-`agent/background-sync`, based on main commit `9b71cab`. It is not merged,
-released, deployed, or included in Cannsheet Mobile v1.2.18.
+`agent/background-sync` in
+[PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), based on main
+commit `9b71cab`. It is not merged, released, deployed, or included in
+Cannsheet Mobile v1.2.18.
 
 The approved feature uses a process-wide `CannsheetGraph` with a shared mutex
 and routes foreground and WorkManager queue attempts through one `SyncEngine`.
