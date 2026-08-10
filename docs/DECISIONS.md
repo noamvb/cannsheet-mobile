@@ -193,8 +193,7 @@ historical rationale.
 
 ## ADR-008: Warm the analytics cache from periodic background sync
 
-- Status: Accepted for feature-branch implementation; not merged, released, or
-  deployed
+- Status: Accepted; merged and released as Cannsheet Mobile v1.2.20
 - Date: 2026-08-10
 - Context: `AnalyticsCoordinator.loadInsightsCacheThenRefresh()` and
   `loadHistoryCacheThenRefresh()` show whatever Room `analytics_cache` row

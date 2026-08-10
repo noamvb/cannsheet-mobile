@@ -5,19 +5,20 @@ Last updated: 2026-08-10
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and annotated tag `v1.2.19`:
-  `009d38cc00642c323015958160b768661c13036d`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.19`,
-  version code `22`
+- Released source commit and annotated tag `v1.2.20`:
+  `d91444afa091faa9bee7727c0e506e76f2f51d36`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.20`,
+  version code `23`
 - Background synchronization [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30)
   and version-only release [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31)
   were squash-merged after their required validation passed.
+- Analytics prefetch [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and version-only release [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) were squash-merged after their required validation passed, and released as v1.2.20.
 - The public signed release is
-  [Cannsheet Mobile 1.2.19](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.19).
-  Its release assets are `Cannsheet-Mobile-1.2.19.apk` and
-  `Cannsheet-Mobile-1.2.19.apk.sha256` (in addition to GitHub's automatic source archives).
+  [Cannsheet Mobile 1.2.20](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.20).
+  Its release assets are `Cannsheet-Mobile-1.2.20.apk` and
+  `Cannsheet-Mobile-1.2.20.apk.sha256` (in addition to GitHub's automatic source archives).
 - Public APK SHA-256:
-  `86773a13c4633034fda8e67b033b2e2ec924333442ad5401ef2ae7d31bd2a747`
+  `c4e96df1b1f158a4119def985ce6a6e0a1cd28463234435f509ceea84cc3532b`
 - The editable History milestone was delivered through backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and production
@@ -64,38 +65,19 @@ unchanged. The signed publication workflow
 [31351814290](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351814290)
 published v1.2.19 after confirming that exact validated main commit.
 
-A working branch (`claude/background-sync-history-insights-2owoab`, not merged)
-adds a best-effort Insights/History cache prefetch to the same periodic
-`SyncWorker` run, gated by a new `prefetch_analytics` WorkManager input-data
-flag that only `SyncScheduler.periodicRequest()` sets. `AnalyticsPrefetcher`
-runs after the existing queue sync only when that run result is
-`NothingToSync` or `Applied` (never after `Retry` or `EnvironmentMismatch`),
-and only when the existing "Background sync" DataStore switch is on; no new
-Settings control was added. It re-reads whichever Insights range or History
-filters the current Room `analytics_cache` row was generated for (falling back
-to the default range and unfiltered History when no cache row exists) so it
-never resets a user's last-viewed scope, and it skips a resource entirely when
-its cache is already less than two hours old. The History write merges the
-fresh first page with cached events strictly older than the fresh page's
-oldest event, rather than replacing deeper cached pages with a single page 1,
-so a user who has paged further into History does not lose that depth on a
-refresh. `Database.kt`'s Room schema, version, and the `BackgroundSyncRunner`
-queue path are unchanged; `AnalyticsRepository`/`AnalyticsDataSource` gained no
-new methods. The three accepted trade-offs (a foreground/background write race
-resolved by Room `REPLACE` last-writer-wins, retained History events not
-re-validated against a corrected `sourceRevision.dataVersion` until the next
-live refresh, and a REPLACE correction that moves an event earlier than the
-fresh page's oldest event being unrecoverable without a full refetch) are
-recorded in [ADR-008](DECISIONS.md#adr-008-warm-the-analytics-cache-from-periodic-background-sync).
+Analytics prefetch (best-effort Insights/History cache warming from the periodic `SyncWorker` run) was delivered in [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33), version-bumped in [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34), and released as Cannsheet Mobile v1.2.20. It is gated by a new `prefetch_analytics` WorkManager input-data flag that only `SyncScheduler.periodicRequest()` sets; `AnalyticsPrefetcher` runs after the existing queue sync only when that run result is `NothingToSync` or `Applied` (never after `Retry` or `EnvironmentMismatch`), and only when the existing "Background sync" DataStore switch is on. No new Settings control was added. It re-reads whichever Insights range or History filters the current Room `analytics_cache` row was generated for (falling back to the default range and unfiltered History when no cache row exists), and skips a resource entirely when its cache is already less than two hours old. The History write merges the fresh first page with cached events strictly older than the fresh page's oldest event, rather than replacing deeper cached pages with a single page 1. `Database.kt`'s Room schema, version, and the `BackgroundSyncRunner` queue path are unchanged; `AnalyticsRepository`/`AnalyticsDataSource` gained no new methods. The three accepted trade-offs (a foreground/background write race resolved by Room `REPLACE` last-writer-wins, retained History events not re-validated against a corrected `sourceRevision.dataVersion` until the next live refresh, and a REPLACE correction that moves an event earlier than the fresh page's oldest event being unrecoverable without a full refetch) are recorded in [ADR-008](DECISIONS.md#adr-008-warm-the-analytics-cache-from-periodic-background-sync).
 
-This environment had no JDK 17+, no Android SDK, and no Node.js runtime
-available, so none of `testDebugUnitTest`, `compileDebugAndroidTestKotlin`,
-`lintDebug`, `assembleDebug`, or `node tests/backend_analytics_test.js` could
-be executed locally; `./gradlew` itself refused to run under the only
-available JDK (1.8). The change was implemented and manually re-read against
-the existing `AnalyticsRepository`, `CannsheetGraph`, `SyncScheduler`, and
-`SyncWorker` source, but is otherwise unvalidated pending CI on the pull
-request. No manual device validation was performed.
+The implementing session's environment had no JDK 17+, no Android SDK, and no Node.js runtime, so none of `testDebugUnitTest`, `compileDebugAndroidTestKotlin`, `lintDebug`, `assembleDebug`, or `node tests/backend_analytics_test.js` could be executed locally; `./gradlew` itself refused to run under the only available JDK (1.8). The code was implemented and manually re-read against the existing `AnalyticsRepository`, `CannsheetGraph`, `SyncScheduler`, and `SyncWorker` source without local execution, and PR #33 was opened as a draft specifically because of that. CI then validated it: PR #33's checks passed
+[run 31421082505](https://github.com/noamvb/cannsheet-mobile/actions/runs/31421082505),
+the merge-to-main commit `f1ebdaa` passed the full matrix in
+[run 31423351995](https://github.com/noamvb/cannsheet-mobile/actions/runs/31423351995),
+PR #34's checks passed
+[run 31424577797](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424577797),
+and the version-bump merge commit `d91444a` (the exact tagged/released commit) passed the full matrix in
+[run 31424975576](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424975576).
+The signed publication workflow
+[run 31426000025](https://github.com/noamvb/cannsheet-mobile/actions/runs/31426000025)
+published v1.2.20 after confirming that exact validated main commit. No manual device validation was performed for this release; see "Current priorities" below.
 
 ## Product usage totals release
 
@@ -176,6 +158,16 @@ Repository code and validation show:
 
 ## Release and validation status
 
+v1.2.20 evidence (current release):
+
+- PR #33's checks passed [run 31421082505](https://github.com/noamvb/cannsheet-mobile/actions/runs/31421082505); the merge-to-main commit `f1ebdaa` passed the full API 24/API 36 matrix in [run 31423351995](https://github.com/noamvb/cannsheet-mobile/actions/runs/31423351995).
+- PR #34's checks passed [run 31424577797](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424577797); the version-bump merge commit `d91444a` (the exact tagged/released commit) passed the full matrix in [run 31424975576](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424975576).
+- Signed publication workflow [run 31426000025](https://github.com/noamvb/cannsheet-mobile/actions/runs/31426000025) passed the exact-main/tag/version gate, signed build, signature verification, checksum generation, public upload, and post-publication verification.
+- The public release is [Cannsheet Mobile 1.2.20](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.20): `Cannsheet-Mobile-1.2.20.apk` (13,493,018 bytes) and its `.sha256`. APK SHA-256: `c4e96df1b1f158a4119def985ce6a6e0a1cd28463234435f509ceea84cc3532b` (independently re-fetched from the public release and confirmed to differ from the v1.2.19 checksum below, proving a distinct build; local `aapt`/`apksigner` re-verification was not performed in this session, but the release workflow's own post-publication step ran that exact check and passed).
+- No manual device installation or Obtainium update was observed in this session.
+
+Prior release (v1.2.19) evidence, retained for history:
+
 Private-source evidence:
 
 - Product usage totals PR #27 and its explicit full feature-branch run
@@ -249,7 +241,7 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Install or update to v1.2.19 on the intended phone, preferably through
+1. Install or update to v1.2.20 on the intended phone, preferably through
    Obtainium.
 2. Verify selected and recent product cards for zero, integer, fractional,
    offline pending, successful sync, failed sync, and borrowed-product cases.
@@ -257,12 +249,14 @@ Local and device evidence:
    only after backend acknowledgement, without creating pending consumption.
 4. Retain the local background-sync screenshot with the task evidence; do not
    commit device captures that contain private data.
+5. Trigger the periodic `SyncWorker` job on a device (`adb shell cmd jobscheduler run -f <package> <jobId>`), confirm via `adb logcat` that one `resource=insights` and one `resource=history` GET fire, and confirm a cold airplane-mode open shows the warmed cache with correction affordances still disabled.
 
 ## Unresolved questions
 
-- Does Obtainium detect and install v1.2.19 in place on the intended phone?
+- Does Obtainium detect and install v1.2.20 in place on the intended phone?
 - Do the confirmed-versus-pending totals remain clear during real offline,
   retry, borrowed-product, and correction workflows on the intended phone?
+- Does the periodic worker's analytics prefetch actually warm the Insights/History cache on a real device (no emulator/CI substitute exists for this), and does the 2-hour freshness floor behave as expected across real wake intervals?
 
 These require device evidence and should not be answered from repository or
 workflow evidence alone.
@@ -271,6 +265,7 @@ workflow evidence alone.
 
 - `app/src/main/java/com/example/ui`
 - `app/src/main/java/com/example/data`
+- `app/src/main/java/com/example/data/sync`
 - `app/src/test`
 - `app/src/androidTest`
 - `tests/backend_corrections_test.js`
