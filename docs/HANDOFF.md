@@ -6,13 +6,9 @@ Last updated: 2026-08-10
 
 Analytics prefetch (best-effort Insights/History cache warming from the periodic `SyncWorker` run) is **merged, released, and CI-validated**: [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) are both merged into `main`, and Cannsheet Mobile **v1.2.20** is published and signed. The code was implemented and self-reviewed without local test execution (this session's environment had no JDK 17+, Android SDK, or Node.js runtime — see "What could not be validated" below), so PR #33 was opened as a draft specifically for that reason. CI then validated everything before any tag was created: PR-level checks, two full push-to-main API 24/API 36 matrix runs (one per merge), and the signed release workflow all passed. See `docs/PROJECT_STATE.md` for the exact run IDs and commit SHAs. No manual device validation was performed.
 
-The prior release state (Cannsheet Mobile v1.2.19, background synchronization
-via [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), and product
-usage totals) remains the last released and device-validated state; see
-`docs/PROJECT_STATE.md` for that evidence. This handoff only covers the new
-branch.
+The prior release before this work, Cannsheet Mobile v1.2.19 (background synchronization via [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), and product usage totals), is documented in `docs/PROJECT_STATE.md` for historical evidence. **v1.2.20 (this work) is now the current release.**
 
-## What this branch changes
+## What this release changes
 
 - New `app/src/main/java/com/example/data/sync/AnalyticsPrefetcher.kt`:
   reads the current Room `analytics_cache` row for Insights and History,
