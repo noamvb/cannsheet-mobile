@@ -3,7 +3,6 @@ package com.example.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
@@ -172,8 +171,8 @@ class HistoryContentTest {
 
         composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
         composeRule.onAllNodes(hasText("Refreshing History…")).assertCountEquals(2)
-        composeRule.onNode(hasText("Refresh History") and hasClickAction())
-            .assertDoesNotExist()
+        composeRule.onAllNodes(hasText("Refresh History") and hasClickAction())
+            .assertCountEquals(0)
     }
 
     @Test
