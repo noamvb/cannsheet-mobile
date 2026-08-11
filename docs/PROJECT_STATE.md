@@ -139,9 +139,27 @@ Last updated: 2026-08-11
   data directory remained `/data/user/0/com.noamv.cannsheet.mobile`; no
   uninstall, data clear, downgrade, or synthetic purchase/correction was
   performed.
-- The interactive History sequence and recording remain pending because the
-  phone presented its lock-pattern screen after a normal wake/unlock-swipe
-  attempt. No pattern was entered or bypassed.
+- After the user unlocked the phone on 2026-08-11, bounded live validation
+  reached Insights → History on the installed production package. With network
+  available, History displayed saved rows, showed the automatic `Refreshing
+  History…` progress state, settled back to rows, and opened an existing event
+  with the online Correct/Void controls visible. A list-header refresh with rows
+  already visible also showed the progress indicator and `Refreshing History…`
+  text while the request was in flight.
+- The network-interruption portion was exercised by starting a History refresh and
+  disabling the phone's network; wireless ADB dropped as expected and a screen
+  recording was pulled for local evidence. Once connectivity was restored,
+  History returned to its saved rows. Because ADB was unavailable during the
+  interruption, the transient offline error inside the sheet and the complete
+  cold-open/manual-offline sequence were not independently read back; do not
+  treat them as passed.
+- No real correction, void, restore, purchase, or other production data mutation
+  was performed. Correction-save success, rotation with an open sheet, and
+  missing-entry dialog behavior remain unverified. The temporary recordings were
+  removed from the phone after being pulled locally and are not committed because
+  they include live History data.
+- Phone use ended with airplane mode off, Wi-Fi/ADB restored, and no app data
+  changed.
 
 ## Background synchronization feature work
 
@@ -282,7 +300,7 @@ v1.2.22 evidence (current release):
 - The public release is [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22): `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) and its `.sha256`. Independently downloaded APK SHA-256: `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
 - The publication workflow independently verified the expected signing certificate and confirmed package `com.noamv.cannsheet.mobile`, version code `25`, and version name `1.2.22`.
 - Wireless ADB device readback: Samsung `SM-F966W`, Android 16 / API 36. `dumpsys package` before and after installation reported the same production signing identity `6d94a7a1` and data directory; the package changed from version code `24` / version name `1.2.21` to version code `25` / version name `1.2.22`, with `lastUpdateTime 2026-08-11 15:16:30` after installation.
-- The in-place production update succeeded with `adb install -r`; no uninstall or data clear was performed. Interactive History validation remains pending because the device was locked behind a user pattern and no pattern was entered.
+- The in-place production update succeeded with `adb install -r`; no uninstall or data clear was performed. Bounded online History refresh validation was completed after the phone was unlocked; the remaining offline in-sheet error, correction-save, rotation, and missing-entry cases are recorded as unverified in the feature section above.
 - The Purchase UI rendered with type-first selection and the new
   `Use these values as future defaults for this product and type` switch. The
   product selector was disabled after selecting type `P` in this session, so
@@ -352,8 +370,10 @@ Local and device evidence:
 - The background-sync branch passed the isolated physical-device checks
   described above; a local screenshot captured its enabled, zero-pending,
   just-now-successful Settings state.
-- No full manual product-total acceptance workflow was performed; the current
-  History UI recording is also pending an unlocked device.
+- No full manual product-total acceptance workflow was performed. The bounded
+  History recording and online refresh readback are preserved locally, but the
+  offline in-sheet error, correction save, rotation, and missing-entry portions
+  are not independently verified.
 
 ## Known limitations
 
@@ -383,9 +403,9 @@ Local and device evidence:
 
 ## Unresolved questions
 
-- Obtainium's post-install refresh and the full History UI flow still need to
-  be observed on an unlocked phone; the APK itself is installed and the
-  in-place package transition was verified through ADB.
+- Obtainium's post-install refresh was not observed in this session. The full
+  History UI plan remains partially unverified: the offline error inside the
+  detail sheet, correction save, rotation, and missing-entry dialog.
 - Does a genuine product suggestion on the installed v1.2.22 app apply and
   preserve a saved Purchase default across restart? The product selector was
   unavailable during this read-only session, and no synthetic purchase was
