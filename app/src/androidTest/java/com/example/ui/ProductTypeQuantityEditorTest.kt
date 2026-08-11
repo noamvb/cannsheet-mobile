@@ -5,9 +5,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
-import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -74,19 +77,19 @@ class ProductTypeQuantityEditorTest {
 
         composeRule
             .onNodeWithTag(ProductTypeQuantityEditorTestTags.presetInput(1))
-            .assertTextEquals("7")
+            .assertEditableTextEquals("7")
         composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.TYPE_PICKER).performClick()
         composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.typeOption("S")).performClick()
         composeRule.waitForIdle()
         composeRule
             .onNodeWithTag(ProductTypeQuantityEditorTestTags.presetInput(1))
-            .assertTextEquals("0.5")
+            .assertEditableTextEquals("0.5")
         composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.TYPE_PICKER).performClick()
         composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.typeOption("P")).performClick()
         composeRule.waitForIdle()
         composeRule
             .onNodeWithTag(ProductTypeQuantityEditorTestTags.presetInput(1))
-            .assertTextEquals("7")
+            .assertEditableTextEquals("7")
     }
 
     @Test
@@ -114,3 +117,12 @@ class ProductTypeQuantityEditorTest {
         composeRule.runOnIdle { assertEquals("S", resetType) }
     }
 }
+
+private fun androidx.compose.ui.test.SemanticsNodeInteraction.assertEditableTextEquals(
+    expected: String,
+) = assert(
+    SemanticsMatcher.expectValue(
+        SemanticsProperties.EditableText,
+        AnnotatedString(expected),
+    ),
+)
