@@ -63,6 +63,45 @@ Last updated: 2026-08-11
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
 
+## Quick-log quantity presets by product type feature work
+
+- The per-product-type quick-log quantity preset implementation is complete in
+  the current local task worktree, but it is not merged or released. Release
+  metadata remains version name `1.2.22` / version code `25`.
+- Global quick-log presets remain the fallback. Per-type overrides share the
+  existing `consumption_preferences` DataStore in a version-1 JSON payload;
+  there is no Room migration, queue contract change, Apps Script change, or
+  production endpoint change.
+- Product types use the canonical `P`, `E`, `J`, `F`, `S`, `K` codes and labels,
+  unioned with normalized catalog types. The ViewModel resolves an effective
+  preset for the selected type and the Settings UI supports editing, saving,
+  resetting, and summarizing custom overrides.
+- The exact local validation command passed with JDK 17.0.20, Gradle 9.3.1,
+  Android platform `android-36.1`, and Build Tools `36.0.0`:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  It completed with `BUILD SUCCESSFUL`; 138 JVM tests completed in the final
+  run, Android-test Kotlin compilation completed, lint completed, and the
+  debug APK assembled.
+- A temporary isolated `devicecheck` build was assembled only for bounded
+  manual validation. The resulting APK was installed as package
+  `com.noamv.cannsheet.mobile.devicecheck`, version name
+  `1.2.22-devicecheck` / version code `25`, alongside the production package.
+  Its local artifact was
+  `app/build/outputs/apk/devicecheck/app-devicecheck.apk` with SHA-256
+  `6a748680fc91c2830d222beeb7b00050f9145a629ccc8f464e5a3c0d9ef6734a`.
+- On the wireless Samsung `SM-F966W`, Settings exposed all six product types;
+  a Shatter override `0.1 / 0.25 / 0.5` saved and persisted across relaunch,
+  appeared on the Shatter Log form, Pen showed the global `0.5 / 1 / 2`
+  defaults, and reset returned Shatter to the global defaults. The existing
+  global editor was also changed to `0.5 / 1.25 / 2`, saved, confirmed after
+  relaunch, and restored to `0.5 / 1 / 2`; Edible with no override showed the
+  default status and global fields. No log, purchase, finish, or sync action
+  was submitted.
+- The backend Node/Python suites and connected instrumentation were not run in
+  this task because the backend was unchanged and the isolated build type has
+  no dedicated connected-test variant. No CI run or production release was
+  performed for this unmerged worktree.
+
 ## Purchase autofill defaults feature work
 
 - The approved implementation was delivered through
@@ -305,6 +344,24 @@ v1.2.22 evidence (current release):
   `Use these values as future defaults for this product and type` switch. The
   product selector was disabled after selecting type `P` in this session, so
   no production purchase or synthetic autofill test was performed.
+
+Unreleased local quick-log quantity preset feature work (2026-08-11):
+
+- The implementation is present in the current unmerged worktree; release
+  metadata remains version name `1.2.22` / version code `25`.
+- The exact local Android command passed with JDK 17.0.20, Gradle 9.3.1,
+  Android platform `android-36.1`, and Build Tools `36.0.0`:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  The command completed with `BUILD SUCCESSFUL`; the test suite completed 138
+  JVM tests during the final non-cached run, Android-test Kotlin compilation
+  completed, lint completed, and the debug APK assembled.
+- The temporary isolated APK is installed as
+  `com.noamv.cannsheet.mobile.devicecheck` on the Samsung `SM-F966W` for
+  bounded manual validation. Its package, version, checksum, manual cases,
+  skipped backend/connected checks, and production-data boundary are recorded
+  in the feature section above and in `docs/HANDOFF.md`.
+- No CI run, commit, tag, public release, or production-package update was
+  performed for this unmerged feature work.
 
 Prior release (v1.2.20) evidence, retained for history:
 

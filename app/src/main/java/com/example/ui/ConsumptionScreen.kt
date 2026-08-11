@@ -92,7 +92,7 @@ private val categoryColors = mapOf(
 fun ConsumptionScreen(viewModel: CannsheetViewModel) {
     val allProducts by viewModel.allProducts.collectAsStateWithLifecycle()
     val recentProducts by viewModel.recentProducts.collectAsStateWithLifecycle()
-    val quantityPresets by viewModel.quantityPresets.collectAsStateWithLifecycle()
+    val quantityPresets by viewModel.effectiveQuantityPresets.collectAsStateWithLifecycle()
     val includeUnopened by viewModel.includeUnopened.collectAsStateWithLifecycle()
     val formState by viewModel.consumptionFormState.collectAsStateWithLifecycle()
     val pendingUsesByProduct by viewModel.pendingUsesByProduct.collectAsStateWithLifecycle()

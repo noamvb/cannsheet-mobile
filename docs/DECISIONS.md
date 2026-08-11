@@ -355,3 +355,57 @@ historical rationale.
   `app/src/test/java/com/example/ui/HistoryCorrectionUiTest.kt`,
   `app/src/androidTest/java/com/example/ui/HistoryContentTest.kt`,
   `docs/ARCHITECTURE.md`
+
+## ADR-011: Keep quick-log quantity presets local and overridable per product type
+
+- Status: Accepted; implementation is in the local task worktree and is not
+  merged or released
+- Date: 2026-08-11
+- Context: The Log screen currently renders one global quick-log quantity list
+  for every product. Pens, shatter, flower, and other product types can use
+  different units or practical quantities, so a shared list is repeatedly
+  wrong for at least one type. The feature needs to add type-specific choices
+  without changing the existing global preference, Room schema, offline queue,
+  or Apps Script contract.
+- Decision:
+  1. Keep the existing global quick-log quantity editor and use its list as the
+     fallback for every type without a valid override. Store overrides in the
+     existing `consumption_preferences` DataStore as one version-1 JSON value;
+     do not touch the existing scalar global preset keys.
+  2. Normalize `ProductTypeKey` values with trimmed,
+     locale-independent uppercase text. Decode the JSON defensively: malformed,
+     unsupported, or invalid records are ignored, duplicate normalized types
+     resolve to the later record, and the in-memory/stored representation is
+     deterministic by type.
+  3. Read global presets and overrides from the same `dataStore.data` snapshot,
+     expose effective presets from `CannsheetViewModel`, and use the selected
+     catalog product's type for both Log chips and the initial default quantity.
+     Remembered per-product quantities still take precedence over the type
+     default; clearing the selection continues to use the global list.
+  4. Reuse one validated preset-row editor for the global Settings section and
+     the type-specific section. The type editor exposes the canonical type
+     labels plus normalized catalog extensions and provides an explicit reset
+     to the global fallback.
+  5. Keep borrowed products on global presets because their free-text type is
+     collected after the chips render. Keep overrides type-scoped rather than
+     introducing per-product persistence.
+- Rationale: A local full-map preference preserves offline behavior and avoids
+  a migration or backend contract change. The override resolver makes the new
+  behavior explicit while retaining the existing global settings and test tags
+  as a regression boundary.
+- Consequences: The feature adds a version-1 JSON preference, a shared product
+  type catalog, and ViewModel/UI flows but no Room tables, queue payloads,
+  network fields, Apps Script writes, or release metadata. A malformed override
+  payload safely behaves as if no type overrides exist. Device validation uses
+  an isolated temporary application ID so the installed production database
+  and signing identity are not disturbed.
+- Related files: `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`,
+  `app/src/main/java/com/example/ui/ProductTypes.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/main/java/com/example/ui/ConsumptionScreen.kt`,
+  `app/src/main/java/com/example/ui/SettingsScreen.kt`,
+  `app/src/main/java/com/example/ui/PurchaseScreen.kt`,
+  `app/src/test/java/com/example/data/QuantityPresetOverridesTest.kt`,
+  `app/src/test/java/com/example/ui/ProductTypesTest.kt`,
+  `app/src/androidTest/java/com/example/ui/ProductTypeQuantityEditorTest.kt`,
+  `docs/ARCHITECTURE.md`

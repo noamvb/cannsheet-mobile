@@ -4,108 +4,116 @@ Last updated: 2026-08-11
 
 ## Current outcome
 
-The History refresh feedback feature from [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40)
-is implemented, tested, squash-merged, versioned, signed, published, and
-installed on the intended Samsung `SM-F966W`.
+The per-product-type quick-log quantity preset feature is implemented in the
+current local task worktree. It is not merged or released; the production
+version remains `1.2.22` / version code `25`.
 
-The feature merge commit is
-`62d7cc6d960b0e13bdfd089152d14f8c20a308a1`. The separate version-only release
-PR [#41](https://github.com/noamvb/cannsheet-mobile/pull/41) raised the app to
-version code `25` / version name `1.2.22`; its exact merged main commit is
-`633bd898ab59dc9d30acb2ba530a41e5f94c1e2a` and its source tag is `v1.2.22`.
+The implementation preserves the existing global quick-log presets as the
+fallback and adds version-1 per-type overrides in the same
+`consumption_preferences` DataStore. No Room schema, offline queue, Apps Script
+contract, production endpoint, package ID, or signing configuration was
+changed.
+
+For device validation, a temporary debug-signed `devicecheck` variant was
+assembled and installed alongside production as
+`com.noamv.cannsheet.mobile.devicecheck`. The production package was not
+overwritten, uninstalled, downgraded, or cleared.
 
 ## Implementation and validation
 
-- The implementation adds the shared `historyNeedsRefreshForCorrections`
-  predicate, an idempotent stale-only coordinator refresh entry point, visible
-  History refresh progress and errors in both list and sheet surfaces,
-  automatic refresh when a stale entry opens, UUID-based sheet rebinding, and a
-  missing-entry explanation.
-- Coordinator, pure-state, and Compose regression tests are included.
-- Feature CI run [31523716900](https://github.com/noamvb/cannsheet-mobile/actions/runs/31523716900)
-  passed security/classification, backend, Android static, API 24
-  instrumentation, and aggregate validation. Its debug artifact ZIP digest was
-  `dcf7108717d33233bc571f00d396e7a3022a6878e9328a1272feb11ac617dc9b`.
-- Version PR run [31525437265](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525437265)
-  passed. The exact release merge commit passed the full main API 24/API 36
-  matrix in [31525848365](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525848365).
-- Signed publication run [31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773)
-  passed exact-main provenance, release-secret validation, signed build,
-  signature and metadata verification, public publication, and post-publication
-  verification.
-- The public release is [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22).
-  The published APK is `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) with
-  SHA-256
-  `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
-- The exact local Android command was attempted with Gradle 9.3.1 and JDK
-  17.0.20, but this Mac has no Android SDK; Gradle stopped with “SDK location
-  not found”. GitHub Actions is the authoritative Android validation evidence.
+- `ConsumptionPreferencesRepository` now decodes and writes a defensive,
+  versioned override payload atomically with the existing preferences snapshot.
+  Product-type keys are normalized with `Locale.ROOT`; invalid records are
+  ignored and invalid preset lists fall back to the global list.
+- `ProductTypes` defines the canonical code/label set and merges it with
+  normalized catalog types. `CannsheetViewModel` exposes the effective
+  type-aware presets and uses them for consumption defaults.
+- Settings keeps the existing global editor and adds a reusable editor for
+  per-type custom quantities, reset behavior, status, and a custom-type
+  summary. Purchase type choices now use the same canonical codes.
+- New JVM coverage covers payload validation, normalization, duplicate
+  handling, ordering, atomic writes, failure behavior, persistence, and
+  effective-preset resolution. New Compose coverage covers selecting a type,
+  reseeding on type changes, saving, and reset behavior.
+- The final local command passed with JDK 17.0.20 and Gradle 9.3.1:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  Result: `BUILD SUCCESSFUL`; 138 JVM tests completed, Android-test Kotlin
+  compilation completed, lint completed, and the debug APK assembled.
+- The temporary device-check APK was built with
+  `./gradlew --no-daemon assembleDevicecheck`, installed successfully, and
+  reported version name `1.2.22-devicecheck` / version code `25`. The artifact
+  was `app/build/outputs/apk/devicecheck/app-devicecheck.apk` with SHA-256
+  `6a748680fc91c2830d222beeb7b00050f9145a629ccc8f464e5a3c0d9ef6734a`.
+- `git diff --check` passed. Existing CRLF files caused only the repository's
+  line-ending conversion warnings; no whitespace errors were reported.
+- Backend Node/Python suites were not run because backend sources were not
+  changed. Connected instrumentation was not run because the temporary
+  `devicecheck` build type has no dedicated connected-test task; the new
+  Android test source compiled successfully. No CI run was started.
 
 ## Device state
 
-- Before installation, the production package was version code `24` / version
-  name `1.2.21`, with signing identity `6d94a7a1` and data directory
-  `/data/user/0/com.noamv.cannsheet.mobile`.
-- The published release-signed APK installed successfully in place with
-  `adb install -r`. After installation, the package was version code `25` /
-  version name `1.2.22`, retained signing identity `6d94a7a1`, retained the
-  same data directory, and reported `lastUpdateTime 2026-08-11 15:16:30`.
-- No uninstall, data clear, downgrade, endpoint change, synthetic purchase,
-  or synthetic correction was performed.
+- Device: wireless ADB target `adb-RFCYA0TZJKA-4E82lh._adb-tls-connect._tcp`,
+  Samsung `SM-F966W`, Android API 36.
+- Installed validation package: `com.noamv.cannsheet.mobile.devicecheck`,
+  version code `25`, version name `1.2.22-devicecheck`, installed with
+  `adb install -r` from the isolated APK.
+- The production package `com.noamv.cannsheet.mobile` remained installed and
+  was not uninstalled, cleared, downgraded, or modified by this validation.
+- The isolated app's temporary Shatter override was reset before finishing;
+  its Settings state showed `Using the default quantities` and
+  `No product types have custom quantities.` Pending actions remained zero.
 
 ## Manual validation boundary
 
-The phone was unlocked by the user on 2026-08-11 and the installed production
-package was exercised over wireless ADB. The bounded validation that was
-actually read back was:
+The phone was occupied from the explicit start notification through the final
+ADB check. The completed bounded walkthrough was:
 
-- Insights → History opened with network available, displayed saved rows, showed
-  the automatic `Refreshing History…` state while the page refreshed, and
-  settled back to the saved rows.
-- Opening an existing History event online showed the detail sheet with the
-  normal Correct/Void controls.
-- Triggering the list-header Refresh control while rows were visible showed a
-  progress indicator and `Refreshing History…` while the request was
-  running.
-- A network interruption was exercised during a History refresh. Wireless ADB
-  dropped, as expected, and the screen recording was pulled locally. After
-  airplane mode was turned off and Wi-Fi restored, the app returned to the
-  saved History rows.
+- Settings displayed the existing global presets `0.5 / 1 / 2` and the new
+  product-type editor.
+- The existing global editor was changed to `0.5 / 1.25 / 2`, saved, confirmed
+  after force-stop/relaunch, and restored to `0.5 / 1 / 2`.
+- The picker exposed exactly `E — Edible`, `F — Flower`, `J — Joint`,
+  `K — Keef`, `P — Pen`, and `S — Shatter`.
+- Shatter was edited to `0.1 / 0.25 / 0.5`, saved, displayed a custom status
+  and summary, and retained that override after force-stop/relaunch.
+- The Shatter Log form displayed `0.1 / 0.25 / 0.5`; after reset, the same
+  Shatter form displayed the global `0.5 / 1 / 2` values. The Pen form also
+  displayed the global values.
+- Edible with no override displayed `Using the default quantities` and seeded
+  its fields from the global list.
+- Selecting products was local UI state only. No Log Consumption, Mark
+  product as finished, Purchase, or Sync Now action was pressed. No real
+  production data was changed.
 
-The following plan cases remain unverified and must not be described as passed:
+This is a manual UI readback, not a physical-device instrumentation result.
+The new Compose instrumentation test was compiled but not connected-run.
+The isolated debug-signed package was used because a debug APK cannot safely
+overlay the production-signed package without an uninstall; the production
+installation was therefore deliberately left untouched.
 
-1. Cold-open History while offline and independently read back the offline error.
-2. The in-sheet automatic/manual offline refresh spinner and
-   `No connection. Showing saved data when available. (OFFLINE)` message.
-3. Successful correction save after refresh.
-4. Rotation with an open detail sheet.
-5. The missing-entry dialog after a refresh removes the opened event.
-
-No real correction, void, restore, purchase, or other production mutation was
-performed. The two temporary recordings were removed from the phone after
-being pulled locally; they are not committed because they contain live History
-data. Phone use ended with airplane mode off, Wi-Fi/ADB restored, and no app
-data changed.
-
-When continuing, warn before using the phone again and report explicitly when
-phone use is finished.
 ## Data-safety notes
 
-- The production app’s local data was preserved by the signed in-place update.
-- No Room migration, queue acknowledgement rule, Apps Script write, endpoint,
-  or signing configuration was changed by the feature.
-- The accepted automatic-refresh trade-off remains that opening a non-current
-  entry resets History to page 1 and clears paged depth, matching the existing
-  manual Refresh behavior.
+- The override data is stored in the isolated app's Preferences DataStore for
+  this device check. Existing Room data, pending actions, and production app
+  data were not cleared or migrated.
+- The implementation does not alter synchronization acknowledgement rules,
+  immutable IDs, retries, backend writes, or release metadata.
+- The temporary `devicecheck` build configuration is removed from the final
+  source diff after validation. The installed APK remains on the device as the
+  requested updated, isolated validation app.
 
 ## Relevant files
 
-- `app/src/main/java/com/example/ui/AnalyticsState.kt`
+- `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
+- `app/src/main/java/com/example/ui/ProductTypes.kt`
 - `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
-- `app/src/main/java/com/example/ui/InsightsScreen.kt`
-- `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`
-- `app/src/test/java/com/example/ui/HistoryCorrectionUiTest.kt`
-- `app/src/androidTest/java/com/example/ui/HistoryContentTest.kt`
+- `app/src/main/java/com/example/ui/ConsumptionScreen.kt`
+- `app/src/main/java/com/example/ui/PurchaseScreen.kt`
+- `app/src/main/java/com/example/ui/SettingsScreen.kt`
+- `app/src/test/java/com/example/data/QuantityPresetOverridesTest.kt`
+- `app/src/test/java/com/example/ui/ProductTypesTest.kt`
+- `app/src/androidTest/java/com/example/ui/ProductTypeQuantityEditorTest.kt`
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
 - `docs/PROJECT_STATE.md`
