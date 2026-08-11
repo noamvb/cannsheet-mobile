@@ -37,7 +37,7 @@ historical rationale.
 - Decision:
   1. `<monochrome>` drawables (`ic_launcher_monochrome.xml`) must contain solid vector shapes (`#000000`) only for positive space (emblem graphics and outlines). Surrounding background canvas and card interiors must be transparent (`#00000000`). Never draw solid background cards in monochrome vectors, as device launchers tint all non-transparent pixels, turning solid boxes into solid dark blobs.
   2. Remove legacy `.webp` bitmap launcher assets from density folders (`mipmap-hdpi`, `mipmap-xxhdpi`, etc.) so modern launchers consistently use `mipmap-anydpi-v26` adaptive XML drawables.
-- Rationale: Ensures crisp, correct theme tinting across all launchers (Pixel, Samsung One UI) and prevents fallback to stale bitmap assets.
+- Rationale: Ensures crisp, correct theme tinting across all launchers (Pixel, Android One UI) and prevents fallback to stale bitmap assets.
 - Related files: `app/src/main/res/drawable/ic_launcher_monochrome.xml`, `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`, `AGENTS.md`
 
 ## ADR-003: UTC-Based Date Picker Formatting for Compose UI
@@ -73,8 +73,8 @@ historical rationale.
 
 ## ADR-005: Represent consumption edits as append-only corrections
 
-- Status: Accepted; backend merged and sandbox verified, Android integration
-  implemented in a working branch, production rollout pending
+- Status: Accepted; backend and Android integration merged, production rollout
+  completed from the merge-verified PR #23 source, and released in v1.2.18
 - Date: 2026-07-29
 - Context: A mistaken consumption entry must be correctable from the app without
   erasing its history, producing duplicate rows on retry, changing totals
@@ -152,8 +152,9 @@ historical rationale.
 
 ## ADR-007: Serialize background queue synchronization in one app graph
 
-- Status: Accepted for feature-branch implementation; not merged, released, or
-  deployed
+- Status: Accepted; merged through [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30),
+  version-bumped through [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31),
+  and released as Cannsheet Mobile v1.2.19
 - Date: 2026-08-09
 - Context: Pending actions already have a safe, acknowledgement-based sync
   protocol, but they need a retry path when the app is not in the foreground.
@@ -182,9 +183,10 @@ historical rationale.
   protocol. Unique work policies prevent an unbounded set of retries, and the
   preference provides a local stop control without data loss.
 - Consequences: New sync callers must use `SyncEngine`; they must not construct
-  separate Room or Retrofit synchronization paths. The feature requires Android
-  scheduling and device validation before any claim about background execution,
-  spreadsheet writes, or user-visible behavior.
+  separate Room or Retrofit synchronization paths. Android scheduling and
+  isolated device validation were completed for the released implementation;
+  the bounded physical-device evidence is recorded in the v1.2.19 project-state
+  section.
 - Related files: `app/src/main/java/com/example/CannsheetApplication.kt`,
   `app/src/main/java/com/example/data/SyncPreferencesRepository.kt`,
   `app/src/main/java/com/example/data/sync`,
@@ -267,8 +269,9 @@ historical rationale.
 
 ## ADR-009: Keep Purchase autofill defaults local and keyed by product name/type
 
-- Status: Accepted; implementation is on the `codex/purchase-defaults` feature
-  branch and is not yet merged or released
+- Status: Accepted; merged and released as Cannsheet Mobile v1.2.21 through
+  [PR #36](https://github.com/noamvb/cannsheet-mobile/pull/36) and version-only
+  [PR #37](https://github.com/noamvb/cannsheet-mobile/pull/37)
 - Date: 2026-08-11
 - Context: Purchase catalog rows can be incomplete, can share a name across
   product types, and can change independently of a user's preferred cost,
@@ -303,9 +306,9 @@ historical rationale.
   user correct or replace future defaults without mutating catalog data.
 - Consequences: `CannsheetGraph` owns one `PurchaseDefaultsRepository`; the
   feature adds no backend fields, endpoint behavior, UUID behavior, Room
-  tables, version metadata, signing configuration, or release publication.
-  Device, CI, and Obtainium evidence remain separate from the local checks for
-  this unmerged feature branch.
+  tables, version metadata, or signing configuration. Device, CI, and
+  Obtainium evidence remain separate from the local checks, and the release
+  publication is recorded in the v1.2.21 project-state entry.
 - Related files: `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt`,
   `app/src/main/java/com/example/data/CannsheetGraph.kt`,
   `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
@@ -317,8 +320,9 @@ historical rationale.
 
 ## ADR-010: Make History refresh feedback visible and rebind open entries
 
-- Status: Accepted; implementation is on the `agent/history-refresh-feedback`
-  feature branch and is not yet merged or released
+- Status: Accepted; merged and released as Cannsheet Mobile v1.2.22 through
+  [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40) and version-only
+  [PR #41](https://github.com/noamvb/cannsheet-mobile/pull/41)
 - Date: 2026-08-11
 - Context: A cached or stale History page correctly blocks corrections, but the
   existing refresh action provided no visible progress or failure inside the
@@ -358,8 +362,9 @@ historical rationale.
 
 ## ADR-011: Keep quick-log quantity presets local and overridable per product type
 
-- Status: Accepted; implementation is in the local task worktree and is not
-  merged or released
+- Status: Accepted; merged through [PR #44](https://github.com/noamvb/cannsheet-mobile/pull/44)
+  and released as Cannsheet Mobile v1.2.23 through version-only
+  [PR #45](https://github.com/noamvb/cannsheet-mobile/pull/45)
 - Date: 2026-08-11
 - Context: The Log screen currently renders one global quick-log quantity list
   for every product. Pens, shatter, flower, and other product types can use
@@ -395,10 +400,14 @@ historical rationale.
   as a regression boundary.
 - Consequences: The feature adds a version-1 JSON preference, a shared product
   type catalog, and ViewModel/UI flows but no Room tables, queue payloads,
-  network fields, Apps Script writes, or release metadata. A malformed override
-  payload safely behaves as if no type overrides exist. Device validation uses
-  an isolated temporary application ID so the installed production database
-  and signing identity are not disturbed.
+  network fields, Apps Script writes, or signing-configuration changes. A
+  malformed override payload safely behaves as if no type overrides exist.
+  The signed v1.2.23 release passed the exact-main and publication gates. The
+  earlier feature walkthrough uses an isolated temporary application ID; the
+  public v1.2.23 APK was subsequently installed in place on the production
+  Android with `adb install -r`, preserving package identity, signing identity,
+  data directory, and existing install time. No production data action was
+  submitted during the launch check.
 - Related files: `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`,
   `app/src/main/java/com/example/ui/ProductTypes.kt`,
   `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
