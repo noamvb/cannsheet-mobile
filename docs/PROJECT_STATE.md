@@ -5,10 +5,16 @@ Last updated: 2026-08-11
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and tag `v1.2.21`:
-  `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.21`,
-  version code `24`
+- Released source commit and tag `v1.2.22`:
+  `633bd898ab59dc9d30acb2ba530a41e5f94c1e2a`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.22`,
+  version code `25`
+- History refresh feedback [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40)
+  was squash-merged as `62d7cc6d960b0e13bdfd089152d14f8c20a308a1` after its
+  feature validation passed.
+- Version-only release [PR #41](https://github.com/noamvb/cannsheet-mobile/pull/41)
+  was squash-merged as `633bd898ab59dc9d30acb2ba530a41e5f94c1e2a` after its
+  PR checks and exact-main validation passed.
 - Purchase autofill defaults feature [PR #36](https://github.com/noamvb/cannsheet-mobile/pull/36)
   was squash-merged as `5f6d1392a77067616bde43265278b77daf447f8e` after its
   PR and full API 24/API 36 validation passed.
@@ -22,26 +28,32 @@ Last updated: 2026-08-11
   the release merge commit passed the full main matrix in
   [run 31460010598](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460010598).
 - Signed publication workflow
-  [run 31460436036](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460436036)
+  [run 31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773)
   passed exact-main proof, version/secret/monotonicity checks, signed build,
   signature verification, public upload, and post-publication verification.
+- The v1.2.22 feature PR checks passed
+  [run 31524608644](https://github.com/noamvb/cannsheet-mobile/actions/runs/31524608644);
+  the version-only PR checks passed
+  [run 31525437265](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525437265);
+  and the exact release merge commit passed the full API 24/API 36 matrix in
+  [run 31525848365](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525848365).
 - Background synchronization [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30)
   and version-only release [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31)
   were squash-merged after their required validation passed.
 - Analytics prefetch [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and version-only release [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) were squash-merged after their required validation passed, and released as v1.2.20.
 - The source tag/release is
-  [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile/releases/tag/v1.2.21).
+  [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile/releases/tag/v1.2.22).
 - The public signed release is
-  [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.21).
-  Its exact assets are `Cannsheet-Mobile-1.2.21.apk` (13,509,398 bytes) and
-  `Cannsheet-Mobile-1.2.21.apk.sha256`.
+  [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22).
+  Its exact assets are `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) and
+  `Cannsheet-Mobile-1.2.22.apk.sha256`.
 - Independently downloaded public APK SHA-256:
-  `e315a04300df297682ce19e3ff1e545a72824558daf720461cab59f3437545d0`
-- Independent `aapt`/`apksigner` verification reported package
-  `com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`,
-  and signing certificate SHA-256
-  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
-- The previous public release had version code `23`; the new release is
+  `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`
+- The signed publication workflow independently verified package
+  `com.noamv.cannsheet.mobile`, version code `25`, version name `1.2.22`, and
+  the release signing certificate; the successful in-place update confirmed
+  compatibility with the device's existing production signing identity.
+- The previous public release had version code `24`; the new release is
   monotonic.
 - The editable History milestone was delivered through backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
@@ -87,8 +99,12 @@ Last updated: 2026-08-11
 
 ## History refresh feedback feature work
 
-- The focused implementation is on branch `agent/history-refresh-feedback` and
-  is not yet merged, released, or assigned a new version.
+- The focused implementation was delivered through
+  [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40), squash-merged
+  as `62d7cc6d960b0e13bdfd089152d14f8c20a308a1`, version-bumped through
+  [PR #41](https://github.com/noamvb/cannsheet-mobile/pull/41), and released as
+  Cannsheet Mobile v1.2.22 in main commit
+  `633bd898ab59dc9d30acb2ba530a41e5f94c1e2a`.
 - `historyNeedsRefreshForCorrections` is now the shared correction-gate and
   stale-refresh predicate. `AnalyticsCoordinator` exposes an idempotent
   `refreshHistoryIfNotCurrent()` entry point, and `CannsheetViewModel` delegates
@@ -102,19 +118,30 @@ Last updated: 2026-08-11
   refresh, and missing-entry sheet closure.
 - GitHub Actions run [31523716900](https://github.com/noamvb/cannsheet-mobile/actions/runs/31523716900)
   passed the security/classification, backend, Android static, API 24
-  instrumentation, and aggregate validation jobs for code commit `ae4812b`.
-  The static job uploaded the debug APK artifact with ZIP digest
+  instrumentation, and aggregate validation jobs for the code commit. The
+  static job uploaded the debug APK artifact with ZIP digest
   `dcf7108717d33233bc571f00d396e7a3022a6878e9328a1272feb11ac617dc9b`.
+- The version PR checks passed [run 31525437265](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525437265),
+  and the merged v1.2.22 commit passed the full API 24/API 36 main matrix in
+  [run 31525848365](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525848365).
+- The signed publication workflow [run 31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773)
+  passed exact-main provenance, release-secret validation, signed APK
+  construction, signature/metadata checks, publication, and post-publication
+  verification. The public APK SHA-256 is
+  `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
 - The exact local Android command was attempted with Gradle 9.3.1 and JDK
   17.0.20, but this Mac has no Android SDK and Gradle stopped with “SDK location
   not found”. CI is the authoritative build/test evidence for this branch.
-- Wireless ADB reached the intended Samsung `SM-F966W`; its production package
-  remained at version code `24` / version name `1.2.21` after the validated
-  debug APK was rejected with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the
-  installed Obtainium release signature differs. No uninstall, data clear, or
-  production-package mutation was performed. Manual History validation and a
-  recording therefore remain pending a release-signed build or explicit
-  approval for a data-destructive reinstall.
+- Wireless ADB reached the intended Samsung `SM-F966W`. The published signed
+  APK installed in place with `adb install -r`, changing the production package
+  from version code `24` / version name `1.2.21` to version code `25` / version
+  name `1.2.22`. The package signing identity remained `6d94a7a1`, and the
+  data directory remained `/data/user/0/com.noamv.cannsheet.mobile`; no
+  uninstall, data clear, downgrade, or synthetic purchase/correction was
+  performed.
+- The interactive History sequence and recording remain pending because the
+  phone presented its lock-pattern screen after a normal wake/unlock-swipe
+  attempt. No pattern was entered or bypassed.
 
 ## Background synchronization feature work
 
@@ -247,20 +274,15 @@ Repository code and validation show:
 
 ## Release and validation status
 
-v1.2.21 evidence (current release):
+v1.2.22 evidence (current release):
 
-- Feature PR #36's checks passed [run 31458365282](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458365282); its merge commit `5f6d1392a77067616bde43265278b77daf447f8e` passed the full API 24/API 36 matrix in [run 31458941204](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458941204).
-- Release PR #37's checks passed [run 31459764234](https://github.com/noamvb/cannsheet-mobile/actions/runs/31459764234); its version-bump merge commit `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e` passed the full API 24/API 36 matrix in [run 31460010598](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460010598).
-- Signed publication workflow [run 31460436036](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460436036) passed exact-main validation, signing, publication, and post-publication verification.
-- The public release is [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.21): `Cannsheet-Mobile-1.2.21.apk` (13,509,398 bytes) and its `.sha256`. Independently verified APK SHA-256: `e315a04300df297682ce19e3ff1e545a72824558daf720461cab59f3437545d0`.
-- Independent public-artifact verification passed `apksigner`, confirmed the expected signing certificate, and confirmed package `com.noamv.cannsheet.mobile`, version code `24`, and version name `1.2.21`.
-- Wireless ADB device readback: Samsung `SM-F966W`, Android 16 / API 36,
-  `192.168.68.54:36595`. `dumpsys package` reported production version code
-  `24`, version name `1.2.21`, and `lastUpdateTime 2026-08-11 01:10:00`.
-- Obtainium detail readback reported `v1.2.21 Installed / Latest`, the public
-  releases URL, the expected signing certificate, and a disabled update
-  action. This verifies the current installed/public pairing, but not a live
-  update transition because the device was already at v1.2.21 on connection.
+- History refresh feedback PR #40's final checks passed [run 31524608644](https://github.com/noamvb/cannsheet-mobile/actions/runs/31524608644); its feature merge commit `62d7cc6d960b0e13bdfd089152d14f8c20a308a1` was included in the exact release merge.
+- Release PR #41's checks passed [run 31525437265](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525437265); its version-bump merge commit `633bd898ab59dc9d30acb2ba530a41e5f94c1e2a` passed the full API 24/API 36 matrix in [run 31525848365](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525848365).
+- Signed publication workflow [run 31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773) passed exact-main validation, release-secret validation, signing, publication, and post-publication verification.
+- The public release is [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22): `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) and its `.sha256`. Independently downloaded APK SHA-256: `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
+- The publication workflow independently verified the expected signing certificate and confirmed package `com.noamv.cannsheet.mobile`, version code `25`, and version name `1.2.22`.
+- Wireless ADB device readback: Samsung `SM-F966W`, Android 16 / API 36. `dumpsys package` before and after installation reported the same production signing identity `6d94a7a1` and data directory; the package changed from version code `24` / version name `1.2.21` to version code `25` / version name `1.2.22`, with `lastUpdateTime 2026-08-11 15:16:30` after installation.
+- The in-place production update succeeded with `adb install -r`; no uninstall or data clear was performed. Interactive History validation remains pending because the device was locked behind a user pattern and no pattern was entered.
 - The Purchase UI rendered with type-first selection and the new
   `Use these values as future defaults for this product and type` switch. The
   product selector was disabled after selecting type `P` in this session, so
@@ -330,8 +352,8 @@ Local and device evidence:
 - The background-sync branch passed the isolated physical-device checks
   described above; a local screenshot captured its enabled, zero-pending,
   just-now-successful Settings state.
-- No production-package feature installation, Obtainium update, or full manual
-  product-total acceptance workflow was performed.
+- No full manual product-total acceptance workflow was performed; the current
+  History UI recording is also pending an unlocked device.
 
 ## Known limitations
 
@@ -341,11 +363,10 @@ Local and device evidence:
 - The Kotlin namespace remains `com.example` while the application ID is
   `com.noamv.cannsheet.mobile`; `README.md` records this as an intentional
   source-layout compatibility choice.
-- The public APK is independently verified as update-compatible by package,
-  higher version code, and signing certificate. The intended phone is now
-  verified at the matching installed version and Obtainium current state, but
-  the v1.2.21 in-place update transition itself was already complete before
-  this session and was not observed live.
+- The public APK is independently verified by the signed publication workflow
+  as update-compatible by package, higher version code, and signing
+  certificate. The intended phone's v1.2.22 in-place update transition was
+  observed live and the production package/data directory remained intact.
 - The first real production correction lifecycle still requires a deliberate
   user/device check; no synthetic production correction was created for testing.
 
@@ -354,16 +375,18 @@ Local and device evidence:
 1. Use the next genuine production purchase to validate default persistence and
    restart/autofill behavior without fabricating data.
 2. If a live Obtainium transition must be witnessed explicitly, observe the
-   next higher release update on the same device; v1.2.21 was already current
-   when this session connected.
+   next higher release update on the same device; v1.2.22 was installed via
+   ADB in this session, while the phone was locked before an Obtainium/UI
+   transition could be exercised.
 3. Continue the existing v1.2.20 device checks for analytics prefetch and
    correction-safe usage totals.
 
 ## Unresolved questions
 
-- Obtainium detects v1.2.21 and reports it installed/latest on the intended
-  phone; the in-place transition was not observed live in this session.
-- Does a genuine product suggestion on the installed v1.2.21 app apply and
+- Obtainium's post-install refresh and the full History UI flow still need to
+  be observed on an unlocked phone; the APK itself is installed and the
+  in-place package transition was verified through ADB.
+- Does a genuine product suggestion on the installed v1.2.22 app apply and
   preserve a saved Purchase default across restart? The product selector was
   unavailable during this read-only session, and no synthetic purchase was
   created.

@@ -2,77 +2,81 @@
 
 Last updated: 2026-08-11
 
-## Current feature outcome
+## Current outcome
 
-The History refresh feedback feature is implemented on branch
-`agent/history-refresh-feedback` and remains in draft PR [#40](https://github.com/noamvb/cannsheet-mobile/pull/40)
-targeting `main`. The implementation adds the shared
-`historyNeedsRefreshForCorrections` gate, an idempotent stale-only coordinator
-refresh delegate, visible list/sheet refresh progress and errors, automatic
-refresh when a stale entry opens, UUID-based sheet rebinding, and a missing-entry
-dialog. It does not change the backend, Room schema, sync worker, endpoint,
-version metadata, signing configuration, or release state.
+The History refresh feedback feature from [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40)
+is implemented, tested, squash-merged, versioned, signed, published, and
+installed on the intended Samsung `SM-F966W`.
 
-The code-validation commit is `ae4812b` (the current branch may also contain a
-documentation-only follow-up). CI run
-[31523716900](https://github.com/noamvb/cannsheet-mobile/actions/runs/31523716900)
-passed classification/security, backend validation, Android static validation,
-API 24 instrumentation (61/61), and the aggregate `Cannsheet Android PR
-validation`. The static job uploaded `cannsheet-debug-apk`; its ZIP SHA-256 was
-`dcf7108717d33233bc571f00d396e7a3022a6878e9328a1272feb11ac617dc9b`.
+The feature merge commit is
+`62d7cc6d960b0e13bdfd089152d14f8c20a308a1`. The separate version-only release
+PR [#41](https://github.com/noamvb/cannsheet-mobile/pull/41) raised the app to
+version code `25` / version name `1.2.22`; its exact merged main commit is
+`633bd898ab59dc9d30acb2ba530a41e5f94c1e2a` and its source tag is `v1.2.22`.
 
-## Validation boundary
+## Implementation and validation
 
-- The exact local command
-  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
-  was attempted with Gradle 9.3.1 and Temurin JDK 17.0.20. It could not run to
-  completion because this Mac has no Android SDK; Gradle reported “SDK location
-  not found”.
-- CI is the authoritative Android build/test evidence for the implementation.
-- The checked-in backend source was untouched. Backend suites were run by CI as
-  part of the PR workflow; no local backend suite was run.
-- The five new Compose tests and three coordinator tests are included in the
-  passing CI run. Earlier CI failures were corrected before that run: nullable
-  response access, an unsupported Compose assertion API, and an offscreen sheet
-  assertion.
+- The implementation adds the shared `historyNeedsRefreshForCorrections`
+  predicate, an idempotent stale-only coordinator refresh entry point, visible
+  History refresh progress and errors in both list and sheet surfaces,
+  automatic refresh when a stale entry opens, UUID-based sheet rebinding, and a
+  missing-entry explanation.
+- Coordinator, pure-state, and Compose regression tests are included.
+- Feature CI run [31523716900](https://github.com/noamvb/cannsheet-mobile/actions/runs/31523716900)
+  passed security/classification, backend, Android static, API 24
+  instrumentation, and aggregate validation. Its debug artifact ZIP digest was
+  `dcf7108717d33233bc571f00d396e7a3022a6878e9328a1272feb11ac617dc9b`.
+- Version PR run [31525437265](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525437265)
+  passed. The exact release merge commit passed the full main API 24/API 36
+  matrix in [31525848365](https://github.com/noamvb/cannsheet-mobile/actions/runs/31525848365).
+- Signed publication run [31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773)
+  passed exact-main provenance, release-secret validation, signed build,
+  signature and metadata verification, public publication, and post-publication
+  verification.
+- The public release is [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22).
+  The published APK is `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) with
+  SHA-256
+  `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
+- The exact local Android command was attempted with Gradle 9.3.1 and JDK
+  17.0.20, but this Mac has no Android SDK; Gradle stopped with “SDK location
+  not found”. GitHub Actions is the authoritative Android validation evidence.
 
-## Device state and blocker
+## Device state
 
-The intended Samsung `SM-F966W` was reachable over wireless ADB. Readback before
-and after the install attempt showed production package
-`com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`, with the
-same update timestamp. The downloaded CI debug APK was attempted with
-`adb install -r`; Android rejected it with
-`INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the installed Obtainium release
-uses a different signing certificate. The production app was not uninstalled,
-cleared, downgraded, or otherwise modified, so local user data remains intact.
+- Before installation, the production package was version code `24` / version
+  name `1.2.21`, with signing identity `6d94a7a1` and data directory
+  `/data/user/0/com.noamv.cannsheet.mobile`.
+- The published release-signed APK installed successfully in place with
+  `adb install -r`. After installation, the package was version code `25` /
+  version name `1.2.22`, retained signing identity `6d94a7a1`, retained the
+  same data directory, and reported `lastUpdateTime 2026-08-11 15:16:30`.
+- No uninstall, data clear, downgrade, endpoint change, synthetic purchase,
+  or synthetic correction was performed.
 
-Manual History validation and the requested recording are not complete. A
-production-package install needs either the existing release keystore/signing
-credentials or an explicitly approved reinstall that may remove local Room and
-DataStore data. A sandbox-suffix build would be a separate app with separate
-data and requires a configured sandbox endpoint; it is not a substitute for
-production-package validation.
+## Remaining manual validation boundary
 
-## Unfinished work
+The phone presented its lock-pattern screen after a normal wake and unlock
+swipe. No pattern was entered or bypassed. Therefore the APK installation is
+verified, but the interactive History sequence and recording from the attached
+plan remain pending until the phone is unlocked:
 
-1. Obtain a release-signed build through the existing signing boundary, or get
-   explicit approval for the data-destructive debug reinstall path.
-2. Install that approved APK without changing the production endpoint or app
-   identity, then perform the manual History sequence from the attached plan:
-   offline refresh progress/error, successful refresh and correction, header
-   refresh, rotation, and missing-entry handling.
-3. Capture the required History refresh recording, update PR #40 with the real
-   device results, and refresh this handoff again.
+1. Offline cached/stale History refresh progress and error inside the sheet.
+2. Online refresh recovering the correction controls and saving a correction.
+3. Header refresh progress, rotation with an open sheet, and missing-entry
+   dialog behavior.
+4. The required History refresh recording.
+
+When continuing, warn before using the phone again and report explicitly when
+phone use is finished.
 
 ## Data-safety notes
 
-- No production data was created, corrected, deleted, or cleared in this work.
+- The production app’s local data was preserved by the signed in-place update.
 - No Room migration, queue acknowledgement rule, Apps Script write, endpoint,
-  version, tag, release, or signing configuration changed.
-- The accepted automatic-refresh trade-off is that opening a non-current entry
-  resets History to page 1 and clears paged depth, matching the existing manual
-  Refresh behavior.
+  or signing configuration was changed by the feature.
+- The accepted automatic-refresh trade-off remains that opening a non-current
+  entry resets History to page 1 and clears paged depth, matching the existing
+  manual Refresh behavior.
 
 ## Relevant files
 
@@ -85,10 +89,3 @@ production-package validation.
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`
 - `docs/PROJECT_STATE.md`
-
-## Recommended next action
-
-Do not uninstall the current production app merely to install the debug APK.
-Provide the release signing material through the existing protected workflow or
-explicitly authorize the data-loss trade-off; then continue with the device
-manual checks and recording.
