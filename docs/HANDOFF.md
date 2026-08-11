@@ -80,14 +80,9 @@ overwritten, uninstalled, downgraded, or cleared.
 ## Device state
 
 - Device: intended wireless Android production device, Android API 36; exact model and transport identifiers are retained only in the local handoff.
-- The production v1.2.23 APK was installed with `adb install -r`; package metadata, signing continuity, data preservation, and successful launch were read back locally.\n  v1.2.23 APK was installed with `adb install -r` and the package metadata,
-  signing identity, data directory, and successful launch were read back.
-- An isolated devicecheck application was used for the bounded UI walkthrough; it remained separate from the production package.\n- The production package `com.noamv.cannsheet.mobile` remained installed and
-  was not uninstalled, cleared, downgraded, or modified by this validation.
-- The isolated app's temporary Shatter override was reset before finishing;
-  its Settings state showed `Using the default quantities` and
-  `No product types have custom quantities.` Pending actions remained zero.
-
+- The public v1.2.23 APK was installed with `adb install -r`; package metadata, signing continuity, data preservation, and successful launch were read back locally.
+- An isolated devicecheck application was used for the bounded UI walkthrough; it remained separate from the production package.
+- The isolated app's temporary Shatter override was reset before finishing; its Settings state showed `Using the default quantities` and `No product types have custom quantities.` Pending actions remained zero.
 ## Manual validation boundary
 
 The phone was occupied from the explicit start notification through the final
