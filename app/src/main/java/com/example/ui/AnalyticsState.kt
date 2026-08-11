@@ -125,9 +125,9 @@ fun historyCorrectionAvailability(
             "A correction for this entry is already queued. Wait for it to sync before making another change."
         historyNeedsRefreshForCorrections(state) ->
             "Refresh History before editing so this entry is current."
-        state.response.correctionVersion < 1 ->
+        state.response?.correctionVersion?.let { it < 1 } == true ->
             "This server does not support history corrections yet."
-        !state.response.correctionWritesEnabled ->
+        state.response?.correctionWritesEnabled == false ->
             "History corrections are not enabled on this server yet."
         else -> null
     }
