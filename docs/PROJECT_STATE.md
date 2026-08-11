@@ -36,8 +36,8 @@ Last updated: 2026-08-11
   `f9f319ba892f4e0f09c9bebc7a581fc1326bf162b1c21c06db653d051c8aab98`
 - The downloaded public APK reports package `com.noamv.cannsheet.mobile`,
   version code `26`, version name `1.2.23`, and passes local v2 signature
-  verification. It was installed in place on the intended wireless Android
-  `the intended Android production device` with `adb install -r`; the app launched successfully afterward.
+  verification. It was installed in place on the intended wireless Samsung
+  `the intended production device` with `adb install -r`; the app launched successfully afterward.
 - The production readback before installation was version code `25`, version
   name `1.2.22`, signing identity `the release signing identity`, and data directory
   `the production app data directory`. The readback after installation
@@ -114,7 +114,7 @@ Last updated: 2026-08-11
   Its local artifact was
   `app/build/outputs/apk/devicecheck/app-devicecheck.apk` with SHA-256
   `6a748680fc91c2830d222beeb7b00050f9145a629ccc8f464e5a3c0d9ef6734a`.
-- On the wireless Android `the intended Android production device`, Settings exposed all six product types;
+- On the intended production device, Settings exposed all six product types;
   a Shatter override `0.1 / 0.25 / 0.5` saved and persisted across relaunch,
   appeared on the Shatter Log form, Pen showed the global `0.5 / 1 / 2`
   defaults, and reset returned Shatter to the global defaults. The existing
@@ -159,7 +159,7 @@ Last updated: 2026-08-11
   time out; GitHub CI is the authoritative Android evidence for the release.
 - CI passed the feature PR, full post-merge API 24/API 36 matrix, release PR,
   full release-merge matrix, and signed publication workflow described above.
-- Wireless ADB later reached the intended Android `the intended Android production device` at
+- Wireless ADB later reached the intended the intended production device at
   `the device wireless endpoint`. Production package readback reported
   `com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`,
   `targetSdk 36`, and `the post-install timestamp`. Obtainium showed
@@ -207,7 +207,7 @@ Last updated: 2026-08-11
 - The exact local Android command was attempted with Gradle 9.3.1 and JDK
   17.0.20, but this Mac has no Android SDK and Gradle stopped with “SDK location
   not found”. CI is the authoritative build/test evidence for this branch.
-- Wireless ADB reached the intended Android `the intended Android production device`. The published signed
+- Wireless ADB reached the intended the intended production device. The published signed
   APK installed in place with `adb install -r`, changing the production package
   from version code `24` / version name `1.2.21` to version code `25` / version
   name `1.2.22`. The package signing identity remained `the release signing identity`, and the
@@ -259,8 +259,8 @@ including API 24, API 36, and the aggregate check. The version-only PR passed
 and exact release commit `009d38c` passed the same full main matrix in
 [run 31351485515](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351485515).
 
-Physical-device validation used an isolated test application ID on a Android
-the intended Android production device running Android 16 / API 36; the installed production and older
+Physical-device validation used an isolated test application ID on a Samsung
+the intended production device running Android 16 / API 36; the installed production and older
 sandbox apps were untouched. All 39 connected sandbox instrumentation tests
 passed. A process-dead airplane-mode test moved one queued action to the
 sandbox Sheet within seconds of reconnect, left zero pending actions, and
@@ -374,7 +374,7 @@ v1.2.23 evidence (current release):
 - Signed publication workflow [run 31544318700](https://github.com/noamvb/cannsheet-mobile/actions/runs/31544318700) passed exact-main validation, release-secret validation, signing, publication, and post-publication verification.
 - The public release is [Cannsheet Mobile 1.2.23](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.23): `Cannsheet-Mobile-1.2.23.apk` (13,525,786 bytes) and its `.sha256`. Independently downloaded APK SHA-256: `f9f319ba892f4e0f09c9bebc7a581fc1326bf162b1c21c06db653d051c8aab98`.
 - The publication workflow independently verified the expected signing certificate and confirmed package `com.noamv.cannsheet.mobile`, version code `26`, and version name `1.2.23`. Local `aapt2` and `apksigner` checks matched those values and passed APK Signature Scheme v2 verification.
-- Wireless ADB device readback: Android `the intended Android production device`, Android 16 / API 36. The production package changed from version code `25` / version name `1.2.22` to version code `26` / version name `1.2.23`; the signing identity remained `the release signing identity`, the data directory remained `the production app data directory`, and install-time metadata remained unchanged.
+- Wireless ADB device readback: the intended production device, Android 16 / API 36. The production package changed from version code `25` / version name `1.2.22` to version code `26` / version name `1.2.23`; the signing identity remained `the release signing identity`, the data directory remained `the production app data directory`, and install-time metadata remained unchanged.
 - The in-place production update succeeded with `adb install -r`; no uninstall, data clear, downgrade, or production data action was performed. The app launched as `com.example.MainActivity` and was force-stopped for handoff.
 
 Prior release (v1.2.22) evidence, retained for history:
@@ -384,7 +384,7 @@ Prior release (v1.2.22) evidence, retained for history:
 - Signed publication workflow [run 31526429773](https://github.com/noamvb/cannsheet-mobile/actions/runs/31526429773) passed exact-main validation, release-secret validation, signing, publication, and post-publication verification.
 - The public release is [Cannsheet Mobile 1.2.22](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.22): `Cannsheet-Mobile-1.2.22.apk` (13,509,402 bytes) and its `.sha256`. Independently downloaded APK SHA-256: `e02debc3efd922ee6005fcf2798d775b8e7d5e9ec7b0e0542d73171a3ea0ad32`.
 - The publication workflow independently verified the expected signing certificate and confirmed package `com.noamv.cannsheet.mobile`, version code `25`, and version name `1.2.22`.
-- Wireless ADB device readback: Android `the intended Android production device`, Android 16 / API 36. `dumpsys package` before and after installation reported the same production signing identity `the release signing identity` and data directory; the package changed from version code `24` / version name `1.2.21` to version code `25` / version name `1.2.22`, with `the post-install timestamp` after installation.
+- Wireless ADB device readback: the intended production device, Android 16 / API 36. `dumpsys package` before and after installation reported the same production signing identity `the release signing identity` and data directory; the package changed from version code `24` / version name `1.2.21` to version code `25` / version name `1.2.22`, with `the post-install timestamp` after installation.
 - The in-place production update succeeded with `adb install -r`; no uninstall or data clear was performed. Bounded online History refresh validation was completed after the phone was unlocked; the remaining offline in-sheet error, correction-save, rotation, and missing-entry cases are recorded as unverified in the feature section above.
 - The Purchase UI rendered with type-first selection and the new
   `Use these values as future defaults for this product and type` switch. The

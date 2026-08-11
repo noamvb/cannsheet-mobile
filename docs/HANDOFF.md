@@ -8,7 +8,7 @@ The per-product-type quick-log quantity preset feature is implemented, merged,
 released, and installed as Cannsheet Mobile v1.2.23. The source release is
 commit `2e251a1d71aedbfe44e265c907a58d77ccd4d720`; the public signed APK is
 published in the separate releases repository and was installed in place on
-the intended Android production device.
+the intended production device.
 
 The implementation preserves the existing global quick-log presets as the
 fallback and adds version-1 per-type overrides in the same
@@ -79,15 +79,10 @@ overwritten, uninstalled, downgraded, or cleared.
 
 ## Device state
 
-- Device: wireless ADB target `the wireless ADB target`,
-  Android `the intended Android production device`, Android API 36.
-- The device returned to wireless ADB at `the device wireless endpoint`. The production
-  v1.2.23 APK was installed with `adb install -r` and the package metadata,
+- Device: intended wireless Android production device, Android API 36; exact model and transport identifiers are retained only in the local handoff.
+- The production v1.2.23 APK was installed with `adb install -r`; package metadata, signing continuity, data preservation, and successful launch were read back locally.\n  v1.2.23 APK was installed with `adb install -r` and the package metadata,
   signing identity, data directory, and successful launch were read back.
-- Installed validation package: `the isolated devicecheck application`,
-  version code `25`, version name `1.2.22-devicecheck`, installed with
-  `adb install -r` from the isolated APK.
-- The production package `com.noamv.cannsheet.mobile` remained installed and
+- An isolated devicecheck application was used for the bounded UI walkthrough; it remained separate from the production package.\n- The production package `com.noamv.cannsheet.mobile` remained installed and
   was not uninstalled, cleared, downgraded, or modified by this validation.
 - The isolated app's temporary Shatter override was reset before finishing;
   its Settings state showed `Using the default quantities` and

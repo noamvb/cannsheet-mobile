@@ -37,7 +37,7 @@ historical rationale.
 - Decision:
   1. `<monochrome>` drawables (`ic_launcher_monochrome.xml`) must contain solid vector shapes (`#000000`) only for positive space (emblem graphics and outlines). Surrounding background canvas and card interiors must be transparent (`#00000000`). Never draw solid background cards in monochrome vectors, as device launchers tint all non-transparent pixels, turning solid boxes into solid dark blobs.
   2. Remove legacy `.webp` bitmap launcher assets from density folders (`mipmap-hdpi`, `mipmap-xxhdpi`, etc.) so modern launchers consistently use `mipmap-anydpi-v26` adaptive XML drawables.
-- Rationale: Ensures crisp, correct theme tinting across all launchers (Pixel, Android One UI) and prevents fallback to stale bitmap assets.
+- Rationale: Ensures crisp, correct theme tinting across all launchers (Pixel, Samsung One UI) and prevents fallback to stale bitmap assets.
 - Related files: `app/src/main/res/drawable/ic_launcher_monochrome.xml`, `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`, `AGENTS.md`
 
 ## ADR-003: UTC-Based Date Picker Formatting for Compose UI
@@ -405,7 +405,7 @@ historical rationale.
   The signed v1.2.23 release passed the exact-main and publication gates. The
   earlier feature walkthrough uses an isolated temporary application ID; the
   public v1.2.23 APK was subsequently installed in place on the production
-  Android with `adb install -r`, preserving package identity, signing identity,
+  Samsung with `adb install -r`, preserving package identity, signing identity,
   data directory, and existing install time. No production data action was
   submitted during the launch check.
 - Related files: `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`,
