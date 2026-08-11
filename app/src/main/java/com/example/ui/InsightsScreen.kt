@@ -121,6 +121,7 @@ fun InsightsScreen(viewModel: CannsheetViewModel) {
                 onSync = viewModel::syncQueue,
                 onRefresh = viewModel::refreshHistory,
                 onLoadMore = viewModel::loadMoreHistory,
+                onRefreshIfNotCurrent = viewModel::refreshHistoryIfNotCurrent,
                 correctionState = viewModel.historyCorrectionState.collectAsStateWithLifecycle().value,
                 onQueueCorrection = viewModel::queueHistoryCorrection,
                 onCancelCorrection = viewModel::cancelHistoryCorrection,
@@ -376,6 +377,7 @@ internal fun HistoryContent(
     onSync: () -> Unit,
     onRefresh: (HistoryFilters) -> Unit,
     onLoadMore: () -> Unit,
+    onRefreshIfNotCurrent: () -> Unit = {},
     correctionState: HistoryCorrectionUiState = HistoryCorrectionUiState(),
     onQueueCorrection: (HistoryCorrectionDraft) -> Unit = {},
     onCancelCorrection: (String) -> Unit = {},
@@ -384,7 +386,50 @@ internal fun HistoryContent(
         mutableStateOf(state.appliedFilters.query.orEmpty())
     }
     var showFilters by rememberSaveable { mutableStateOf(false) }
-    var selectedEvent by remember { mutableStateOf<HistoryEventDto?>(null) }
+    // Hold the identity, not the snapshot. A refresh replaces every HistoryEventDto instance, and
+    // the correction draft reads expectedHeadId off whatever copy this sheet was given.
+    var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
+    var missingEntryNotice by rememberSaveable { mutableStateOf(false) }
+    val selectedEvent = selectedEventId?.let { id ->
+        state.events.firstOrNull { it.eventUuid == id }
+    }
+
+    // Opening an entry from a cached or stale page starts the refresh the "Editing unavailable"
+    // notice describes. Keyed on the identity so it runs once per opened entry, not per recomposition.
+    LaunchedEffect(selectedEventId) {
+        if (selectedEventId != null) onRefreshIfNotCurrent()
+    }
+
+    // A correction, a void, or a filter change can remove the opened entry from the refreshed page.
+    // Keeping the sheet open on a copy that is no longer in history would show values the server
+    // no longer agrees with, so close it and say why. Events are only replaced on success, so this
+    // cannot fire mid-refresh.
+    LaunchedEffect(selectedEventId, selectedEvent, state.isRefreshing, state.isInitialLoading) {
+        if (
+            selectedEventId != null &&
+            selectedEvent == null &&
+            !state.isRefreshing &&
+            !state.isInitialLoading
+        ) {
+            selectedEventId = null
+            missingEntryNotice = true
+        }
+    }
+    if (missingEntryNotice) {
+        AlertDialog(
+            onDismissRequest = { missingEntryNotice = false },
+            title = { Text("Entry not in refreshed History") },
+            text = {
+                Text(
+                    "This entry is no longer on the refreshed page. It may have been corrected, " +
+                        "voided, or excluded by the current filters.",
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { missingEntryNotice = false }) { Text("OK") }
+            },
+        )
+    }
     if (showFilters) {
         HistoryFilterSheet(
             current = state.appliedFilters.copy(query = search),
@@ -409,7 +454,9 @@ internal fun HistoryContent(
             isCorrectionQueued = selected.eventUuid in correctionState.queuedTargetIds,
             onCancelCorrection = onCancelCorrection,
             onRefresh = { onRefresh(state.appliedFilters) },
-            onDismiss = { selectedEvent = null },
+            isRefreshing = state.isRefreshing,
+            refreshError = state.error,
+            onDismiss = { selectedEventId = null },
         )
     }
 
@@ -434,8 +481,21 @@ internal fun HistoryContent(
             IconButton(onClick = { showFilters = true }) {
                 Icon(Icons.Default.FilterList, contentDescription = "History filters")
             }
-            IconButton(onClick = { onRefresh(state.appliedFilters) }) {
+            IconButton(
+                onClick = { onRefresh(state.appliedFilters) },
+                enabled = !state.isRefreshing,
+            ) {
                 Icon(Icons.Default.Refresh, contentDescription = "Refresh History")
+            }
+        }
+        if (state.isRefreshing) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(Modifier.size(22.dp))
+                Text("Refreshing History…", style = MaterialTheme.typography.bodySmall)
             }
         }
         if (pendingCount > 0) {
@@ -463,7 +523,7 @@ internal fun HistoryContent(
         } else {
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                 items(state.events, key = HistoryEventDto::eventUuid) { event ->
-                    HistoryRow(event, onClick = { selectedEvent = event })
+                    HistoryRow(event, onClick = { selectedEventId = event.eventUuid })
                     HorizontalDivider()
                 }
                 item {
@@ -771,6 +831,8 @@ private fun HistoryEventSheet(
     isCorrectionQueued: Boolean,
     onCancelCorrection: (String) -> Unit,
     onRefresh: () -> Unit,
+    isRefreshing: Boolean,
+    refreshError: AnalyticsUiError?,
     onDismiss: () -> Unit,
 ) {
     var editorOperation by remember(event.eventUuid) { mutableStateOf<HistoryCorrectionOperation?>(null) }
@@ -797,7 +859,7 @@ private fun HistoryEventSheet(
             availability.reason?.let { reason ->
                 NoticeCard("Editing unavailable", reason)
                 if (reason.startsWith("Refresh History")) {
-                    TextButton(onClick = onRefresh) { Text("Refresh History") }
+                    RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
                 }
             }
             if (availability.canCorrect || availability.canVoid || availability.canRestore) {
@@ -823,7 +885,7 @@ private fun HistoryEventSheet(
             status?.let { message ->
                 Text(message, color = MaterialTheme.colorScheme.primary)
                 if (message.contains("Refresh History")) {
-                    TextButton(onClick = onRefresh) { Text("Refresh History") }
+                    RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
                 }
             }
             if (isCorrectionQueued) {
@@ -867,6 +929,32 @@ private fun HistoryEventSheet(
             },
             dismissButton = { TextButton(onClick = { confirmCancellation = false }) { Text("Keep it") } },
         )
+    }
+}
+
+/**
+ * The refresh affordance shown inside the History detail sheet. The sheet covers the list's
+ * SnapshotNotice, so progress and failure have to be reported here or a reader sees nothing at all.
+ */
+@Composable
+private fun RefreshHistoryAction(
+    isRefreshing: Boolean,
+    refreshError: AnalyticsUiError?,
+    onRefresh: () -> Unit,
+) {
+    if (isRefreshing) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            CircularProgressIndicator(Modifier.size(18.dp))
+            Text("Refreshing History…")
+        }
+    } else {
+        TextButton(onClick = onRefresh) { Text("Refresh History") }
+    }
+    refreshError?.let {
+        Text("${it.message} (${it.code})", color = MaterialTheme.colorScheme.error)
     }
 }
 

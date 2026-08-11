@@ -85,6 +85,25 @@ Last updated: 2026-08-11
   `P`, the local product selector remained unavailable, so suggestion/default
   application and a real purchase were intentionally not exercised.
 
+## History refresh feedback feature work
+
+- The focused implementation is on branch `agent/history-refresh-feedback` and
+  is not yet merged, released, or assigned a new version.
+- `historyNeedsRefreshForCorrections` is now the shared correction-gate and
+  stale-refresh predicate. `AnalyticsCoordinator` exposes an idempotent
+  `refreshHistoryIfNotCurrent()` entry point, and `CannsheetViewModel` delegates
+  it to the History UI.
+- History renders refresh progress in its header and inside the open detail
+  sheet, reports refresh failures inside the sheet, starts one refresh when a
+  stale/cached entry is opened, tracks the opened entry by UUID, and explains
+  when a successful refresh removes it from the current page.
+- JVM and Compose regression tests were added for the shared predicate,
+  idempotent coordinator behavior, visible progress/error states, automatic
+  refresh, and missing-entry sheet closure.
+- Local Android validation and device installation are still pending for this
+  feature. Do not treat the released v1.2.21 APK evidence above as validation
+  of this branch.
+
 ## Background synchronization feature work
 
 Background synchronization was delivered in

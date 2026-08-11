@@ -14,6 +14,24 @@ import org.junit.Test
 
 class HistoryCorrectionUiTest {
     @Test
+    fun historyNeedsRefreshForCorrectionsMatchesEveryStaleCondition() {
+        val event = historyEvent()
+        val fresh = historyState()
+        val reason = "Refresh History before editing so this entry is current."
+
+        listOf(
+            fresh.copy(isFromCache = true),
+            fresh.copy(isStale = true),
+            fresh.copy(response = null),
+            fresh.copy(hasFreshCursor = false),
+        ).forEach { stale ->
+            assertTrue(historyNeedsRefreshForCorrections(stale))
+            assertEquals(reason, historyCorrectionAvailability(stale, event, emptySet()).reason)
+        }
+        assertFalse(historyNeedsRefreshForCorrections(fresh))
+    }
+
+    @Test
     fun editingRequiresFreshEnabledServerHistoryAndNoQueuedCorrection() {
         val event = historyEvent()
         val fresh = historyState()

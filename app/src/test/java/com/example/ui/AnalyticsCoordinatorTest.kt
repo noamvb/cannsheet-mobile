@@ -105,6 +105,77 @@ class AnalyticsCoordinatorTest {
         )
     }
 
+    @Test
+    fun openingAnEntryOnAStalePageStartsOneRefresh() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.refreshHistory()
+            repository.nextHistoryRequest().response.complete(
+                historyResponse(eventIds = listOf("cached"), nextCursor = "cursor"),
+            )
+            awaitState { coordinator.history.value.hasFreshCursor }
+
+            coordinator.markStale()
+            coordinator.refreshHistoryIfNotCurrent()
+
+            val refresh = repository.nextHistoryRequest()
+            assertFalse(repository.hasQueuedHistoryRequest())
+            refresh.response.complete(historyResponse(eventIds = listOf("fresh"), nextCursor = null))
+            awaitState { coordinator.history.value.events.singleOrNull()?.eventUuid == "fresh" }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun refreshHistoryIfNotCurrentIsIgnoredWhenTheSnapshotIsAlreadyCurrent() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.refreshHistory()
+            repository.nextHistoryRequest().response.complete(
+                historyResponse(eventIds = listOf("current"), nextCursor = null),
+            )
+            awaitState { coordinator.history.value.hasFreshCursor }
+
+            coordinator.refreshHistoryIfNotCurrent()
+            yield()
+
+            assertFalse(repository.hasQueuedHistoryRequest())
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun refreshHistoryIfNotCurrentDoesNotRestartARefreshThatIsAlreadyRunning() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.refreshHistory()
+            val initial = repository.nextHistoryRequest()
+            initial.response.complete(historyResponse(eventIds = listOf("old"), nextCursor = null))
+            awaitState { coordinator.history.value.hasFreshCursor }
+
+            coordinator.refreshHistory()
+            val refresh = repository.nextHistoryRequest()
+            assertTrue(coordinator.history.value.isRefreshing)
+
+            coordinator.refreshHistoryIfNotCurrent()
+            yield()
+
+            assertFalse(repository.hasQueuedHistoryRequest())
+            refresh.response.complete(historyResponse(eventIds = listOf("new"), nextCursor = null))
+            awaitState { coordinator.history.value.events.singleOrNull()?.eventUuid == "new" }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
     private suspend fun awaitState(predicate: () -> Boolean) {
         withTimeout(2_000) {
             while (!predicate()) yield()

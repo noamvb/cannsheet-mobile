@@ -105,6 +105,13 @@ data class HistoryCorrectionAvailability(
 )
 
 /**
+ * The snapshot conditions that make a correction unsafe. The correction gate and the History
+ * detail sheet's automatic refresh must agree about what "not current" means, so both read this.
+ */
+fun historyNeedsRefreshForCorrections(state: HistoryUiState): Boolean =
+    state.isFromCache || state.isStale || state.response == null || !state.hasFreshCursor
+
+/**
  * Corrections are deliberately restricted to a current server snapshot. A
  * cached page can be useful to read, but its correction head can be stale.
  */
@@ -116,7 +123,7 @@ fun historyCorrectionAvailability(
     val disabledReason = when {
         event.eventUuid in queuedTargetIds ->
             "A correction for this entry is already queued. Wait for it to sync before making another change."
-        state.isFromCache || state.isStale || state.response == null || !state.hasFreshCursor ->
+        historyNeedsRefreshForCorrections(state) ->
             "Refresh History before editing so this entry is current."
         state.response.correctionVersion < 1 ->
             "This server does not support history corrections yet."
@@ -262,6 +269,18 @@ class AnalyticsCoordinator(
 
     fun refreshHistory(filters: HistoryFilters = _history.value.appliedFilters) {
         refreshHistoryPage(filters, resetCursorRecovery = true)
+    }
+
+    /**
+     * Starts the refresh the "Editing unavailable" notice used to ask a reader to run by hand.
+     * A refresh already in flight is left alone: [refreshHistory] cancels and restarts the
+     * request, so re-entering here would keep resetting the page the reader is waiting for.
+     */
+    fun refreshHistoryIfNotCurrent() {
+        val current = _history.value
+        if (current.isInitialLoading || current.isRefreshing) return
+        if (!historyNeedsRefreshForCorrections(current)) return
+        refreshHistory(current.appliedFilters)
     }
 
     private fun refreshHistoryPage(
