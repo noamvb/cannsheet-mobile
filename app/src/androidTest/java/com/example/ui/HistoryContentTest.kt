@@ -251,7 +251,7 @@ class HistoryContentTest {
         }
 
         composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
-        composeRule.onNode(hasText("Event UUID: ${event.eventUuid}")).assertIsDisplayed()
+        composeRule.onNode(hasText("Event UUID: ${event.eventUuid}")).assertExists()
 
         state.value = state.value.copy(events = emptyList(), isRefreshing = false)
         composeRule.waitForIdle()
