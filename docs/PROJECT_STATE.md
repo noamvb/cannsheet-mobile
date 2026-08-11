@@ -5,20 +5,44 @@ Last updated: 2026-08-11
 ## Repository state
 
 - Canonical branch: `main`
-- Released source commit and annotated tag `v1.2.20`:
-  `d91444afa091faa9bee7727c0e506e76f2f51d36`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.20`,
-  version code `23`
+- Released source commit and tag `v1.2.21`:
+  `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.21`,
+  version code `24`
+- Purchase autofill defaults feature [PR #36](https://github.com/noamvb/cannsheet-mobile/pull/36)
+  was squash-merged as `5f6d1392a77067616bde43265278b77daf447f8e` after its
+  PR and full API 24/API 36 validation passed.
+- Version-only release [PR #37](https://github.com/noamvb/cannsheet-mobile/pull/37)
+  was squash-merged as `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e` after its
+  PR checks and exact-main validation passed.
+- The feature PR checks passed [run 31458365282](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458365282);
+  the feature merge commit passed the full main matrix in
+  [run 31458941204](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458941204).
+- The release PR checks passed [run 31459764234](https://github.com/noamvb/cannsheet-mobile/actions/runs/31459764234);
+  the release merge commit passed the full main matrix in
+  [run 31460010598](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460010598).
+- Signed publication workflow
+  [run 31460436036](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460436036)
+  passed exact-main proof, version/secret/monotonicity checks, signed build,
+  signature verification, public upload, and post-publication verification.
 - Background synchronization [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30)
   and version-only release [PR #31](https://github.com/noamvb/cannsheet-mobile/pull/31)
   were squash-merged after their required validation passed.
 - Analytics prefetch [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and version-only release [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) were squash-merged after their required validation passed, and released as v1.2.20.
+- The source tag/release is
+  [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile/releases/tag/v1.2.21).
 - The public signed release is
-  [Cannsheet Mobile 1.2.20](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.20).
-  Its release assets are `Cannsheet-Mobile-1.2.20.apk` and
-  `Cannsheet-Mobile-1.2.20.apk.sha256` (in addition to GitHub's automatic source archives).
-- Public APK SHA-256:
-  `c4e96df1b1f158a4119def985ce6a6e0a1cd28463234435f509ceea84cc3532b`
+  [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.21).
+  Its exact assets are `Cannsheet-Mobile-1.2.21.apk` (13,509,398 bytes) and
+  `Cannsheet-Mobile-1.2.21.apk.sha256`.
+- Independently downloaded public APK SHA-256:
+  `e315a04300df297682ce19e3ff1e545a72824558daf720461cab59f3437545d0`
+- Independent `aapt`/`apksigner` verification reported package
+  `com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`,
+  and signing certificate SHA-256
+  `A9:78:72:49:B1:06:D9:8A:42:1E:D8:39:78:93:61:A4:57:53:E3:67:E2:43:82:0D:10:D2:F3:A0:97:08:66:5E`.
+- The previous public release had version code `23`; the new release is
+  monotonic.
 - The editable History milestone was delivered through backend
   [PR #19](https://github.com/noamvb/cannsheet-mobile/pull/19), Android
   [PR #20](https://github.com/noamvb/cannsheet-mobile/pull/20), and production
@@ -29,9 +53,10 @@ Last updated: 2026-08-11
 
 ## Purchase autofill defaults feature work
 
-- The approved implementation is being developed on the clean feature branch
-  `codex/purchase-defaults`, based on main commit
-  `19fe80652fcd3fc4909a5138f22df815098493eb`.
+- The approved implementation was delivered through
+  [PR #36](https://github.com/noamvb/cannsheet-mobile/pull/36) and is included
+  in released main commit
+  `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e`.
 - The Purchase screen now supports type-first, explicit-suggestion autofill;
   normalized product/type keys; saved-default precedence over catalog values;
   canonical THC fractions; and an opt-in save-default switch for cost, THC,
@@ -41,14 +66,14 @@ Last updated: 2026-08-11
   Room purchase persistence completes before the optional DataStore write;
   default-write failure leaves the purchase queued and reports separate
   feedback from sync status.
-- Local validation passed with normal Android SDK access:
-  `testDebugUnitTest`, `compileDebugAndroidTestKotlin`, `lintDebug`, and
-  `assembleDebug` all completed successfully. The focused DataStore and
-  purchase-persistence tests also passed. `node tests/backend_analytics_test.js`
-  passed with the existing 400-purchase/3,600-event benchmark.
-- No feature commit, push, pull request, CI run, device/emulator acceptance,
-  signed APK, release tag, public publication, or Obtainium update has been
-  performed yet. The current public release remains v1.2.20.
+- Local focused tests and the backend analytics benchmark passed. The full
+  local release-branch Android command was attempted, but this machine's
+  protected Android SDK metadata/license access caused the Gradle attempt to
+  time out; GitHub CI is the authoritative Android evidence for the release.
+- CI passed the feature PR, full post-merge API 24/API 36 matrix, release PR,
+  full release-merge matrix, and signed publication workflow described above.
+- No production-package installation or Obtainium update was performed:
+  the final ADB refresh reported no connected device or emulator.
 
 ## Background synchronization feature work
 
@@ -181,7 +206,16 @@ Repository code and validation show:
 
 ## Release and validation status
 
-v1.2.20 evidence (current release):
+v1.2.21 evidence (current release):
+
+- Feature PR #36's checks passed [run 31458365282](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458365282); its merge commit `5f6d1392a77067616bde43265278b77daf447f8e` passed the full API 24/API 36 matrix in [run 31458941204](https://github.com/noamvb/cannsheet-mobile/actions/runs/31458941204).
+- Release PR #37's checks passed [run 31459764234](https://github.com/noamvb/cannsheet-mobile/actions/runs/31459764234); its version-bump merge commit `b77bb4fdd9d4062d54d3bfb36837c7612b73eb6e` passed the full API 24/API 36 matrix in [run 31460010598](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460010598).
+- Signed publication workflow [run 31460436036](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460436036) passed exact-main validation, signing, publication, and post-publication verification.
+- The public release is [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.21): `Cannsheet-Mobile-1.2.21.apk` (13,509,398 bytes) and its `.sha256`. Independently verified APK SHA-256: `e315a04300df297682ce19e3ff1e545a72824558daf720461cab59f3437545d0`.
+- Independent public-artifact verification passed `apksigner`, confirmed the expected signing certificate, and confirmed package `com.noamv.cannsheet.mobile`, version code `24`, and version name `1.2.21`.
+- No device or emulator was connected during the final ADB check. No production installation, Obtainium update, or phone UI acceptance was observed.
+
+Prior release (v1.2.20) evidence, retained for history:
 
 - PR #33's checks passed [run 31421082505](https://github.com/noamvb/cannsheet-mobile/actions/runs/31421082505); the merge-to-main commit `f1ebdaa` passed the full API 24/API 36 matrix in [run 31423351995](https://github.com/noamvb/cannsheet-mobile/actions/runs/31423351995).
 - PR #34's checks passed [run 31424577797](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424577797); the version-bump merge commit `d91444a` (the exact tagged/released commit) passed the full matrix in [run 31424975576](https://github.com/noamvb/cannsheet-mobile/actions/runs/31424975576).
@@ -264,27 +298,19 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Complete the primary self-review of `codex/purchase-defaults`, then obtain
-   the explicit feature-delivery approval before committing, pushing, or
-   opening the focused draft PR.
-2. Run the configured PR workflow and require green Android/backend checks;
-   manually dispatch the API 24/API 36 validation when the repository workflow
-   requires it.
-3. Validate the exact merged-main SHA before beginning the separately gated
-   v1.2.21 version/signing/publication workflow.
-4. After release approval, independently verify the signed public APK and
-   perform the intended-phone Obtainium update acceptance. Keep device,
-   signing, publication, and Obtainium evidence separate from local/CI tests.
-5. Continue the existing v1.2.20 device checks for analytics prefetch and
+1. Connect the intended Android phone or emulator and perform the in-place
+   v1.2.21 installation/update acceptance through Obtainium.
+2. Record device package/version readback, Obtainium detection/update result,
+   and any user-facing smoke test separately from CI, signing, and public APK
+   evidence.
+3. Continue the existing v1.2.20 device checks for analytics prefetch and
    correction-safe usage totals when a device session is available.
 
 ## Unresolved questions
 
-- Has the Purchase autofill feature passed the focused PR and exact-main CI
-  gates after it is committed and pushed?
-- Does the signed v1.2.21 APK independently verify and install through
-  Obtainium on the intended phone?
-- Does Obtainium detect and install v1.2.20 in place on the intended phone?
+- Does Obtainium detect and install v1.2.21 in place on the intended phone?
+- Does the installed v1.2.21 app pass the intended-phone Purchase autofill
+  smoke test?
 - Do the confirmed-versus-pending totals remain clear during real offline,
   retry, borrowed-product, and correction workflows on the intended phone?
 - Does the periodic worker's analytics prefetch actually warm the Insights/History cache on a real device (no emulator/CI substitute exists for this), and does the 2-hour freshness floor behave as expected across real wake intervals?
