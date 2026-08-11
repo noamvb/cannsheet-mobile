@@ -114,7 +114,7 @@ Last updated: 2026-08-11
   Its local artifact was
   `app/build/outputs/apk/devicecheck/app-devicecheck.apk` with SHA-256
   `6a748680fc91c2830d222beeb7b00050f9145a629ccc8f464e5a3c0d9ef6734a`.
-- On the intended production device, Settings exposed all six product types;
+- On the wireless the intended production device, Settings exposed all six product types;
   a Shatter override `0.1 / 0.25 / 0.5` saved and persisted across relaunch,
   appeared on the Shatter Log form, Pen showed the global `0.5 / 1 / 2`
   defaults, and reset returned Shatter to the global defaults. The existing
@@ -159,7 +159,7 @@ Last updated: 2026-08-11
   time out; GitHub CI is the authoritative Android evidence for the release.
 - CI passed the feature PR, full post-merge API 24/API 36 matrix, release PR,
   full release-merge matrix, and signed publication workflow described above.
-- Wireless ADB later reached the intended the intended production device at
+- Wireless ADB later reached the intended production device at
   `the device wireless endpoint`. Production package readback reported
   `com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`,
   `targetSdk 36`, and `the post-install timestamp`. Obtainium showed
@@ -207,7 +207,7 @@ Last updated: 2026-08-11
 - The exact local Android command was attempted with Gradle 9.3.1 and JDK
   17.0.20, but this Mac has no Android SDK and Gradle stopped with “SDK location
   not found”. CI is the authoritative build/test evidence for this branch.
-- Wireless ADB reached the intended the intended production device. The published signed
+- Wireless ADB reached the intended production device. The published signed
   APK installed in place with `adb install -r`, changing the production package
   from version code `24` / version name `1.2.21` to version code `25` / version
   name `1.2.22`. The package signing identity remained `the release signing identity`, and the
@@ -259,8 +259,7 @@ including API 24, API 36, and the aggregate check. The version-only PR passed
 and exact release commit `009d38c` passed the same full main matrix in
 [run 31351485515](https://github.com/noamvb/cannsheet-mobile/actions/runs/31351485515).
 
-Physical-device validation used an isolated test application ID on a Samsung
-the intended production device running Android 16 / API 36; the installed production and older
+Physical-device validation used an isolated test application ID on an Android device running Android 16 / API 36; the installed production and older
 sandbox apps were untouched. All 39 connected sandbox instrumentation tests
 passed. A process-dead airplane-mode test moved one queued action to the
 sandbox Sheet within seconds of reconnect, left zero pending actions, and
