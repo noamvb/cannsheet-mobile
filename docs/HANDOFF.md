@@ -22,9 +22,22 @@ with APK SHA-256
 Independent verification confirmed package `com.noamv.cannsheet.mobile`,
 version code 24, version name 1.2.21, and the expected signing certificate.
 
-The final ADB refresh found no connected device or emulator. No production
-installation, Obtainium update, or phone UI acceptance was performed. See
-`docs/PROJECT_STATE.md` for the exact run IDs and the remaining device gate.
+Wireless ADB later reached the intended Samsung SM-F966W (`192.168.68.54:36595`)
+without uninstalling or clearing Cannsheet data. Android read back production
+package `com.noamv.cannsheet.mobile` at version code 24 / version name 1.2.21
+(`targetSdk 36`). Obtainium showed Cannsheet Mobile from the public releases
+repository as `v1.2.21 Installed / Latest`, with the expected signing
+certificate and a disabled update button. The device was already current when
+this session connected, so an Obtainium in-place update transition was not
+observed and must not be claimed.
+
+A read-only Purchase smoke check confirmed the type-first form, the available
+type choices, and the new defaults switch visible and initially off. The local
+product selector remained unavailable after choosing type `P`, so no
+suggestion/default application could be exercised; no purchase was submitted.
+The next genuine purchase remains the appropriate way to validate persistence
+and restart/autofill behavior without fabricating production data. See
+`docs/PROJECT_STATE.md` for the exact release and device evidence.
 
 ## Previous release outcome
 
@@ -103,16 +116,16 @@ validation this change will receive.
 
 ## Current next actions
 
-The v1.2.21 implementation and signed public release are complete. The only
-remaining release acceptance gate is device-based:
+The v1.2.21 implementation, signed public release, current-device readback,
+and Obtainium current-state check are complete. The remaining manual checks are:
 
-1. Connect the intended Android phone or emulator.
-2. Confirm Obtainium detects the public v1.2.21 release and performs the
-   in-place update without changing the application ID or signing identity.
-3. Read back the installed package/version and perform the focused Purchase
-   autofill smoke test. Keep this evidence separate from CI and APK metadata.
-4. Separately complete the older v1.2.20 analytics-prefetch device checks
-   described in `docs/PROJECT_STATE.md` when a device session is available.
+1. Use the next genuine purchase to validate saved-default persistence and
+   restart/autofill behavior; do not create a synthetic production purchase.
+2. If an in-place Obtainium update must be witnessed explicitly, observe the
+   next higher release update on the same device. The v1.2.21 transition was
+   already complete before this ADB session began.
+3. Separately complete the older v1.2.20 analytics-prefetch device checks
+   described in `docs/PROJECT_STATE.md`.
 
 ## Historical v1.2.20 recommended actions
 

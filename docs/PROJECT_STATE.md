@@ -72,8 +72,18 @@ Last updated: 2026-08-11
   time out; GitHub CI is the authoritative Android evidence for the release.
 - CI passed the feature PR, full post-merge API 24/API 36 matrix, release PR,
   full release-merge matrix, and signed publication workflow described above.
-- No production-package installation or Obtainium update was performed:
-  the final ADB refresh reported no connected device or emulator.
+- Wireless ADB later reached the intended Samsung `SM-F966W` at
+  `192.168.68.54:36595`. Production package readback reported
+  `com.noamv.cannsheet.mobile`, version code `24`, version name `1.2.21`,
+  `targetSdk 36`, and `lastUpdateTime 2026-08-11 01:10:00`. Obtainium showed
+  Cannsheet Mobile from `https://github.com/noamvb/cannsheet-mobile-releases`
+  as `v1.2.21 Installed / Latest`, with the expected certificate and its
+  update button disabled. The device was already current when connected, so
+  an Obtainium in-place update transition was not observed.
+- A read-only Purchase-screen check confirmed the type-first form, type
+  choices, and visible initially-off defaults switch. After selecting type
+  `P`, the local product selector remained unavailable, so suggestion/default
+  application and a real purchase were intentionally not exercised.
 
 ## Background synchronization feature work
 
@@ -213,7 +223,17 @@ v1.2.21 evidence (current release):
 - Signed publication workflow [run 31460436036](https://github.com/noamvb/cannsheet-mobile/actions/runs/31460436036) passed exact-main validation, signing, publication, and post-publication verification.
 - The public release is [Cannsheet Mobile 1.2.21](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.21): `Cannsheet-Mobile-1.2.21.apk` (13,509,398 bytes) and its `.sha256`. Independently verified APK SHA-256: `e315a04300df297682ce19e3ff1e545a72824558daf720461cab59f3437545d0`.
 - Independent public-artifact verification passed `apksigner`, confirmed the expected signing certificate, and confirmed package `com.noamv.cannsheet.mobile`, version code `24`, and version name `1.2.21`.
-- No device or emulator was connected during the final ADB check. No production installation, Obtainium update, or phone UI acceptance was observed.
+- Wireless ADB device readback: Samsung `SM-F966W`, Android 16 / API 36,
+  `192.168.68.54:36595`. `dumpsys package` reported production version code
+  `24`, version name `1.2.21`, and `lastUpdateTime 2026-08-11 01:10:00`.
+- Obtainium detail readback reported `v1.2.21 Installed / Latest`, the public
+  releases URL, the expected signing certificate, and a disabled update
+  action. This verifies the current installed/public pairing, but not a live
+  update transition because the device was already at v1.2.21 on connection.
+- The Purchase UI rendered with type-first selection and the new
+  `Use these values as future defaults for this product and type` switch. The
+  product selector was disabled after selecting type `P` in this session, so
+  no production purchase or synthetic autofill test was performed.
 
 Prior release (v1.2.20) evidence, retained for history:
 
@@ -291,26 +311,31 @@ Local and device evidence:
   `com.noamv.cannsheet.mobile`; `README.md` records this as an intentional
   source-layout compatibility choice.
 - The public APK is independently verified as update-compatible by package,
-  higher version code, and signing certificate, but an actual in-place phone
-  installation has not been observed in this release session.
+  higher version code, and signing certificate. The intended phone is now
+  verified at the matching installed version and Obtainium current state, but
+  the v1.2.21 in-place update transition itself was already complete before
+  this session and was not observed live.
 - The first real production correction lifecycle still requires a deliberate
   user/device check; no synthetic production correction was created for testing.
 
 ## Current priorities
 
-1. Connect the intended Android phone or emulator and perform the in-place
-   v1.2.21 installation/update acceptance through Obtainium.
-2. Record device package/version readback, Obtainium detection/update result,
-   and any user-facing smoke test separately from CI, signing, and public APK
-   evidence.
+1. Use the next genuine production purchase to validate default persistence and
+   restart/autofill behavior without fabricating data.
+2. If a live Obtainium transition must be witnessed explicitly, observe the
+   next higher release update on the same device; v1.2.21 was already current
+   when this session connected.
 3. Continue the existing v1.2.20 device checks for analytics prefetch and
-   correction-safe usage totals when a device session is available.
+   correction-safe usage totals.
 
 ## Unresolved questions
 
-- Does Obtainium detect and install v1.2.21 in place on the intended phone?
-- Does the installed v1.2.21 app pass the intended-phone Purchase autofill
-  smoke test?
+- Obtainium detects v1.2.21 and reports it installed/latest on the intended
+  phone; the in-place transition was not observed live in this session.
+- Does a genuine product suggestion on the installed v1.2.21 app apply and
+  preserve a saved Purchase default across restart? The product selector was
+  unavailable during this read-only session, and no synthetic purchase was
+  created.
 - Do the confirmed-versus-pending totals remain clear during real offline,
   retry, borrowed-product, and correction workflows on the intended phone?
 - Does the periodic worker's analytics prefetch actually warm the Insights/History cache on a real device (no emulator/CI substitute exists for this), and does the 2-hour freshness floor behave as expected across real wake intervals?
