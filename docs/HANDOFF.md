@@ -53,22 +53,42 @@ version code `25` / version name `1.2.22`; its exact merged main commit is
 - No uninstall, data clear, downgrade, endpoint change, synthetic purchase,
   or synthetic correction was performed.
 
-## Remaining manual validation boundary
+## Manual validation boundary
 
-The phone presented its lock-pattern screen after a normal wake and unlock
-swipe. No pattern was entered or bypassed. Therefore the APK installation is
-verified, but the interactive History sequence and recording from the attached
-plan remain pending until the phone is unlocked:
+The phone was unlocked by the user on 2026-08-11 and the installed production
+package was exercised over wireless ADB. The bounded validation that was
+actually read back was:
 
-1. Offline cached/stale History refresh progress and error inside the sheet.
-2. Online refresh recovering the correction controls and saving a correction.
-3. Header refresh progress, rotation with an open sheet, and missing-entry
-   dialog behavior.
-4. The required History refresh recording.
+- Insights → History opened with network available, displayed saved rows, showed
+  the automatic `Refreshing History…` state while the page refreshed, and
+  settled back to the saved rows.
+- Opening an existing History event online showed the detail sheet with the
+  normal Correct/Void controls.
+- Triggering the list-header Refresh control while rows were visible showed a
+  progress indicator and `Refreshing History…` while the request was
+  running.
+- A network interruption was exercised during a History refresh. Wireless ADB
+  dropped, as expected, and the screen recording was pulled locally. After
+  airplane mode was turned off and Wi-Fi restored, the app returned to the
+  saved History rows.
+
+The following plan cases remain unverified and must not be described as passed:
+
+1. Cold-open History while offline and independently read back the offline error.
+2. The in-sheet automatic/manual offline refresh spinner and
+   `No connection. Showing saved data when available. (OFFLINE)` message.
+3. Successful correction save after refresh.
+4. Rotation with an open detail sheet.
+5. The missing-entry dialog after a refresh removes the opened event.
+
+No real correction, void, restore, purchase, or other production mutation was
+performed. The two temporary recordings were removed from the phone after
+being pulled locally; they are not committed because they contain live History
+data. Phone use ended with airplane mode off, Wi-Fi/ADB restored, and no app
+data changed.
 
 When continuing, warn before using the phone again and report explicitly when
 phone use is finished.
-
 ## Data-safety notes
 
 - The production app’s local data was preserved by the signed in-place update.
