@@ -764,6 +764,8 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     fun refreshHistory(filters: HistoryFilters = historyState.value.appliedFilters) =
         analyticsCoordinator.refreshHistory(filters)
 
+    fun refreshHistoryIfNotCurrent() = analyticsCoordinator.refreshHistoryIfNotCurrent()
+
     fun loadMoreHistory() = analyticsCoordinator.loadMoreHistory()
 
     fun clearSyncStatus() {

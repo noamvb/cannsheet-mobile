@@ -314,3 +314,44 @@ historical rationale.
   `app/src/test/java/com/example/data/PurchaseDefaultsRepositoryTest.kt`,
   `app/src/test/java/com/example/ui/PurchasePersistenceTest.kt`,
   `app/src/androidTest/java/com/example/ui/PurchaseContentTest.kt`
+
+## ADR-010: Make History refresh feedback visible and rebind open entries
+
+- Status: Accepted; implementation is on the `agent/history-refresh-feedback`
+  feature branch and is not yet merged or released
+- Date: 2026-08-11
+- Context: A cached or stale History page correctly blocks corrections, but the
+  existing refresh action provided no visible progress or failure inside the
+  detail sheet and handed correction dialogs the DTO that was opened before a
+  successful refresh. This made the correction gate appear broken and could
+  reject an edit immediately after the user followed its refresh instruction.
+- Decision:
+  1. Keep the fresh-snapshot correction gate and share its predicate with the
+     History detail sheet's automatic refresh entry point.
+  2. Render History refresh progress in the list header and render progress or
+     failure inline in the detail sheet, where the reader can see it while the
+     modal sheet is open.
+  3. Start one idempotent refresh when a stale or cached entry is opened,
+     rather than adding a process-lifecycle observer, time-based staleness TTL,
+     or a new dependency.
+  4. Track the opened entry by UUID and re-read it from current History state so
+     correction drafts carry the current `correctionHeadId` after refresh.
+  5. Close the sheet and explain the outcome when the opened entry is no longer
+     present on the refreshed page.
+- Rationale: The existing optimistic-concurrency rule remains the data-safety
+  boundary, while visible state and UUID-based rebinding make the prescribed
+  refresh action observable and make a successful refresh genuinely unblock a
+  correction.
+- Consequences: The History UI gains one automatic refresh trigger, inline
+  failure feedback, rotation-safe entry identity, and an explicit missing-entry
+  dialog. The accepted trade-off is that automatic refresh resets History to
+  page 1 and clears paged depth, exactly as the manual Refresh button already
+  does. It can only fire when `historyNeedsRefreshForCorrections` is true, which
+  already implies `hasFreshCursor == false` and no usable cursor.
+- Related files: `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/main/java/com/example/ui/InsightsScreen.kt`,
+  `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
+  `app/src/test/java/com/example/ui/HistoryCorrectionUiTest.kt`,
+  `app/src/androidTest/java/com/example/ui/HistoryContentTest.kt`,
+  `docs/ARCHITECTURE.md`

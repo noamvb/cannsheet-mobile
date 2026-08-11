@@ -85,6 +85,37 @@ Last updated: 2026-08-11
   `P`, the local product selector remained unavailable, so suggestion/default
   application and a real purchase were intentionally not exercised.
 
+## History refresh feedback feature work
+
+- The focused implementation is on branch `agent/history-refresh-feedback` and
+  is not yet merged, released, or assigned a new version.
+- `historyNeedsRefreshForCorrections` is now the shared correction-gate and
+  stale-refresh predicate. `AnalyticsCoordinator` exposes an idempotent
+  `refreshHistoryIfNotCurrent()` entry point, and `CannsheetViewModel` delegates
+  it to the History UI.
+- History renders refresh progress in its header and inside the open detail
+  sheet, reports refresh failures inside the sheet, starts one refresh when a
+  stale/cached entry is opened, tracks the opened entry by UUID, and explains
+  when a successful refresh removes it from the current page.
+- JVM and Compose regression tests were added for the shared predicate,
+  idempotent coordinator behavior, visible progress/error states, automatic
+  refresh, and missing-entry sheet closure.
+- GitHub Actions run [31523716900](https://github.com/noamvb/cannsheet-mobile/actions/runs/31523716900)
+  passed the security/classification, backend, Android static, API 24
+  instrumentation, and aggregate validation jobs for code commit `ae4812b`.
+  The static job uploaded the debug APK artifact with ZIP digest
+  `dcf7108717d33233bc571f00d396e7a3022a6878e9328a1272feb11ac617dc9b`.
+- The exact local Android command was attempted with Gradle 9.3.1 and JDK
+  17.0.20, but this Mac has no Android SDK and Gradle stopped with “SDK location
+  not found”. CI is the authoritative build/test evidence for this branch.
+- Wireless ADB reached the intended Samsung `SM-F966W`; its production package
+  remained at version code `24` / version name `1.2.21` after the validated
+  debug APK was rejected with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` because the
+  installed Obtainium release signature differs. No uninstall, data clear, or
+  production-package mutation was performed. Manual History validation and a
+  recording therefore remain pending a release-signed build or explicit
+  approval for a data-destructive reinstall.
+
 ## Background synchronization feature work
 
 Background synchronization was delivered in

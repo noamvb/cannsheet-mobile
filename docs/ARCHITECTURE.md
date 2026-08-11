@@ -184,7 +184,14 @@ the previous defaults map.
    generated for (falling back to the default range/unfiltered History when no
    cache exists yet) rather than resetting a user's last-viewed scope. This
    only changes the freshness of the first paint on a cold open; the
-   coordinator still performs its own live refresh on every `onVisible`.
+   coordinator still performs its own live refresh on first load or when the
+   relevant state is stale from `onVisible` / `onHistoryVisible`.
+7. The History detail sheet starts one refresh when an opened entry comes from
+   a snapshot that cannot support a correction, and reports refresh progress or
+   failure inline because the sheet covers the list notice. It tracks the open
+   entry by event UUID, so a successful refresh re-binds the sheet to the
+   current DTO and its `correctionHeadId`; if the entry leaves the refreshed
+   page, the sheet closes with an explanation.
 
 ### Consumption history corrections
 
