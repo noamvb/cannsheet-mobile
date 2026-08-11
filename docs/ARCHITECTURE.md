@@ -49,6 +49,10 @@ flowchart LR
   analytics/history contract, repository, and cache serialization.
 - `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
   stores quick-log presets and the unopened-product preference in DataStore.
+- `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt` stores
+  the optional Purchase-screen defaults in a separate version-1 JSON
+  Preferences DataStore. `CannsheetGraph` creates the one process-wide
+  instance used by the view model.
 
 ### Background queue synchronization
 
@@ -149,6 +153,24 @@ environment and response-identity checks, and acknowledgement-only deletion.
 It is a second trigger for the existing idempotent protocol, not a new backend
 write path or a second source of truth.
 
+### Purchase autofill defaults
+
+The Purchase screen requires a selected product type before it offers catalog
+suggestions. Suggestions include all catalog statuses, are filtered by the
+selected type, normalized for case-insensitive matching, de-duplicated by
+normalized name, sorted deterministically, and limited to five entries. A
+default is applied only after the user explicitly selects a suggestion; typing
+the same name does not apply values.
+
+Defaults use `trim().lowercase(Locale.ROOT)` product names and
+`trim().uppercase(Locale.ROOT)` product types as their key. Saved values win
+over catalog values, and THC is displayed as a percent while the DataStore and
+queued purchase model use a canonical fraction. The switch is initially off
+and saves only cost, THC, and grams when the confirmed purchase has been
+written locally. The local Room queue write completes before the optional
+DataStore write; a DataStore failure leaves the purchase queued and preserves
+the previous defaults map.
+
 ### Insights and History
 
 1. `AnalyticsCoordinator` requests versioned Insights or paginated History data.
@@ -210,7 +232,9 @@ actions, consumption corrections, product interactions, sync request state, and
 analytics cache entries. `products.totalUses` was added by the forward 9-to-10
 migration and is nullable. The `consumption_actions` aggregate is a live view of
 the pending queue only, not a replacement for server history. DataStore holds
-user preferences that do not require relational transactions.
+user preferences that do not require relational transactions. Purchase defaults
+are an independent full-map JSON value in the `purchase_defaults` DataStore;
+they do not enter the Room schema or Apps Script synchronization payload.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
@@ -247,10 +271,12 @@ source values.
 
 - `app/src/test`: JVM unit tests for UI helpers/coordinators, environment
   contracts, queue acknowledgement logic, preferences, filtering, product
-  mapping, usage formatting, and status handling.
+  mapping, usage formatting, purchase-default persistence, purchase-before-
+  default failure handling, and status handling.
 - `app/src/androidTest`: Room migration/queue tests and Compose UI tests that
   require a device or emulator, including pending-usage aggregation, the 9-to-10
-  migration, and selected/recent usage-total rendering.
+  migration, selected/recent usage-total rendering, and Purchase type-filtered
+  suggestion/autofill behavior.
 - `tests`: Node scripts execute the checked-in Apps Script source against fake
   Apps Script/Sheets implementations; a Python unittest covers deterministic
   backend benchmark tooling.

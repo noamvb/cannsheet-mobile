@@ -35,6 +35,7 @@ class CannsheetGraph private constructor(context: Context) {
     ).build()
 
     val repository = CannsheetRepository(database)
+    val purchaseDefaultsRepository = PurchaseDefaultsRepository(context.applicationContext)
     val syncPreferences = SyncPreferencesRepository(context.applicationContext)
 
     private val client = OkHttpClient.Builder()

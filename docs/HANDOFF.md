@@ -1,14 +1,34 @@
 # Latest handoff
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
-## Outcome
+## Current feature outcome
+
+The Purchase autofill defaults feature is implemented and locally validated on
+the clean `codex/purchase-defaults` branch, based on main commit
+`19fe80652fcd3fc4909a5138f22df815098493eb`. It adds type-first explicit
+suggestions, local normalized product/type defaults, saved-over-catalog
+precedence, canonical THC handling, an opt-in default-save switch, and
+purchase-before-default persistence after the existing Undo countdown. The
+feature does not change the Room schema, Apps Script contract, version
+metadata, signing configuration, or release repositories.
+
+The local checks passed with normal Android SDK access: focused DataStore and
+persistence JVM tests, `testDebugUnitTest`,
+`compileDebugAndroidTestKotlin`, `lintDebug`, `assembleDebug`, and
+`node tests/backend_analytics_test.js`. The feature has not yet been committed,
+pushed, reviewed by CI, merged, signed, published, installed on a device, or
+accepted through Obtainium. Cannsheet Mobile v1.2.20 remains the current
+public release. See `docs/PROJECT_STATE.md` for the evidence boundary and next
+gates.
+
+## Previous release outcome
 
 Analytics prefetch (best-effort Insights/History cache warming from the periodic `SyncWorker` run) is **merged, released, and CI-validated**: [PR #33](https://github.com/noamvb/cannsheet-mobile/pull/33) and [PR #34](https://github.com/noamvb/cannsheet-mobile/pull/34) are both merged into `main`, and Cannsheet Mobile **v1.2.20** is published and signed. The code was implemented and self-reviewed without local test execution (this session's environment had no JDK 17+, Android SDK, or Node.js runtime — see "What could not be validated" below), so PR #33 was opened as a draft specifically for that reason. CI then validated everything before any tag was created: PR-level checks, two full push-to-main API 24/API 36 matrix runs (one per merge), and the signed release workflow all passed. See `docs/PROJECT_STATE.md` for the exact run IDs and commit SHAs. No manual device validation was performed.
 
 The prior release before this work, Cannsheet Mobile v1.2.19 (background synchronization via [PR #30](https://github.com/noamvb/cannsheet-mobile/pull/30), and product usage totals), is documented in `docs/PROJECT_STATE.md` for historical evidence. **v1.2.20 (this work) is now the current release.**
 
-## What this release changes
+## Previous release: v1.2.20 changes
 
 - New `app/src/main/java/com/example/data/sync/AnalyticsPrefetcher.kt`:
   reads the current Room `analytics_cache` row for Insights and History,
@@ -33,7 +53,7 @@ The prior release before this work, Cannsheet Mobile v1.2.19 (background synchro
 - Full design rationale and accepted trade-offs are in
   [ADR-008](DECISIONS.md#adr-008-warm-the-analytics-cache-from-periodic-background-sync).
 
-## New and changed tests
+## Previous release: v1.2.20 tests
 
 - `app/src/test/java/com/example/data/sync/AnalyticsPrefetcherTest.kt` (new):
   freshness gate, range/filter reuse, the History merge algorithm, and
@@ -50,7 +70,7 @@ The prior release before this work, Cannsheet Mobile v1.2.19 (background synchro
 
 None of these were executed in this session — see below. (Update: CI subsequently ran the equivalent checks — unit tests, lint, `compileDebugAndroidTestKotlin`, and two full API 24/API 36 matrix runs — and all passed before the release was tagged; see `docs/PROJECT_STATE.md` for exact run IDs. This section is kept as-is for an accurate record of what this session itself could verify.)
 
-## What could not be validated
+## Historical v1.2.20 validation note
 
 This session's environment had **no JDK 17+, no Android SDK, and no Node.js
 runtime**. `./gradlew --no-daemon testDebugUnitTest ...` was attempted and
@@ -77,7 +97,25 @@ as a draft specifically because of this, and states plainly that CI (the
 `compileDebugAndroidTestKotlin` and the emulator matrix) is the first real
 validation this change will receive.
 
-## Recommended next action
+## Current next actions
+
+The approved feature is locally green but is still before the feature-delivery
+approval gate:
+
+1. Finish the primary diff self-review and obtain explicit approval before
+   committing, pushing, or opening the focused draft PR.
+2. Run and monitor the PR checks, including backend validation,
+   `compileDebugAndroidTestKotlin`, lint, and the emulator coverage required by
+   the repository workflow.
+3. After merge, validate the exact main SHA before seeking the separate
+   v1.2.21 release approval. Only then edit version metadata, publish the
+   signed APK, and perform independent package/signature/checksum checks.
+4. Validate the in-place Obtainium update on the intended phone. No CI or APK
+   metadata result is a substitute for that device evidence.
+5. Separately complete the older v1.2.20 analytics-prefetch device checks
+   described in `docs/PROJECT_STATE.md` when a device session is available.
+
+## Historical v1.2.20 recommended actions
 
 All of this has now happened: CI passed, PR #33 and PR #34 were merged, and v1.2.20 was tagged and published. The remaining recommended actions are the manual device validation steps that were never run in this session and have no CI substitute:
 
