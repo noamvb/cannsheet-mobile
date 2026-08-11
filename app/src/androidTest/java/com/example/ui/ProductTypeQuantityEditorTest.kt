@@ -39,6 +39,7 @@ class ProductTypeQuantityEditorTest {
                         onSave = { type, presets ->
                             savedType = type
                             savedPresets = presets
+                            Result.success(Unit)
                         },
                         onReset = {},
                     )
@@ -68,7 +69,7 @@ class ProductTypeQuantityEditorTest {
                         productTypes = listOf("P", "S"),
                         globalPresets = listOf(0.5, 1.0, 2.0),
                         overrides = mapOf(ProductTypeKey("P") to listOf(7.0)),
-                        onSave = { _, _ -> },
+                        onSave = { _, _ -> Result.success(Unit) },
                         onReset = {},
                     )
                 }
@@ -102,7 +103,7 @@ class ProductTypeQuantityEditorTest {
                         productTypes = listOf("P", "S"),
                         globalPresets = listOf(0.5, 1.0, 2.0),
                         overrides = mapOf(ProductTypeKey("S") to listOf(0.1, 0.25)),
-                        onSave = { _, _ -> },
+                        onSave = { _, _ -> Result.success(Unit) },
                         onReset = { resetType = it },
                     )
                 }

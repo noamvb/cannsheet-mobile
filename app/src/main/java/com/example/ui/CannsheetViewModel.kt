@@ -202,20 +202,16 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _submissionTimer.value = seconds.coerceIn(0, 5)
     }
 
-    fun updateQuantityPresets(presets: List<Double>) {
-        viewModelScope.launch {
-            runCatching { consumptionPreferences.setQuantityPresets(presets) }
-                .onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
-        }
-    }
+    suspend fun updateQuantityPresets(presets: List<Double>): Result<Unit> =
+        runCatching { consumptionPreferences.setQuantityPresets(presets) }
+            .onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
 
-    fun updateQuantityPresetsForType(type: String, presets: List<Double>) {
-        viewModelScope.launch {
-            runCatching {
-                consumptionPreferences.setQuantityPresetsForType(ProductTypeKey(type), presets)
-            }.onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
-        }
-    }
+    suspend fun updateQuantityPresetsForType(
+        type: String,
+        presets: List<Double>,
+    ): Result<Unit> = runCatching {
+        consumptionPreferences.setQuantityPresetsForType(ProductTypeKey(type), presets)
+    }.onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
 
     fun clearQuantityPresetsForType(type: String) {
         viewModelScope.launch {

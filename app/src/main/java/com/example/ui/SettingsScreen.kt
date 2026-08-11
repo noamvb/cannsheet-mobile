@@ -23,6 +23,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(viewModel: CannsheetViewModel) {
@@ -139,7 +140,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
 @Composable
 internal fun QuickLogQuantityEditor(
     quantityPresets: List<Double>,
-    onSave: (List<Double>) -> Unit,
+    onSave: suspend (List<Double>) -> Result<Unit>,
 ) {
     Text("Quick-log quantities", style = MaterialTheme.typography.titleLarge)
     Spacer(modifier = Modifier.height(8.dp))
@@ -178,14 +179,16 @@ internal fun QuantityPresetListEditor(
     tags: QuantityPresetEditorTags,
     saveButtonLabel: String,
     savedMessage: String,
-    onSave: (List<Double>) -> Unit,
+    onSave: suspend (List<Double>) -> Result<Unit>,
     seedKey: Any? = Unit,
 ) {
     var presetInputs by remember {
         mutableStateOf(presets.toPresetInputStrings())
     }
     var presetsSaved by remember { mutableStateOf(false) }
+    var saveInProgress by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(seedKey, presets) {
         presetInputs = presets.toPresetInputStrings()
@@ -231,6 +234,7 @@ internal fun QuantityPresetListEditor(
                 modifier = Modifier
                     .weight(1f)
                     .testTag(tags.presetInput(index + 1)),
+                enabled = !saveInProgress,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 isError = presetErrors[index] != null,
@@ -243,7 +247,7 @@ internal fun QuantityPresetListEditor(
                     presetInputs = presetInputs.toMutableList().also { it.removeAt(index) }
                     presetsSaved = false
                 },
-                enabled = presetInputs.size >
+                enabled = !saveInProgress && presetInputs.size >
                     ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS,
                 modifier = Modifier
                     .testTag(tags.removePreset(index + 1))
@@ -277,7 +281,7 @@ internal fun QuantityPresetListEditor(
         modifier = Modifier
             .fillMaxWidth()
             .testTag(tags.addPreset),
-        enabled = presetInputs.size <
+        enabled = !saveInProgress && presetInputs.size <
             ConsumptionPreferencesRepository.MAX_QUANTITY_PRESETS,
     ) {
         Text("Add preset")
@@ -290,14 +294,21 @@ internal fun QuantityPresetListEditor(
     Spacer(modifier = Modifier.height(8.dp))
     Button(
         onClick = {
-            onSave(parsedPresets.filterNotNull())
-            presetsSaved = true
-            focusManager.clearFocus()
+            coroutineScope.launch {
+                saveInProgress = true
+                presetsSaved = false
+                val result = onSave(parsedPresets.filterNotNull())
+                if (result.isSuccess) {
+                    presetsSaved = true
+                    focusManager.clearFocus()
+                }
+                saveInProgress = false
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
             .testTag(tags.savePresets),
-        enabled = presetsAreValid
+        enabled = presetsAreValid && !saveInProgress,
     ) {
         Text(saveButtonLabel)
     }
@@ -331,7 +342,7 @@ internal fun ProductTypeQuantityEditor(
     productTypes: List<String>,
     globalPresets: List<Double>,
     overrides: Map<ProductTypeKey, List<Double>>,
-    onSave: (String, List<Double>) -> Unit,
+    onSave: suspend (String, List<Double>) -> Result<Unit>,
     onReset: (String) -> Unit,
 ) {
     var selectedType by rememberSaveable { mutableStateOf(productTypes.firstOrNull().orEmpty()) }
