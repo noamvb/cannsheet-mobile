@@ -93,7 +93,7 @@ fun PurchaseContent(
     var appliedAutofillMessage by remember { mutableStateOf<String?>(null) }
     var validationMessage by remember { mutableStateOf<String?>(null) }
 
-    val categories = listOf("P", "E", "J", "F", "S", "K")
+    val categories = ProductTypes.CODES
     val suggestions = remember(products, purchaseDefaultsState, type, name) {
         if (purchaseDefaultsState is PurchaseDefaultsState.Loaded) {
             purchaseSuggestions(products = products, selectedType = type, query = name)

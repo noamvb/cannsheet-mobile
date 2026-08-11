@@ -16,6 +16,7 @@ import com.example.data.Product
 import com.example.data.ProductInteraction
 import com.example.data.ProductCatalogRefreshResult
 import com.example.data.ProductStatus
+import com.example.data.ProductTypeKey
 import com.example.data.PurchaseAction
 import com.example.data.PurchaseDefaultsState
 import com.example.data.PurchaseSubmission
@@ -93,6 +94,10 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             ConsumptionPreferencesRepository.DEFAULT_QUANTITY_PRESETS,
         )
 
+    val quantityPresetOverrides: StateFlow<Map<ProductTypeKey, List<Double>>> =
+        consumptionPreferences.quantityPresetOverrides
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
+
     val includeUnopened: StateFlow<Boolean> = consumptionPreferences.includeUnopened
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -126,6 +131,28 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val _consumptionFormState = MutableStateFlow(ConsumptionFormState())
     val consumptionFormState: StateFlow<ConsumptionFormState> = _consumptionFormState
+
+    val productTypeOptions: StateFlow<List<String>> = allProducts
+        .map { products -> ProductTypes.options(products.map(Product::type)) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ProductTypes.options(emptyList()))
+
+    val effectiveQuantityPresets: StateFlow<List<Double>> = combine(
+        allProducts,
+        consumptionFormState,
+        quantityPresets,
+        quantityPresetOverrides,
+    ) { products, form, globalPresets, overrides ->
+        val type = products.firstOrNull { it.id == form.selectedProductId }?.type
+        ConsumptionPreferencesRepository.effectiveQuantityPresets(
+            globalPresets,
+            overrides,
+            type,
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        ConsumptionPreferencesRepository.DEFAULT_QUANTITY_PRESETS,
+    )
 
     val pendingActionCount: StateFlow<Int> = repository.pendingActionCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -175,10 +202,22 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _submissionTimer.value = seconds.coerceIn(0, 5)
     }
 
-    fun updateQuantityPresets(presets: List<Double>) {
+    suspend fun updateQuantityPresets(presets: List<Double>): Result<Unit> =
+        runCatching { consumptionPreferences.setQuantityPresets(presets) }
+            .onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
+
+    suspend fun updateQuantityPresetsForType(
+        type: String,
+        presets: List<Double>,
+    ): Result<Unit> = runCatching {
+        consumptionPreferences.setQuantityPresetsForType(ProductTypeKey(type), presets)
+    }.onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
+
+    fun clearQuantityPresetsForType(type: String) {
         viewModelScope.launch {
-            runCatching { consumptionPreferences.setQuantityPresets(presets) }
-                .onFailure { _syncStatus.value = it.message ?: "Could not save quantity presets" }
+            runCatching {
+                consumptionPreferences.clearQuantityPresetsForType(ProductTypeKey(type))
+            }.onFailure { _syncStatus.value = it.message ?: "Could not reset quantity presets" }
         }
     }
 
@@ -202,7 +241,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             .firstOrNull { it.productId == productId }
             ?.lastQuantity
             ?.takeIf { it.isFinite() && it > 0.0 }
-        val suggestedQuantity = rememberedQuantity ?: defaultQuantity()
+        val suggestedQuantity = rememberedQuantity ?: defaultQuantity(
+            allProducts.value.firstOrNull { it.id == productId }?.type,
+        )
         _consumptionFormState.value = ConsumptionFormState(
             selectedProductId = productId,
             quantityText = formatQuantity(suggestedQuantity),
@@ -776,10 +817,16 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _purchaseFeedback.value = null
     }
 
-    private fun defaultQuantity(): Double =
-        quantityPresets.value.firstOrNull { it == 1.0 }
-            ?: quantityPresets.value.firstOrNull()
+    private fun defaultQuantity(productType: String? = null): Double {
+        val presets = ConsumptionPreferencesRepository.effectiveQuantityPresets(
+            globalPresets = quantityPresets.value,
+            overrides = quantityPresetOverrides.value,
+            productType = productType,
+        )
+        return presets.firstOrNull { it == 1.0 }
+            ?: presets.firstOrNull()
             ?: 1.0
+    }
 
     private fun formatQuantity(quantity: Double): String =
         BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()

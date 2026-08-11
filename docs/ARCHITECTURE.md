@@ -48,7 +48,8 @@ flowchart LR
 - `app/src/main/java/com/example/data/AnalyticsData.kt` defines the versioned
   analytics/history contract, repository, and cache serialization.
 - `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
-  stores quick-log presets and the unopened-product preference in DataStore.
+  stores global quick-log presets, per-product-type quick-log overrides, and the
+  unopened-product preference in the `consumption_preferences` DataStore.
 - `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt` stores
   the optional Purchase-screen defaults in a separate version-1 JSON
   Preferences DataStore. `CannsheetGraph` creates the one process-wide
@@ -170,6 +171,26 @@ and saves only cost, THC, and grams when the confirmed purchase has been
 written locally. The local Room queue write completes before the optional
 DataStore write; a DataStore failure leaves the purchase queued and preserves
 the previous defaults map.
+
+### Quick-log quantity presets
+
+The Settings screen keeps the existing global quick-log quantity editor and
+stores those scalar values in the established `consumption_preferences`
+DataStore keys. Per-product-type overrides are stored as one version-1 JSON
+value in that same DataStore. A selected catalog product resolves its
+normalized type through `ProductTypeKey`; a valid override supplies the Log
+screen chips and default quantity, while a missing or invalid override falls
+back to the global list. The Preferences repository reads both global values
+and overrides from one `dataStore.data` snapshot so the view model does not
+combine independent flows.
+
+`ProductTypes` owns the canonical purchase-order codes and their labels while
+also exposing normalized catalog extensions for the Settings picker. Borrowed
+products intentionally keep the global presets: their free-text type is
+collected after the quantity chips have already been rendered, so no reliable
+type is available at chip-selection time. Overrides are keyed by type rather
+than by individual product and do not change Room, the offline queues, or the
+Apps Script contract.
 
 ### Insights and History
 

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
@@ -15,11 +16,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
+import com.example.data.ProductTypeKey
+import java.math.BigDecimal
 import java.net.URI
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsScreen(viewModel: CannsheetViewModel) {
@@ -27,6 +31,8 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val syncStatus by viewModel.syncStatus.collectAsState()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
     val quantityPresets by viewModel.quantityPresets.collectAsState()
+    val quantityPresetOverrides by viewModel.quantityPresetOverrides.collectAsState()
+    val productTypeOptions by viewModel.productTypeOptions.collectAsState()
     val timerValue by viewModel.submissionTimer.collectAsState()
     val backgroundSyncPreferences by viewModel.backgroundSyncPreferences.collectAsState()
     val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
@@ -67,6 +73,15 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         QuickLogQuantityEditor(
             quantityPresets = quantityPresets,
             onSave = viewModel::updateQuantityPresets,
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+        ProductTypeQuantityEditor(
+            productTypes = productTypeOptions,
+            globalPresets = quantityPresets,
+            overrides = quantityPresetOverrides,
+            onSave = viewModel::updateQuantityPresetsForType,
+            onReset = viewModel::clearQuantityPresetsForType,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -125,16 +140,59 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
 @Composable
 internal fun QuickLogQuantityEditor(
     quantityPresets: List<Double>,
-    onSave: (List<Double>) -> Unit,
+    onSave: suspend (List<Double>) -> Result<Unit>,
+) {
+    Text("Quick-log quantities", style = MaterialTheme.typography.titleLarge)
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        "Choose up to 10 quantities to show as shortcuts when logging consumption.",
+        style = MaterialTheme.typography.bodyMedium
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    QuantityPresetListEditor(
+        presets = quantityPresets,
+        tags = QuantityPresetEditorTags(
+            addPreset = "quick-log-add-preset",
+            savePresets = "quick-log-save-presets",
+            presetInputPrefix = "quick-log-preset-input-",
+            removePresetPrefix = "quick-log-remove-preset-",
+        ),
+        saveButtonLabel = "Save quantity presets",
+        savedMessage = "Quantity presets saved",
+        onSave = onSave,
+    )
+}
+
+internal data class QuantityPresetEditorTags(
+    val addPreset: String,
+    val savePresets: String,
+    val presetInputPrefix: String,
+    val removePresetPrefix: String,
+) {
+    fun presetInput(position: Int) = "$presetInputPrefix$position"
+    fun removePreset(position: Int) = "$removePresetPrefix$position"
+}
+
+@Composable
+internal fun QuantityPresetListEditor(
+    presets: List<Double>,
+    tags: QuantityPresetEditorTags,
+    saveButtonLabel: String,
+    savedMessage: String,
+    onSave: suspend (List<Double>) -> Result<Unit>,
+    seedKey: Any? = Unit,
 ) {
     var presetInputs by remember {
-        mutableStateOf(quantityPresets.toPresetInputStrings())
+        mutableStateOf(presets.toPresetInputStrings())
     }
     var presetsSaved by remember { mutableStateOf(false) }
+    var saveInProgress by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(quantityPresets) {
-        presetInputs = quantityPresets.toPresetInputStrings()
+    LaunchedEffect(seedKey, presets) {
+        presetInputs = presets.toPresetInputStrings()
+        presetsSaved = false
     }
 
     val parsedPresets = presetInputs.map(String::toDoubleOrNull)
@@ -161,14 +219,6 @@ internal fun QuickLogQuantityEditor(
                 ConsumptionPreferencesRepository.MAX_QUANTITY_PRESETS &&
             presetErrors.all { it == null }
 
-    Text("Quick-log quantities", style = MaterialTheme.typography.titleLarge)
-    Spacer(modifier = Modifier.height(8.dp))
-    Text(
-        "Choose up to 10 quantities to show as shortcuts when logging consumption.",
-        style = MaterialTheme.typography.bodyMedium
-    )
-    Spacer(modifier = Modifier.height(12.dp))
-
     presetInputs.forEachIndexed { index, input ->
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -183,7 +233,8 @@ internal fun QuickLogQuantityEditor(
                 label = { Text("Preset ${index + 1}") },
                 modifier = Modifier
                     .weight(1f)
-                    .testTag(QuickLogQuantityEditorTestTags.presetInput(index + 1)),
+                    .testTag(tags.presetInput(index + 1)),
+                enabled = !saveInProgress,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 isError = presetErrors[index] != null,
@@ -196,10 +247,10 @@ internal fun QuickLogQuantityEditor(
                     presetInputs = presetInputs.toMutableList().also { it.removeAt(index) }
                     presetsSaved = false
                 },
-                enabled = presetInputs.size >
+                enabled = !saveInProgress && presetInputs.size >
                     ConsumptionPreferencesRepository.MIN_QUANTITY_PRESETS,
                 modifier = Modifier
-                    .testTag(QuickLogQuantityEditorTestTags.removePreset(index + 1))
+                    .testTag(tags.removePreset(index + 1))
                     .semantics {
                         contentDescription = "Remove preset ${index + 1}"
                         if (
@@ -229,8 +280,8 @@ internal fun QuickLogQuantityEditor(
         },
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(QuickLogQuantityEditorTestTags.ADD_PRESET),
-        enabled = presetInputs.size <
+            .testTag(tags.addPreset),
+        enabled = !saveInProgress && presetInputs.size <
             ConsumptionPreferencesRepository.MAX_QUANTITY_PRESETS,
     ) {
         Text("Add preset")
@@ -243,25 +294,166 @@ internal fun QuickLogQuantityEditor(
     Spacer(modifier = Modifier.height(8.dp))
     Button(
         onClick = {
-            onSave(parsedPresets.filterNotNull())
-            presetsSaved = true
-            focusManager.clearFocus()
+            coroutineScope.launch {
+                saveInProgress = true
+                presetsSaved = false
+                val result = onSave(parsedPresets.filterNotNull())
+                if (result.isSuccess) {
+                    presetsSaved = true
+                    focusManager.clearFocus()
+                }
+                saveInProgress = false
+            }
         },
         modifier = Modifier
             .fillMaxWidth()
-            .testTag(QuickLogQuantityEditorTestTags.SAVE_PRESETS),
-        enabled = presetsAreValid
+            .testTag(tags.savePresets),
+        enabled = presetsAreValid && !saveInProgress,
     ) {
-        Text("Save quantity presets")
+        Text(saveButtonLabel)
     }
     if (presetsSaved) {
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            "Quantity presets saved",
+            savedMessage,
             color = MaterialTheme.colorScheme.primary,
             style = MaterialTheme.typography.bodyMedium
         )
     }
+}
+
+internal object ProductTypeQuantityEditorTestTags {
+    const val TYPE_PICKER = "type-quantities-type-picker"
+    const val TYPE_MENU = "type-quantities-type-menu"
+    const val STATUS = "type-quantities-status"
+    const val SUMMARY = "type-quantities-summary"
+    const val RESET = "type-quantities-reset"
+    const val ADD_PRESET = "type-quantities-add-preset"
+    const val SAVE_PRESETS = "type-quantities-save-presets"
+
+    fun typeOption(type: String) = "type-quantities-type-option-$type"
+    fun presetInput(position: Int) = "type-quantities-preset-input-$position"
+    fun removePreset(position: Int) = "type-quantities-remove-preset-$position"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun ProductTypeQuantityEditor(
+    productTypes: List<String>,
+    globalPresets: List<Double>,
+    overrides: Map<ProductTypeKey, List<Double>>,
+    onSave: suspend (String, List<Double>) -> Result<Unit>,
+    onReset: (String) -> Unit,
+) {
+    var selectedType by rememberSaveable { mutableStateOf(productTypes.firstOrNull().orEmpty()) }
+    var typeExpanded by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(productTypes) {
+        if (selectedType !in productTypes) {
+            selectedType = productTypes.firstOrNull().orEmpty()
+        }
+    }
+
+    Text("Quantities by product type", style = MaterialTheme.typography.titleLarge)
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        "Override the quantities above for one product type. Types without an override use the quantities above.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    if (productTypes.isEmpty()) {
+        Text("No product types available.", style = MaterialTheme.typography.bodyMedium)
+        return
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = typeExpanded,
+        onExpandedChange = { typeExpanded = !typeExpanded },
+    ) {
+        OutlinedTextField(
+            value = ProductTypes.displayName(selectedType),
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Product type") },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded)
+            },
+            modifier = Modifier
+                .menuAnchor()
+                .fillMaxWidth()
+                .testTag(ProductTypeQuantityEditorTestTags.TYPE_PICKER),
+        )
+        ExposedDropdownMenu(
+            expanded = typeExpanded,
+            onDismissRequest = { typeExpanded = false },
+            modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.TYPE_MENU),
+        ) {
+            productTypes.forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(ProductTypes.displayName(type)) },
+                    modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.typeOption(type)),
+                    onClick = {
+                        selectedType = type
+                        typeExpanded = false
+                    },
+                )
+            }
+        }
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+    val selectedOverride = overrides[ProductTypeKey(selectedType)]
+    val effectivePresets = ConsumptionPreferencesRepository.effectiveQuantityPresets(
+        globalPresets = globalPresets,
+        overrides = overrides,
+        productType = selectedType,
+    )
+    Text(
+        text = selectedOverride?.let { presets ->
+            "Custom: ${presets.joinToString(", ", transform = ::formatQuantityPreset)}"
+        } ?: "Using the default quantities",
+        modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.STATUS),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    QuantityPresetListEditor(
+        presets = effectivePresets,
+        tags = QuantityPresetEditorTags(
+            addPreset = ProductTypeQuantityEditorTestTags.ADD_PRESET,
+            savePresets = ProductTypeQuantityEditorTestTags.SAVE_PRESETS,
+            presetInputPrefix = "type-quantities-preset-input-",
+            removePresetPrefix = "type-quantities-remove-preset-",
+        ),
+        saveButtonLabel = "Save quantities for ${ProductTypes.displayName(selectedType)}",
+        savedMessage = "Quantities saved",
+        onSave = { presets -> onSave(selectedType, presets) },
+        seedKey = selectedType,
+    )
+
+    Spacer(modifier = Modifier.height(12.dp))
+    OutlinedButton(
+        onClick = { onReset(selectedType) },
+        enabled = overrides.containsKey(ProductTypeKey(selectedType)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(ProductTypeQuantityEditorTestTags.RESET),
+    ) {
+        Text("Use default quantities for ${ProductTypes.displayName(selectedType)}")
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+    val customTypes = overrides.keys.map { it.type }.sorted()
+    Text(
+        text = if (customTypes.isEmpty()) {
+            "No product types have custom quantities."
+        } else {
+            "Custom quantities: ${customTypes.joinToString(", ")}"
+        },
+        modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.SUMMARY),
+        style = MaterialTheme.typography.bodyMedium,
+    )
 }
 
 internal object QuickLogQuantityEditorTestTags {
@@ -333,6 +525,9 @@ internal fun endpointDiagnostic(url: String): String = runCatching {
     val deployment = uri.path.substringAfter("/macros/s/").substringBefore('/').takeLast(10)
     "${uri.host}/…$deployment"
 }.getOrDefault("invalid endpoint")
+
+private fun formatQuantityPreset(quantity: Double): String =
+    BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()
 
 private fun List<Double>.toPresetInputStrings(): List<String> {
     val validPresets = takeIf(ConsumptionPreferencesRepository::isValidQuantityPresets)
