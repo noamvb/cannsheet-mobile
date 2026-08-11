@@ -196,6 +196,7 @@ fun PurchaseContent(
                 categories.forEach { category ->
                     DropdownMenuItem(
                         text = { Text(category) },
+                        modifier = Modifier.testTag(PurchaseContentTestTags.typeOption(category)),
                         onClick = {
                             if (type != category) {
                                 type = category

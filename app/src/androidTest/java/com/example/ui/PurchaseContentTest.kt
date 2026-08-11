@@ -6,8 +6,6 @@ import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -189,7 +187,7 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).performTextInput("3.5")
 
         composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().performClick()
 
         composeRule.runOnIdle {
             assertEquals("P", submission?.type)
@@ -213,7 +211,7 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).performTextInput("1")
         composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).performScrollTo().performClick()
         composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).assertIsOn()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().performClick()
 
         composeRule.runOnIdle {
             assertEquals(0.0, submission?.cost)
@@ -256,6 +254,6 @@ class PurchaseContentTest {
 
     private fun selectType(type: String) {
         composeRule.onNodeWithTag(PurchaseContentTestTags.TYPE).performClick()
-        composeRule.onNode(hasText(type) and hasClickAction()).performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.typeOption(type)).performClick()
     }
 }

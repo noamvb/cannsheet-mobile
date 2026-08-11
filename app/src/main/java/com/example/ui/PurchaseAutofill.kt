@@ -24,6 +24,8 @@ object PurchaseContentTestTags {
     const val APPLIED_AUTOFILL = "purchase_applied_autofill"
 
     fun suggestion(name: String): String = "purchase_suggestion_${name.normalizedPurchaseValue()}"
+
+    fun typeOption(type: String): String = "purchase_type_option_${type.normalizedPurchaseValue()}"
 }
 
 internal fun String.normalizedPurchaseValue(): String = trim().lowercase(Locale.ROOT)
