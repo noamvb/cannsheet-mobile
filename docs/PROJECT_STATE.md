@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-08-10
+Last updated: 2026-08-11
 
 ## Repository state
 
@@ -26,6 +26,29 @@ Last updated: 2026-08-10
   [PR #21](https://github.com/noamvb/cannsheet-mobile/pull/21),
   [PR #22](https://github.com/noamvb/cannsheet-mobile/pull/22), and
   [PR #23](https://github.com/noamvb/cannsheet-mobile/pull/23).
+
+## Purchase autofill defaults feature work
+
+- The approved implementation is being developed on the clean feature branch
+  `codex/purchase-defaults`, based on main commit
+  `19fe80652fcd3fc4909a5138f22df815098493eb`.
+- The Purchase screen now supports type-first, explicit-suggestion autofill;
+  normalized product/type keys; saved-default precedence over catalog values;
+  canonical THC fractions; and an opt-in save-default switch for cost, THC,
+  and grams. Defaults are stored in a dedicated version-1 Preferences
+  DataStore and are not part of Room or the Apps Script queue contract.
+- The Undo countdown captures an immutable submission. After confirmation,
+  Room purchase persistence completes before the optional DataStore write;
+  default-write failure leaves the purchase queued and reports separate
+  feedback from sync status.
+- Local validation passed with normal Android SDK access:
+  `testDebugUnitTest`, `compileDebugAndroidTestKotlin`, `lintDebug`, and
+  `assembleDebug` all completed successfully. The focused DataStore and
+  purchase-persistence tests also passed. `node tests/backend_analytics_test.js`
+  passed with the existing 400-purchase/3,600-event benchmark.
+- No feature commit, push, pull request, CI run, device/emulator acceptance,
+  signed APK, release tag, public publication, or Obtainium update has been
+  performed yet. The current public release remains v1.2.20.
 
 ## Background synchronization feature work
 
@@ -241,18 +264,26 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Install or update to v1.2.20 on the intended phone, preferably through
-   Obtainium.
-2. Verify selected and recent product cards for zero, integer, fractional,
-   offline pending, successful sync, failed sync, and borrowed-product cases.
-3. Perform one controlled correction and confirm that the synced total changes
-   only after backend acknowledgement, without creating pending consumption.
-4. Retain the local background-sync screenshot with the task evidence; do not
-   commit device captures that contain private data.
-5. Trigger the periodic `SyncWorker` job on a device (`adb shell cmd jobscheduler run -f <package> <jobId>`), confirm via `adb logcat` that one `resource=insights` and one `resource=history` GET fire, and confirm a cold airplane-mode open shows the warmed cache with correction affordances still disabled.
+1. Complete the primary self-review of `codex/purchase-defaults`, then obtain
+   the explicit feature-delivery approval before committing, pushing, or
+   opening the focused draft PR.
+2. Run the configured PR workflow and require green Android/backend checks;
+   manually dispatch the API 24/API 36 validation when the repository workflow
+   requires it.
+3. Validate the exact merged-main SHA before beginning the separately gated
+   v1.2.21 version/signing/publication workflow.
+4. After release approval, independently verify the signed public APK and
+   perform the intended-phone Obtainium update acceptance. Keep device,
+   signing, publication, and Obtainium evidence separate from local/CI tests.
+5. Continue the existing v1.2.20 device checks for analytics prefetch and
+   correction-safe usage totals when a device session is available.
 
 ## Unresolved questions
 
+- Has the Purchase autofill feature passed the focused PR and exact-main CI
+  gates after it is committed and pushed?
+- Does the signed v1.2.21 APK independently verify and install through
+  Obtainium on the intended phone?
 - Does Obtainium detect and install v1.2.20 in place on the intended phone?
 - Do the confirmed-versus-pending totals remain clear during real offline,
   retry, borrowed-product, and correction workflows on the intended phone?

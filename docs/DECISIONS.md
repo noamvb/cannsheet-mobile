@@ -264,3 +264,53 @@ historical rationale.
   `app/src/test/java/com/example/data/sync/AnalyticsPrefetcherTest.kt`,
   `app/src/test/java/com/example/data/sync/SyncWorkerPrefetchGateTest.kt`,
   `docs/ARCHITECTURE.md`
+
+## ADR-009: Keep Purchase autofill defaults local and keyed by product name/type
+
+- Status: Accepted; implementation is on the `codex/purchase-defaults` feature
+  branch and is not yet merged or released
+- Date: 2026-08-11
+- Context: Purchase catalog rows can be incomplete, can share a name across
+  product types, and can change independently of a user's preferred cost,
+  THC, and grams. The feature needs to remember explicit user choices without
+  changing Room's pending queue schema or the Apps Script contract.
+- Decision:
+  1. Store defaults in one version-1 JSON value in a dedicated Preferences
+     DataStore named `purchase_defaults`, with one atomic full-map edit per
+     saved product/type key. Invalid records are skipped, malformed or
+     unsupported payloads load as an empty map, and deterministic type/name
+     ordering makes the stored representation stable.
+  2. Normalize keys with trimmed, locale-independent product names and types;
+     preserve the product type as part of identity so the same name in two
+     types cannot share defaults. Store THC as a fraction from `0.0` through
+     `1.0`, retaining explicit zero.
+  3. Use the saved map only after an explicit type-filtered suggestion
+     selection. A complete saved entry takes precedence over catalog values;
+     otherwise valid catalog fields are used as a fallback. Manually entered
+     products can become saved keys after a successful purchase.
+  4. Capture an immutable submission before the existing Undo countdown. After
+     the countdown, write the purchase to Room first, then attempt the optional
+     DataStore write, and then follow the existing synchronization path. A
+     canceled countdown writes neither item; a DataStore failure never removes
+     or retries the already-queued purchase.
+  5. Keep default-save validation stricter than ordinary unchecked purchases:
+     cost is finite and non-negative, THC is explicitly entered and within
+     `0..100` percent, grams is finite and positive, and name/type are
+     nonblank. Feedback about purchase/default persistence is separate from
+     the existing sync status.
+- Rationale: A local preference is available offline, avoids a Room migration,
+  preserves the existing queue and backend idempotency boundaries, and lets a
+  user correct or replace future defaults without mutating catalog data.
+- Consequences: `CannsheetGraph` owns one `PurchaseDefaultsRepository`; the
+  feature adds no backend fields, endpoint behavior, UUID behavior, Room
+  tables, version metadata, signing configuration, or release publication.
+  Device, CI, and Obtainium evidence remain separate from the local checks for
+  this unmerged feature branch.
+- Related files: `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt`,
+  `app/src/main/java/com/example/data/CannsheetGraph.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/main/java/com/example/ui/PurchaseScreen.kt`,
+  `app/src/main/java/com/example/ui/PurchaseAutofill.kt`,
+  `app/src/test/java/com/example/data/PurchaseDefaultsRepositoryTest.kt`,
+  `app/src/test/java/com/example/ui/PurchasePersistenceTest.kt`,
+  `app/src/androidTest/java/com/example/ui/PurchaseContentTest.kt`

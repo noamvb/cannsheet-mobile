@@ -17,6 +17,8 @@ import com.example.data.ProductInteraction
 import com.example.data.ProductCatalogRefreshResult
 import com.example.data.ProductStatus
 import com.example.data.PurchaseAction
+import com.example.data.PurchaseDefaultsState
+import com.example.data.PurchaseSubmission
 import com.example.data.PendingConsumptionCorrection
 import com.example.data.SyncOutcome
 import com.example.data.SyncPreferences
@@ -48,6 +50,10 @@ data class RecentProduct(
     val lastQuantity: Double,
 )
 
+data class PurchaseFeedback(
+    val message: String,
+)
+
 class CannsheetViewModel(application: Application) : AndroidViewModel(application) {
     private val graph = CannsheetGraph.get(application)
     private val repository = graph.repository
@@ -66,6 +72,16 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     val allProducts: StateFlow<List<Product>> = repository.allProducts
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val purchaseDefaultsState: StateFlow<PurchaseDefaultsState> =
+        graph.purchaseDefaultsRepository.state.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            PurchaseDefaultsState.NotLoaded,
+        )
+
+    private val _purchaseFeedback = MutableStateFlow<PurchaseFeedback?>(null)
+    val purchaseFeedback: StateFlow<PurchaseFeedback?> = _purchaseFeedback
 
     val productInteractions: StateFlow<List<ProductInteraction>> = repository.productInteractions
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -215,6 +231,17 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun queuePurchase(submission: PurchaseSubmission) {
+        countdownJob?.cancel()
+        pendingConsumptionAction = null
+        pendingBorrowedConsumptionAction = null
+        pendingFinishAction = null
+        pendingPurchaseAction = {
+            submitPurchase(submission)
+        }
+        startCountdown()
+    }
+
     fun queuePurchase(
         date: String,
         type: String,
@@ -225,14 +252,19 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         borrowed: Boolean,
         postTax: Boolean,
     ) {
-        countdownJob?.cancel()
-        pendingConsumptionAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = null
-        pendingPurchaseAction = {
-            addPurchase(date, type, name, cost, thc, grams, borrowed, postTax)
-        }
-        startCountdown()
+        queuePurchase(
+            PurchaseSubmission(
+                date = date,
+                type = type,
+                name = name,
+                cost = cost,
+                thc = thc,
+                grams = grams,
+                borrowed = borrowed,
+                postTax = postTax,
+                saveAsDefault = false,
+            ),
+        )
     }
 
     fun queueConsumption(
@@ -348,21 +380,64 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         borrowed: Boolean,
         postTax: Boolean,
     ) {
-        viewModelScope.launch {
-            val action = PurchaseAction(
-                tempId = "temp_${UUID.randomUUID()}",
-                actionId = UUID.randomUUID().toString(),
+        submitPurchase(
+            PurchaseSubmission(
                 date = date,
                 type = type,
                 name = name,
                 cost = cost,
                 thc = thc,
                 grams = grams,
-                borrowed = if (borrowed) 1 else 0,
+                borrowed = borrowed,
                 postTax = postTax,
+                saveAsDefault = false,
+            ),
+        )
+    }
+
+    private fun submitPurchase(submission: PurchaseSubmission) {
+        viewModelScope.launch {
+            val action = PurchaseAction(
+                tempId = "temp_${UUID.randomUUID()}",
+                actionId = UUID.randomUUID().toString(),
+                date = submission.date,
+                type = submission.type,
+                name = submission.name,
+                cost = submission.cost,
+                thc = submission.thc,
+                grams = submission.grams,
+                borrowed = if (submission.borrowed) 1 else 0,
+                postTax = submission.postTax,
             )
-            repository.addPurchase(action)
-            _syncStatus.value = "Purchase saved offline"
+            when (
+                val result = persistPurchaseAndDefault(
+                    saveAsDefault = submission.saveAsDefault,
+                    persistPurchase = { repository.addPurchase(action) },
+                    persistDefault = { graph.purchaseDefaultsRepository.saveDefault(submission) },
+                )
+            ) {
+                is PurchasePersistenceResult.PurchaseFailed -> {
+                    _purchaseFeedback.value = PurchaseFeedback("Purchase could not be saved.")
+                    return@launch
+                }
+
+                PurchasePersistenceResult.PurchaseSaved -> {
+                    _syncStatus.value = "Purchase saved offline"
+                }
+
+                PurchasePersistenceResult.PurchaseAndDefaultSaved -> {
+                    _purchaseFeedback.value =
+                        PurchaseFeedback("Purchase saved and future defaults updated.")
+                    _syncStatus.value = "Purchase saved offline"
+                }
+
+                is PurchasePersistenceResult.PurchaseSavedDefaultFailed -> {
+                    _purchaseFeedback.value = PurchaseFeedback(
+                        "Purchase saved, but future defaults could not be updated.",
+                    )
+                    _syncStatus.value = "Purchase saved offline"
+                }
+            }
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
         }
@@ -693,6 +768,10 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun clearSyncStatus() {
         _syncStatus.value = null
+    }
+
+    fun clearPurchaseFeedback() {
+        _purchaseFeedback.value = null
     }
 
     private fun defaultQuantity(): Double =
