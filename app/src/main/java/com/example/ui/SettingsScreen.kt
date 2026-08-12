@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.ProductTypeKey
@@ -32,6 +33,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val pendingCount by viewModel.pendingActionCount.collectAsState()
     val quantityPresets by viewModel.quantityPresets.collectAsState()
     val quantityPresetOverrides by viewModel.quantityPresetOverrides.collectAsState()
+    val secondsPerUseOverrides by viewModel.secondsPerUseOverrides.collectAsState()
     val productTypeOptions by viewModel.productTypeOptions.collectAsState()
     val timerValue by viewModel.submissionTimer.collectAsState()
     val backgroundSyncPreferences by viewModel.backgroundSyncPreferences.collectAsState()
@@ -82,6 +84,9 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             overrides = quantityPresetOverrides,
             onSave = viewModel::updateQuantityPresetsForType,
             onReset = viewModel::clearQuantityPresetsForType,
+            secondsPerUseOverrides = secondsPerUseOverrides,
+            onSaveSecondsPerUse = viewModel::updateSecondsPerUseForType,
+            onClearSecondsPerUse = viewModel::clearSecondsPerUseForType,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -330,6 +335,10 @@ internal object ProductTypeQuantityEditorTestTags {
     const val RESET = "type-quantities-reset"
     const val ADD_PRESET = "type-quantities-add-preset"
     const val SAVE_PRESETS = "type-quantities-save-presets"
+    const val DURATION_SWITCH = "type-quantities-duration-switch"
+    const val SECONDS_PER_USE = "type-quantities-seconds-per-use"
+    const val SAVE_DURATION = "type-quantities-save-duration"
+    const val DURATION_PREVIEW = "type-quantities-duration-preview"
 
     fun typeOption(type: String) = "type-quantities-type-option-$type"
     fun presetInput(position: Int) = "type-quantities-preset-input-$position"
@@ -344,9 +353,18 @@ internal fun ProductTypeQuantityEditor(
     overrides: Map<ProductTypeKey, List<Double>>,
     onSave: suspend (String, List<Double>) -> Result<Unit>,
     onReset: (String) -> Unit,
+    secondsPerUseOverrides: Map<ProductTypeKey, Double> = emptyMap(),
+    onSaveSecondsPerUse: suspend (String, Double) -> Result<Unit> = { _, _ -> Result.success(Unit) },
+    onClearSecondsPerUse: (String) -> Unit = {},
 ) {
     var selectedType by rememberSaveable { mutableStateOf(productTypes.firstOrNull().orEmpty()) }
     var typeExpanded by rememberSaveable { mutableStateOf(false) }
+    var durationEnabled by remember { mutableStateOf(false) }
+    var secondsPerUseInput by remember { mutableStateOf("") }
+    var durationSaved by remember { mutableStateOf(false) }
+    var durationSaveInProgress by remember { mutableStateOf(false) }
+    val focusManager = LocalFocusManager.current
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(productTypes) {
         if (selectedType !in productTypes) {
@@ -404,6 +422,12 @@ internal fun ProductTypeQuantityEditor(
 
     Spacer(modifier = Modifier.height(12.dp))
     val selectedOverride = overrides[ProductTypeKey(selectedType)]
+    val selectedSecondsPerUse = secondsPerUseOverrides[ProductTypeKey(selectedType)]
+    LaunchedEffect(selectedType, selectedSecondsPerUse) {
+        durationEnabled = selectedSecondsPerUse != null
+        secondsPerUseInput = selectedSecondsPerUse?.let(::formatQuantityPreset).orEmpty()
+        durationSaved = false
+    }
     val effectivePresets = ConsumptionPreferencesRepository.effectiveQuantityPresets(
         globalPresets = globalPresets,
         overrides = overrides,
@@ -414,6 +438,107 @@ internal fun ProductTypeQuantityEditor(
             "Custom: ${presets.joinToString(", ", transform = ::formatQuantityPreset)}"
         } ?: "Using the default quantities",
         modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.STATUS),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text("Enter quantity as duration", fontWeight = FontWeight.Medium)
+            Text(
+                "Show duration chips while storing the same quantity in uses.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Switch(
+            checked = durationEnabled,
+            onCheckedChange = { enabled ->
+                durationEnabled = enabled
+                durationSaved = false
+                if (!enabled) {
+                    onClearSecondsPerUse(selectedType)
+                    focusManager.clearFocus()
+                }
+            },
+            modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.DURATION_SWITCH),
+            enabled = !durationSaveInProgress,
+        )
+    }
+
+    if (durationEnabled) {
+        Spacer(modifier = Modifier.height(8.dp))
+        val parsedSecondsPerUse = secondsPerUseInput.toDoubleOrNull()
+        val secondsPerUseError = when {
+            secondsPerUseInput.isBlank() -> "Required"
+            parsedSecondsPerUse == null || !parsedSecondsPerUse.isFinite() -> "Enter a valid number"
+            !ConsumptionPreferencesRepository.isValidSecondsPerUse(parsedSecondsPerUse) ->
+                "Must be greater than 0 and no more than ${ConsumptionPreferencesRepository.MAX_SECONDS_PER_USE}"
+            else -> null
+        }
+        OutlinedTextField(
+            value = secondsPerUseInput,
+            onValueChange = {
+                secondsPerUseInput = it
+                durationSaved = false
+            },
+            label = { Text("Seconds per use") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            singleLine = true,
+            enabled = !durationSaveInProgress,
+            isError = secondsPerUseError != null,
+            supportingText = secondsPerUseError?.let { error -> { Text(error) } },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(ProductTypeQuantityEditorTestTags.SECONDS_PER_USE),
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Button(
+            onClick = {
+                secondsPerUseInput.toDoubleOrNull()?.let { seconds ->
+                    coroutineScope.launch {
+                        durationSaveInProgress = true
+                        durationSaved = false
+                        val result = onSaveSecondsPerUse(selectedType, seconds)
+                        if (result.isSuccess) {
+                            durationSaved = true
+                            focusManager.clearFocus()
+                        }
+                        durationSaveInProgress = false
+                    }
+                }
+            },
+            enabled = secondsPerUseError == null && !durationSaveInProgress,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(ProductTypeQuantityEditorTestTags.SAVE_DURATION),
+        ) {
+            Text("Save duration")
+        }
+        if (durationSaved) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Duration saved",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+    }
+
+    val previewSecondsPerUse = if (durationEnabled) {
+        secondsPerUseInput.toDoubleOrNull()
+            ?.takeIf(ConsumptionPreferencesRepository::isValidSecondsPerUse)
+    } else {
+        null
+    }
+    Text(
+        text = "Presets show as: ${effectivePresets.joinToString(" · ") { preset ->
+            formatQuantityInInputUnit(preset, previewSecondsPerUse)
+        }}",
+        modifier = Modifier.testTag(ProductTypeQuantityEditorTestTags.DURATION_PREVIEW),
         style = MaterialTheme.typography.bodyMedium,
     )
     Spacer(modifier = Modifier.height(12.dp))

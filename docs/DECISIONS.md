@@ -193,6 +193,58 @@ historical rationale.
   `app/src/main/java/com/example/ui`, `app/build.gradle.kts`,
   `docs/ARCHITECTURE.md`
 
+## ADR-012: Make pen quick logging duration-based without changing the wire unit
+
+- Status: Accepted; implementation delivered through the one-tap pen logging
+  feature branch
+- Date: 2026-08-11
+- Context: Pen entries are the common consumption path, but the battery reports
+  pull duration in seconds while the app stores and transmits uses. A single
+  pen cart can be in the battery at a time, so repeatedly choosing a product
+  and doing the seconds-to-uses arithmetic adds avoidable work. The existing
+  submission countdown also discarded a pending action when another action was
+  queued during the cancellation window.
+- Decision:
+  1. Keep uses as the only stored and transmitted quantity. Store an optional
+     seconds-per-use rate per product type and use decimal-safe conversion only
+     for duration chip labels; custom quantity entry remains in uses.
+  2. Seed the missing duration payload with `P = 10.0` seconds per use. Once a
+     versioned payload exists, an absent `P` record is an explicit off state and
+     must not be reseeded. Invalid payloads load defensively as an empty map,
+     and clearing a rate writes an explicit empty/reduced payload.
+  3. Track one loaded pen product ID locally. A valid explicit selectable `P`
+     product wins; otherwise the most recently logged selectable `P` product is
+     the fallback. A successful local pen log moves the loaded ID to that
+     product, while finishing the loaded product clears it.
+  4. Render one-tap duration chips only for a resolved loaded pen. Route each
+     chip through the existing `queueConsumption` countdown so CANCEL, SUBMIT
+     NOW, offline Room persistence, acknowledgement rules, and the PR 1 flush
+     behavior remain the single submission path.
+  5. Replace the four pending countdown callbacks with one take-once holder.
+     Replacing an action returns the displaced callback so it is invoked before
+     the new countdown starts; cancel takes it without invoking it.
+- Rationale: The UI becomes one tap for the pen-specific common case while the
+  durable quantity unit, queue identity, timestamp capture, sync protocol, and
+  backend contract remain unchanged. Explicit preference semantics prevent a
+  user-cleared rate from silently returning on a later read.
+- Consequences: The app gains two local DataStore values and a pen-specific Log
+  card plus Settings controls. No Room migration, Apps Script change, endpoint
+  change, spreadsheet write change, or release metadata change is required.
+  Physical-device acceptance still needs a bounded isolated build because the
+  debug APK must not overlay the production-signed package.
+- Related files: `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`,
+  `app/src/main/java/com/example/ui/QuantityUnits.kt`,
+  `app/src/main/java/com/example/ui/PenQuickLog.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/main/java/com/example/ui/ConsumptionScreen.kt`,
+  `app/src/main/java/com/example/ui/SettingsScreen.kt`,
+  `app/src/test/java/com/example/data/SecondsPerUseOverridesTest.kt`,
+  `app/src/test/java/com/example/ui/QuantityUnitsTest.kt`,
+  `app/src/test/java/com/example/ui/PenQuickLogTest.kt`,
+  `app/src/androidTest/java/com/example/ui/PenQuickLogCardTest.kt`,
+  `app/src/androidTest/java/com/example/ui/ProductTypeQuantityEditorTest.kt`,
+  `docs/ARCHITECTURE.md`
+
 ## ADR-008: Warm the analytics cache from periodic background sync
 
 - Status: Accepted; merged and released as Cannsheet Mobile v1.2.20

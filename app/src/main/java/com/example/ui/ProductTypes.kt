@@ -3,6 +3,8 @@ package com.example.ui
 import java.util.Locale
 
 internal object ProductTypes {
+    const val PEN = "P"
+
     /** Keep this exact order: it is the Purchase screen's dropdown order. */
     val CODES: List<String> = listOf("P", "E", "J", "F", "S", "K")
 

@@ -28,6 +28,7 @@ import com.example.data.productStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -98,6 +99,17 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         consumptionPreferences.quantityPresetOverrides
             .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    val secondsPerUseOverrides: StateFlow<Map<ProductTypeKey, Double>> =
+        consumptionPreferences.secondsPerUseOverrides
+            .stateIn(
+                viewModelScope,
+                SharingStarted.Eagerly,
+                ConsumptionPreferencesRepository.DEFAULT_SECONDS_PER_USE_OVERRIDES,
+            )
+
+    val loadedPenProductId: StateFlow<String?> = consumptionPreferences.loadedPenProductId
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val includeUnopened: StateFlow<Boolean> = consumptionPreferences.includeUnopened
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
@@ -129,6 +141,37 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyMap())
 
+    private data class PenPresetInputs(
+        val globalPresets: List<Double>,
+        val presetOverrides: Map<ProductTypeKey, List<Double>>,
+        val secondsPerUseOverrides: Map<ProductTypeKey, Double>,
+    )
+
+    private val penPresetInputs: Flow<PenPresetInputs> = combine(
+        quantityPresets,
+        quantityPresetOverrides,
+        secondsPerUseOverrides,
+        ::PenPresetInputs,
+    )
+
+    val penQuickLogState: StateFlow<PenQuickLogState> = combine(
+        allProducts,
+        productInteractions,
+        loadedPenProductId,
+        pendingUsesByProduct,
+        penPresetInputs,
+    ) { products, interactions, explicitProductId, pending, inputs ->
+        buildPenQuickLogState(
+            products = products,
+            interactions = interactions,
+            explicitProductId = explicitProductId,
+            globalPresets = inputs.globalPresets,
+            presetOverrides = inputs.presetOverrides,
+            secondsPerUseOverrides = inputs.secondsPerUseOverrides,
+            pendingUsesByProduct = pending,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, PenQuickLogState.Unavailable)
+
     private val _consumptionFormState = MutableStateFlow(ConsumptionFormState())
     val consumptionFormState: StateFlow<ConsumptionFormState> = _consumptionFormState
 
@@ -153,6 +196,15 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         SharingStarted.Eagerly,
         ConsumptionPreferencesRepository.DEFAULT_QUANTITY_PRESETS,
     )
+
+    val effectiveSecondsPerUse: StateFlow<Double?> = combine(
+        allProducts,
+        consumptionFormState,
+        secondsPerUseOverrides,
+    ) { products, form, overrides ->
+        val type = products.firstOrNull { it.id == form.selectedProductId }?.type
+        ConsumptionPreferencesRepository.effectiveSecondsPerUse(overrides, type)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val pendingActionCount: StateFlow<Int> = repository.pendingActionCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
@@ -218,6 +270,21 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    suspend fun updateSecondsPerUseForType(
+        type: String,
+        secondsPerUse: Double,
+    ): Result<Unit> = runCatching {
+        consumptionPreferences.setSecondsPerUseForType(ProductTypeKey(type), secondsPerUse)
+    }.onFailure { _syncStatus.value = it.message ?: "Could not save seconds per use" }
+
+    fun clearSecondsPerUseForType(type: String) {
+        viewModelScope.launch {
+            runCatching {
+                consumptionPreferences.clearSecondsPerUseForType(ProductTypeKey(type))
+            }.onFailure { _syncStatus.value = it.message ?: "Could not reset seconds per use" }
+        }
+    }
+
     fun setIncludeUnopened(include: Boolean) {
         viewModelScope.launch {
             consumptionPreferences.setIncludeUnopened(include)
@@ -255,6 +322,21 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         _consumptionFormState.value = ConsumptionFormState(
             quantityText = formatQuantity(defaultQuantity()),
         )
+    }
+
+    fun quickLogPen(uses: Double) {
+        val loaded = penQuickLogState.value as? PenQuickLogState.Loaded ?: return
+        if (!uses.isFinite() || uses <= 0.0) return
+        val at = currentSubmissionDateTime()
+        queueConsumption(at.date, at.time, loaded.product.id, uses, isFinished = false)
+    }
+
+    fun setLoadedPenProduct(productId: String) {
+        viewModelScope.launch {
+            runCatching {
+                consumptionPreferences.setLoadedPenProductId(productId)
+            }.onFailure { _syncStatus.value = it.message ?: "Could not save the loaded pen cart" }
+        }
     }
 
     fun fetchProducts() {
@@ -472,6 +554,16 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 productUuid = allProducts.value.firstOrNull { it.id == productId }?.productUuid,
             )
             repository.addConsumption(action, System.currentTimeMillis())
+            val loggedType = allProducts.value.firstOrNull { it.id == productId }
+                ?.type
+                ?.let(ProductTypes::normalize)
+            if (loggedType == ProductTypes.PEN) {
+                if (isFinished) {
+                    consumptionPreferences.clearLoadedPenProductId()
+                } else {
+                    consumptionPreferences.setLoadedPenProductId(productId)
+                }
+            }
             if (isFinished && _consumptionFormState.value.selectedProductId == productId) {
                 clearConsumptionSelection()
             }
@@ -541,6 +633,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     productUuid = productUuid,
                 ),
             )
+            val finishedType = allProducts.value.firstOrNull { it.id == productId }
+                ?.type
+                ?.let(ProductTypes::normalize)
+            if (finishedType == ProductTypes.PEN && loadedPenProductId.value == productId) {
+                consumptionPreferences.clearLoadedPenProductId()
+            }
             if (_consumptionFormState.value.selectedProductId == productId) {
                 clearConsumptionSelection()
             }

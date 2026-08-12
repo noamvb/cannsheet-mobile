@@ -63,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -87,6 +88,118 @@ private val categoryColors = mapOf(
     "K" to Color(0xFF4DB6AC),
 )
 
+private enum class ProductPickerMode {
+    LOG_TARGET,
+    LOADED_PEN,
+}
+
+internal object PenQuickLogTestTags {
+    const val CARD = "pen-quick-log-card"
+    const val CHOOSE_CART = "pen-quick-log-choose-cart"
+    const val SWAP_CART = "pen-quick-log-swap-cart"
+
+    fun quickLogChip(position: Int) = "pen-quick-log-chip-$position"
+}
+
+@Composable
+internal fun PenQuickLogCard(
+    state: PenQuickLogState,
+    onQuickLogPen: (Double) -> Unit,
+    onChooseCart: () -> Unit,
+) {
+    when (state) {
+        PenQuickLogState.Unavailable -> Unit
+        PenQuickLogState.NoCartLoaded -> {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(PenQuickLogTestTags.CARD),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Which cart is in the battery?", style = MaterialTheme.typography.titleMedium)
+                    Button(
+                        onClick = onChooseCart,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag(PenQuickLogTestTags.CHOOSE_CART),
+                    ) {
+                        Text("Choose pen cart")
+                    }
+                }
+            }
+        }
+
+        is PenQuickLogState.Loaded -> {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(PenQuickLogTestTags.CARD),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(state.product.name, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                state.syncedUses?.let {
+                                    "${state.product.productStatus.label} · synced ${formatUsageAmount(it)} uses"
+                                } ?: "${state.product.productStatus.label} · synced unavailable",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            if (state.pendingUses > 0.0) {
+                                Text(
+                                    "Pending: +${formatUsageAmount(state.pendingUses)} uses",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                        TextButton(
+                            onClick = onChooseCart,
+                            modifier = Modifier.testTag(PenQuickLogTestTags.SWAP_CART),
+                        ) {
+                            Text("Swap cart")
+                        }
+                    }
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(state.presetUses) { preset ->
+                            val position = state.presetUses.indexOf(preset) + 1
+                            FilterChip(
+                                selected = false,
+                                onClick = { onQuickLogPen(preset) },
+                                label = {
+                                    Text(formatQuantityInInputUnit(preset, state.secondsPerUse))
+                                },
+                                modifier = Modifier.testTag(
+                                    PenQuickLogTestTags.quickLogChip(position),
+                                ),
+                            )
+                        }
+                    }
+                    Text(
+                        "${formatQuantityInInputUnit(1.0, state.secondsPerUse)} = 1 use",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConsumptionScreen(viewModel: CannsheetViewModel) {
@@ -96,6 +209,8 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
     val includeUnopened by viewModel.includeUnopened.collectAsStateWithLifecycle()
     val formState by viewModel.consumptionFormState.collectAsStateWithLifecycle()
     val pendingUsesByProduct by viewModel.pendingUsesByProduct.collectAsStateWithLifecycle()
+    val penQuickLog by viewModel.penQuickLogState.collectAsStateWithLifecycle()
+    val secondsPerUse by viewModel.effectiveSecondsPerUse.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -119,6 +234,10 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         onLog = viewModel::queueConsumption,
         onLogBorrowed = viewModel::queueBorrowedConsumption,
         onFinishWithoutConsumption = viewModel::queueFinishProduct,
+        penQuickLog = penQuickLog,
+        secondsPerUse = secondsPerUse,
+        onQuickLogPen = viewModel::quickLogPen,
+        onChooseLoadedPen = viewModel::setLoadedPenProduct,
     )
 }
 
@@ -137,8 +256,13 @@ fun ConsumptionContent(
     onLog: (String, String, String, Double, Boolean) -> Unit,
     onLogBorrowed: (date: String, time: String, type: String, name: String, uses: Double) -> Unit,
     onFinishWithoutConsumption: (String) -> Unit,
+    penQuickLog: PenQuickLogState = PenQuickLogState.Unavailable,
+    secondsPerUse: Double? = null,
+    onQuickLogPen: (Double) -> Unit = {},
+    onChooseLoadedPen: (String) -> Unit = {},
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
+    var pickerMode by rememberSaveable { mutableStateOf(ProductPickerMode.LOG_TARGET) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var isFinished by rememberSaveable { mutableStateOf(false) }
@@ -174,21 +298,57 @@ fun ConsumptionContent(
             category = selectedCategory,
         )
     }
+    val penPickerProducts = remember(
+        allProducts,
+        includeUnopened,
+        searchQuery,
+    ) {
+        filterSelectableProducts(
+            products = allProducts,
+            includeUnopened = includeUnopened,
+            query = searchQuery,
+            category = ProductTypes.PEN,
+        )
+    }
+    val pickerProducts = if (pickerMode == ProductPickerMode.LOADED_PEN) {
+        penPickerProducts
+    } else {
+        filteredProducts
+    }
+    val pickerCategories = if (pickerMode == ProductPickerMode.LOADED_PEN) {
+        listOf(ProductTypes.PEN)
+    } else {
+        categories
+    }
+    val pickerCategory = if (pickerMode == ProductPickerMode.LOADED_PEN) {
+        ProductTypes.PEN
+    } else {
+        selectedCategory
+    }
 
     if (showProductPicker) {
         ProductPickerSheet(
-            products = filteredProducts,
-            categories = categories,
-            selectedCategory = selectedCategory,
+            products = pickerProducts,
+            categories = pickerCategories,
+            selectedCategory = pickerCategory,
             searchQuery = searchQuery,
             includeUnopened = includeUnopened,
             onSearchQueryChange = { searchQuery = it },
-            onCategoryChange = { selectedCategory = it },
+            onCategoryChange = {
+                if (pickerMode == ProductPickerMode.LOG_TARGET) {
+                    selectedCategory = it
+                }
+            },
             onIncludeUnopenedChange = onIncludeUnopenedChange,
             onProductSelected = { product ->
-                onSelectProduct(product.id)
+                if (pickerMode == ProductPickerMode.LOADED_PEN) {
+                    onChooseLoadedPen(product.id)
+                } else {
+                    onSelectProduct(product.id)
+                }
                 validationMessage = null
                 showProductPicker = false
+                pickerMode = ProductPickerMode.LOG_TARGET
             },
             onDismiss = { showProductPicker = false },
         )
@@ -369,6 +529,19 @@ fun ConsumptionContent(
                 Text("Log Consumption", style = MaterialTheme.typography.headlineMedium)
             }
 
+            if (penQuickLog !is PenQuickLogState.Unavailable) {
+                item {
+                    PenQuickLogCard(
+                        state = penQuickLog,
+                        onQuickLogPen = onQuickLogPen,
+                        onChooseCart = {
+                            pickerMode = ProductPickerMode.LOADED_PEN
+                            showProductPicker = true
+                        },
+                    )
+                }
+            }
+
             if (recentProducts.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -394,7 +567,10 @@ fun ConsumptionContent(
                 ProductSelectionCard(
                     product = selectedProduct,
                     pendingUses = selectedProduct?.let { pendingUsesByProduct[it.id] } ?: 0.0,
-                    onClick = { showProductPicker = true },
+                    onClick = {
+                        pickerMode = ProductPickerMode.LOG_TARGET
+                        showProductPicker = true
+                    },
                 )
             }
 
@@ -413,6 +589,7 @@ fun ConsumptionContent(
             item {
                 QuantitySection(
                     presets = quantityPresets,
+                    secondsPerUse = secondsPerUse,
                     quantityText = formState.quantityText,
                     onQuantityChange = {
                         onQuantityChange(it)
@@ -651,6 +828,7 @@ private fun ProductSelectionCard(product: Product?, pendingUses: Double, onClick
 @Composable
 private fun QuantitySection(
     presets: List<Double>,
+    secondsPerUse: Double?,
     quantityText: String,
     onQuantityChange: (String) -> Unit,
 ) {
@@ -662,14 +840,16 @@ private fun QuantitySection(
                 FilterChip(
                     selected = currentQuantity == preset,
                     onClick = { onQuantityChange(formatQuantity(preset)) },
-                    label = { Text(formatQuantity(preset)) },
+                    label = { Text(formatQuantityInInputUnit(preset, secondsPerUse)) },
                 )
             }
         }
         OutlinedTextField(
             value = quantityText,
             onValueChange = onQuantityChange,
-            label = { Text("Custom quantity") },
+            label = {
+                Text(if (secondsPerUse == null) "Custom quantity" else "Custom quantity (uses)")
+            },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             singleLine = true,
             isError = quantityText.isNotBlank() &&
@@ -870,7 +1050,9 @@ internal fun filterSelectableProducts(
             product.productStatus == ProductStatus.ACTIVE ||
                 (includeUnopened && product.productStatus == ProductStatus.UNOPENED)
         }
-        .filter { category == null || it.type == category }
+        .filter {
+            category == null || ProductTypes.normalize(it.type) == ProductTypes.normalize(category)
+        }
         .filter { product ->
             normalizedQuery.isEmpty() ||
                 product.name.contains(normalizedQuery, ignoreCase = true) ||

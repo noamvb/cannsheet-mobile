@@ -2,6 +2,7 @@ package com.example.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -40,6 +41,39 @@ class ConsumptionPreferencesRepositoryTest {
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(1.0, 1.0, 2.0)))
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(0.0, 1.0, 2.0)))
         assertFalse(ConsumptionPreferencesRepository.isValidQuantityPresets(listOf(Double.NaN, 1.0, 2.0)))
+    }
+
+    @Test
+    fun validatesSecondsPerUseBoundaries() {
+        assertTrue(ConsumptionPreferencesRepository.isValidSecondsPerUse(0.000001))
+        assertTrue(
+            ConsumptionPreferencesRepository.isValidSecondsPerUse(
+                ConsumptionPreferencesRepository.MAX_SECONDS_PER_USE,
+            ),
+        )
+        assertFalse(ConsumptionPreferencesRepository.isValidSecondsPerUse(0.0))
+        assertFalse(
+            ConsumptionPreferencesRepository.isValidSecondsPerUse(
+                ConsumptionPreferencesRepository.MAX_SECONDS_PER_USE + 0.1,
+            ),
+        )
+        assertFalse(ConsumptionPreferencesRepository.isValidSecondsPerUse(Double.NaN))
+        assertFalse(ConsumptionPreferencesRepository.isValidSecondsPerUse(Double.POSITIVE_INFINITY))
+    }
+
+    @Test
+    fun effectiveSecondsPerUseNormalizesTypeAndFallsBackToNull() {
+        val overrides = mapOf(ProductTypeKey("P") to 10.0)
+
+        assertEquals(10.0, ConsumptionPreferencesRepository.effectiveSecondsPerUse(overrides, " p "))
+        assertNull(ConsumptionPreferencesRepository.effectiveSecondsPerUse(overrides, null))
+        assertNull(ConsumptionPreferencesRepository.effectiveSecondsPerUse(overrides, " "))
+        assertNull(
+            ConsumptionPreferencesRepository.effectiveSecondsPerUse(
+                mapOf(ProductTypeKey("P") to 0.0),
+                "P",
+            ),
+        )
     }
 
     @Test
