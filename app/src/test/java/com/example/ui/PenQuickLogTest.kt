@@ -1,5 +1,7 @@
 package com.example.ui
 
+import com.example.domain.PenQuickLogState
+
 import com.example.data.Product
 import com.example.data.ProductInteraction
 import com.example.data.ProductTypeKey

@@ -3,14 +3,9 @@ package com.example.widget
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import com.example.R
 
 object PenWidgetUpdater {
-    private val updateScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-
     /** Safe to call from any app path; users without widget instances pay no update cost. */
     fun updateAll(context: Context) {
         val appContext = context.applicationContext
@@ -19,7 +14,7 @@ object PenWidgetUpdater {
         val appWidgetIds = manager.getAppWidgetIds(component)
         if (appWidgetIds.isEmpty()) return
 
-        updateScope.launch {
+        PenWidgetRuntime.launchSerialized {
             appWidgetIds.forEach { appWidgetId ->
                 update(appContext, appWidgetId)
             }
@@ -40,14 +35,19 @@ object PenWidgetUpdater {
         )
         val manager = AppWidgetManager.getInstance(appContext)
         val options = manager.getAppWidgetOptions(appWidgetId)
-        val showSubtitle = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0) >= 140
+        val subtitleMinHeightDp = (
+            appContext.resources.getDimension(R.dimen.widget_subtitle_min_height) /
+                appContext.resources.displayMetrics.density
+        ).toInt()
+        val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
+        val compact = minHeightDp in 1 until subtitleMinHeightDp
         manager.updateAppWidget(
             appWidgetId,
             PenWidgetRenderer.buildRemoteViews(
                 context = appContext,
                 appWidgetId = appWidgetId,
                 model = model,
-                showSubtitle = showSubtitle,
+                compact = compact,
             ),
         )
     }

@@ -13,7 +13,9 @@ class PenWidgetCommitWorker(
         val appWidgetId = inputData.getInt(INPUT_APP_WIDGET_ID, -1)
         val commitId = inputData.getString(INPUT_COMMIT_ID)
         if (appWidgetId >= 0 && !commitId.isNullOrBlank()) {
-            PenWidgetCommitCoordinator.commit(applicationContext, appWidgetId, commitId)
+            PenWidgetRuntime.withSerialized {
+                PenWidgetCommitCoordinator.commit(applicationContext, appWidgetId, commitId)
+            }
         }
         Result.success()
     } catch (error: CancellationException) {

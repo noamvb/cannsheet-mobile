@@ -4,7 +4,10 @@ Reviewed: 2026-08-12
 Subject: the home-screen pen consumption widget shipped in
 [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52) (`0e9bb65`) and
 released as v1.2.25.
-Status: proposal. Nothing in this document has been implemented.
+Status: implemented in [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55),
+with the review adjustments recorded below. Physical-launcher validation remains
+outstanding and is deliberately not inferred from source, local compilation, or
+emulator tests.
 
 ## 1. Scope and method
 
@@ -80,6 +83,34 @@ Three findings are data-safety issues that contradict guarantees `AGENTS.md` and
 | W-23 | Low | Seconds round-trip is lossy for non-divisor rates (10s at 7s/use redisplays as 9.999997s) |
 | W-24 | Low | Per-tap cost is a full DataStore scan plus three Room reads |
 | W-25 | Low | Layout and resource polish (invalid `fontFamily`, dead attribute, inconsistent defaults, no tap-through) |
+
+### Implementation resolution
+
+The remediation was consolidated into PR #55 at the user's direction rather
+than split across the six originally proposed PRs. W-01 through W-23 and the
+applicable W-25 items are implemented with these review adjustments:
+
+- Claims use both a unique claim token and a process-owner token. A different
+  process may immediately recover an abandoned claim; the same process waits
+  for the bounded stale-claim threshold. Completion must match the exact claim.
+- Widget submissions never update the current loaded-cart preference. The cart
+  is a submit-time input; a delayed commit must not mutate current selection.
+- The compact layout retains decrement, counter/Undo, increment, and submit
+  controls. Removing the step controls would make a newly placed compact widget
+  unable to build a duration.
+- `singleTop` is paired with an explicit one-shot navigation-event flow;
+  `setContent` remains an `onCreate` operation and `onNewIntent` does not rebuild
+  the Compose hierarchy.
+- The repository convenience `addConsumption(action)` overload remains because
+  Android regression tests use that API. W-24's caching/long-press optimization
+  remains deferred: it is a performance enhancement, not a correctness fix,
+  and would widen the state model without device profiling evidence.
+- No `onRestored` migration was added for the short-lived widget DataStore,
+  which is explicitly excluded from backup. Restore semantics therefore do not
+  apply to its pending payloads.
+
+The original findings and proposed fixes below are retained as the review
+record. Where they differ from this section, this resolution is authoritative.
 
 ## 3. Findings
 
@@ -719,10 +750,11 @@ not change stored precision — that would touch the wire contract. Add a test
 matrix over the rates above. Treat as its own PR, since it changes in-app
 display outside the widget.
 
-## 4. Sequenced remediation plan
+## 4. Original sequenced remediation plan
 
-Six PRs, each one coherent change per `AGENTS.md`. Ordering is by risk, and
-PR-1 through PR-3 are the ones that matter.
+This was the proposed six-PR sequence before the user directed that the whole
+review be implemented and merged through the existing branch. It is retained
+to show the original risk ordering; PR-1 through PR-3 were the critical path.
 
 ### PR-1 — Widget commit durability *(W-01, W-02, W-09, W-22)*
 

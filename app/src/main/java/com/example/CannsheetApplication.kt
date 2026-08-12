@@ -4,6 +4,8 @@ import android.app.Application
 import com.example.data.CannsheetGraph
 import com.example.data.sync.SyncScheduler
 import com.example.widget.PenWidgetCommitCoordinator
+import com.example.widget.PenWidgetRefresher
+import com.example.widget.PenWidgetRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -18,7 +20,8 @@ class CannsheetApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val graph = CannsheetGraph.get(this)
-        applicationScope.launch {
+        graph.installWidgetRefresher(PenWidgetRefresher(this))
+        PenWidgetRuntime.launchSerialized {
             PenWidgetCommitCoordinator.flushOverdue(this@CannsheetApplication, System.currentTimeMillis())
         }
         applicationScope.launch {

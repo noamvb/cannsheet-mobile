@@ -35,9 +35,11 @@ class ConsumptionLogger(
         uses: Double,
         isFinished: Boolean,
         loggedAtEpochMillis: Long = System.currentTimeMillis(),
+        eventId: String = UUID.randomUUID().toString(),
+        updateLoadedCart: Boolean = true,
     ) {
         val action = ConsumptionAction(
-            eventId = UUID.randomUUID().toString(),
+            eventId = eventId,
             date = date,
             time = time,
             productId = productId,
@@ -46,7 +48,7 @@ class ConsumptionLogger(
             productUuid = productUuid,
         )
         repository.addConsumption(action, loggedAtEpochMillis)
-        if (productType?.let(ProductTypeCodes::normalize) == ProductTypeCodes.PEN) {
+        if (updateLoadedCart && productType?.let(ProductTypeCodes::normalize) == ProductTypeCodes.PEN) {
             if (isFinished) {
                 consumptionPreferences.clearLoadedPenProductId()
             } else {

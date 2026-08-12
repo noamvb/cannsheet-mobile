@@ -49,7 +49,7 @@ class PenWidgetStateRepositoryTest {
     }
 
     @Test
-    fun submitUndoAndCommitAreAtomicStateTransitions() = runBlocking {
+    fun submitUndoClaimAndCompleteAreAtomicStateTransitions() = runBlocking {
         val payload = payload()
         assertTrue(repository.submitCommit(7, payload))
         assertFalse(repository.submitCommit(7, payload.copy(commitId = "second")))
@@ -58,9 +58,45 @@ class PenWidgetStateRepositoryTest {
         assertEquals(null, repository.read(7).pendingCommit)
 
         assertTrue(repository.submitCommit(7, payload))
-        assertEquals(payload, repository.takeCommit(7, payload.commitId, 1_000L))
-        assertEquals(1_000L, repository.read(7).lastQueuedAtMillis)
-        assertEquals(null, repository.takeCommit(7, payload.commitId, 2_000L))
+        val claim = repository.claimCommit(7, payload.commitId, 5_000L)
+        assertEquals(payload.eventId, claim?.payload?.eventId)
+        assertEquals(null, repository.claimCommit(7, payload.commitId, 5_001L))
+        assertTrue(repository.completeCommit(7, payload.commitId, requireNotNull(claim).claimId, 5_001L))
+        assertEquals(5_001L, repository.read(7).lastQueuedAtMillis)
+        assertEquals(null, repository.claimCommit(7, payload.commitId, 6_000L))
+    }
+
+    @Test
+    fun submitBuilderCapturesTheDraftInsideTheAtomicEdit() = runBlocking {
+        repository.adjustDraftSeconds(8, STEP_SECONDS)
+        repository.adjustDraftSeconds(8, STEP_SECONDS)
+
+        val submitted = repository.submitCommit(8) { seconds ->
+            payload().copy(seconds = seconds, uses = seconds / 10.0)
+        }
+
+        assertEquals(20, submitted?.seconds)
+        assertEquals(2.0, submitted?.uses ?: 0.0, 0.0)
+        assertEquals(0, repository.read(8).draftSeconds)
+    }
+
+    @Test
+    fun failedClaimCanReleaseAndStaleClaimCanBeRecovered() = runBlocking {
+        val payload = payload()
+        repository.submitCommit(11, payload)
+
+        val first = requireNotNull(repository.claimCommit(11, payload.commitId, 5_000L))
+        assertTrue(repository.releaseClaim(11, payload.commitId, first.claimId))
+        val second = requireNotNull(repository.claimCommit(11, payload.commitId, 5_001L))
+        assertEquals(payload.eventId, second.payload.eventId)
+
+        val recovered = repository.claimCommit(
+            11,
+            payload.commitId,
+            5_001L + CLAIM_STALE_MILLIS,
+        )
+        assertEquals(payload.eventId, recovered?.payload?.eventId)
+        assertFalse(second.claimId == recovered?.claimId)
     }
 
     @Test
@@ -78,6 +114,8 @@ class PenWidgetStateRepositoryTest {
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",
+        eventId = "event-1",
+        submittedAtEpochMillis = 0L,
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = "uuid-1",

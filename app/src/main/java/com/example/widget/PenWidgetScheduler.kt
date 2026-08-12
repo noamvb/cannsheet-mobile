@@ -27,7 +27,7 @@ object PenWidgetScheduler {
 
     internal fun commitRequest(appWidgetId: Int, commitId: String): OneTimeWorkRequest =
         OneTimeWorkRequestBuilder<PenWidgetCommitWorker>()
-            .setInitialDelay(UNDO_WINDOW_MILLIS, TimeUnit.MILLISECONDS)
+            .setInitialDelay(COMMIT_DELAY_MILLIS, TimeUnit.MILLISECONDS)
             .setInputData(
                 workDataOf(
                     INPUT_APP_WIDGET_ID to appWidgetId,

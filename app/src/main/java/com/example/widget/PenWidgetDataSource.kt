@@ -2,8 +2,8 @@ package com.example.widget
 
 import android.content.Context
 import com.example.data.CannsheetGraph
-import com.example.ui.PenQuickLogState
-import com.example.ui.buildPenQuickLogState
+import com.example.domain.PenQuickLogState
+import com.example.domain.buildPenQuickLogState
 import kotlinx.coroutines.flow.first
 
 object PenWidgetDataSource {

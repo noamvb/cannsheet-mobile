@@ -23,6 +23,11 @@ The implementation does not alter the Room schema, existing queue payloads,
 Apps Script contract, production endpoint, application ID, or signing
 configuration.
 
+Widget remediation [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55)
+implements the post-release source-review findings without changing v1.2.25
+release metadata. The original proposal and the accepted adjustments are
+recorded in `docs/WIDGET_REVIEW_PLAN.md`.
+
 ## Implementation
 
 - The widget uses the platform `AppWidgetProvider` and `RemoteViews` APIs, with
@@ -30,21 +35,27 @@ configuration.
 - It reuses the loaded-pen resolution, rate, date/time, and
   `ConsumptionLogger` boundaries. Seconds are display/input units only;
   `secondsToUses` converts before Room, the offline queue, or the wire.
-- Submit captures the product, stable consumption ID, date, time, rate,
-  displayed seconds, and converted uses in the `pen_widget_state` DataStore.
-  Room persistence is deferred for five seconds through unique WorkManager
-  work. The worker atomically takes the payload before using the shared logger
-  and immediate sync scheduler.
-- Undo and worker commit are arbitrated by the captured `commitId`. Cancelling
-  WorkManager is only an optimization; a late worker becomes a no-op, and no
-  already queued Room row is deleted. Overdue payloads are lazily flushed on
-  widget broadcasts and application startup.
+- Submit atomically captures the product, stable consumption event ID, submit
+  timing, date, time, rate, displayed seconds, and converted uses in payload
+  version 2 of `pen_widget_state`; valid version-1 payloads migrate on decode.
+- A process-local five-second timer is the primary Undo/delivery path, followed
+  by 1.5 seconds of grace. Unique WorkManager work is the process-death
+  backstop, while broadcasts and startup lazily flush overdue work. Maximum-age
+  and backwards-clock rules prevent a pending payload from wedging the widget.
+- Delivery claims without removing the payload, writes the stable event through
+  the shared logger, and completes/removes only the exact claim after Room is
+  durable. Failure releases it for retry; widget deletion force-commits first.
+  No widget retry deletes a queued Room row or changes the current loaded cart.
 - The state model is `Unavailable`, `NoCart`, `RateOff`, `Composing`, or
   `AwaitingCommit`. The draft starts at zero, moves in ten-second steps, clamps
   to 0..600 seconds, and enables submit only for a positive value.
-- Provider actions, application startup, loaded-cart/log/finish changes, and
-  acknowledged sync work request widget refreshes. The v1.2.25 source also
-  contains the API 24-safe `RemoteViews` rendering fix required by CI.
+- Provider actions and workers share serialized mutation/render execution.
+  Application startup, reactive pen-state changes, and acknowledged sync work
+  refresh through a data-facing interface, removing package dependency cycles.
+- Widget app opens use activity `PendingIntent`s and one-shot `singleTop`
+  navigation events without rebuilding Compose. Copy is resource-backed;
+  accessibility descriptions include the value and action; initial, picker,
+  full, and compact layouts have explicit usable sizing and confirmation.
 
 ## Validation and provenance
 
@@ -66,8 +77,21 @@ configuration.
   release session because the available JVM is Java 8 while Gradle 9.3.1
   requires Java 17 or newer; the GitHub Actions Android matrix is the
   authoritative Android build/test evidence.
+- PR #55 local validation passed with JDK 17.0.20, Android platform 36.1, and
+  Build Tools 36.0.0. The exact command was
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`;
+  it completed with `BUILD SUCCESSFUL`, 186 passing JVM tests, Android-test
+  Kotlin compilation, lint, and debug APK assembly. All eight checked-in Node.js
+  backend suites passed using the bundled Node runtime, and the Python backend
+  benchmark passed all 13 tests. The first JavaScript attempt found no `node` on
+  the shell PATH and executed no suites; the explicit bundled-runtime rerun is
+  the passing evidence.
 - Source previews and CI widget renderer/state tests are available. No
   production-device widget screenshot or action walkthrough was performed.
+- PR #55 adds a generated representative picker preview, but no physical
+  launcher sizing/action walkthrough, emulator instrumentation execution, or
+  production widget submission was run. Android instrumentation source compiled
+  in the local gate and is not being described as executed device coverage.
 
 ## Phone state and safety boundary
 
@@ -88,7 +112,8 @@ configuration.
 
 ## Recommended next action
 
-The release is complete. If physical widget visual/action coverage is desired,
+The release remains complete and PR #55 does not publish a new APK. If physical
+widget visual/action coverage is desired,
 build or obtain a separate sandbox/debug package with a non-production endpoint
 and test only that package: light/dark rendering, launcher sizing, +/- controls,
 reset, countdown/Undo, and all local message states. Do not use the signed
@@ -99,9 +124,9 @@ APK over it.
 
 - Seconds never enter the Room schema, offline queue, Apps Script request, or
   spreadsheet contract; only converted uses do.
-- The five-second widget payload is short-lived DataStore UI state and is
-  excluded from backup. Commit-ID arbitration makes Undo and late worker
-  callbacks safe without deleting existing queued actions.
+- The short-lived widget payload is excluded from backup. Claim/write/complete
+  keeps it recoverable until Room is durable, and stable-event arbitration makes
+  retries idempotent without deleting existing queued actions.
 - Existing Room migrations, immutable IDs, acknowledgement rules, retries,
   and synchronization locking remain unchanged.
 - Public documentation intentionally omits wireless ADB serials, private local

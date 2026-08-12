@@ -1,6 +1,6 @@
 package com.example.widget
 
-import com.example.ui.secondsToUses
+import com.example.domain.secondsToUses
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

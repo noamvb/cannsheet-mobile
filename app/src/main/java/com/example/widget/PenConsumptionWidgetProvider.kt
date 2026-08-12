@@ -4,14 +4,9 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import com.example.MainActivity
-import com.example.ui.PenQuickLogState
-import com.example.ui.currentSubmissionDateTime
-import com.example.ui.secondsToUses
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
+import com.example.domain.PenQuickLogState
+import com.example.domain.currentSubmissionDateTime
+import com.example.domain.secondsToUses
 import java.util.UUID
 
 class PenConsumptionWidgetProvider : AppWidgetProvider() {
@@ -23,13 +18,9 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         super.onUpdate(context, appWidgetManager, appWidgetIds)
         val pendingResult = goAsync()
         val appContext = context.applicationContext
-        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            try {
-                PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
-                appWidgetIds.forEach { PenWidgetUpdater.update(appContext, it) }
-            } finally {
-                pendingResult.finish()
-            }
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
+            appWidgetIds.forEach { PenWidgetUpdater.update(appContext, it) }
         }
     }
 
@@ -49,14 +40,32 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         super.onDeleted(context, appWidgetIds)
         val pendingResult = goAsync()
         val appContext = context.applicationContext
-        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            try {
-                PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
-                val state = PenWidgetStateRepository(appContext)
-                appWidgetIds.forEach { state.clear(it) }
-            } finally {
-                pendingResult.finish()
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            val state = PenWidgetStateRepository(appContext)
+            var firstFailure: Throwable? = null
+            appWidgetIds.forEach { appWidgetId ->
+                val commitResult = runCatching {
+                    PenWidgetCommitCoordinator.commit(
+                        context = appContext,
+                        appWidgetId = appWidgetId,
+                        commitId = null,
+                        force = true,
+                    )
+                }
+                commitResult.exceptionOrNull()?.let { error ->
+                    if (firstFailure == null) firstFailure = error
+                }
+                val stateReadResult = runCatching { state.read(appWidgetId).pendingCommit }
+                stateReadResult.exceptionOrNull()?.let { error ->
+                    if (firstFailure == null) firstFailure = error
+                }
+                if (stateReadResult.isSuccess && stateReadResult.getOrNull() == null) {
+                    PenWidgetRuntime.cancelCommitTimer(appWidgetId)
+                    PenWidgetScheduler.cancelCommit(appContext, appWidgetId)
+                    state.clear(appWidgetId)
+                }
             }
+            firstFailure?.let { throw it }
         }
     }
 
@@ -73,14 +82,10 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
 
         val pendingResult = goAsync()
         val appContext = context.applicationContext
-        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            try {
-                PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
-                handleAction(appContext, action, appWidgetId, intent)
-                PenWidgetUpdater.update(appContext, appWidgetId)
-            } finally {
-                pendingResult.finish()
-            }
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
+            handleAction(appContext, action, appWidgetId, intent)
+            PenWidgetUpdater.update(appContext, appWidgetId)
         }
     }
 
@@ -99,11 +104,10 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
             ACTION_UNDO -> {
                 val commitId = intent.getStringExtra(EXTRA_COMMIT_ID) ?: return
                 if (state.undo(appWidgetId, commitId)) {
+                    PenWidgetRuntime.cancelCommitTimer(appWidgetId)
                     PenWidgetScheduler.cancelCommit(context, appWidgetId)
                 }
             }
-            ACTION_OPEN_LOG -> openMainActivity(context, startRoute = "consumption")
-            ACTION_OPEN_SETTINGS -> openMainActivity(context, startRoute = "settings")
         }
     }
 
@@ -115,35 +119,33 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         val penState = PenWidgetDataSource.loadPenState(context)
         val loaded = penState as? PenQuickLogState.Loaded ?: return
         val secondsPerUse = loaded.secondsPerUse ?: return
-        val draft = state.read(appWidgetId)
-        if (draft.pendingCommit != null || draft.draftSeconds <= 0) return
 
         val now = System.currentTimeMillis()
         val at = currentSubmissionDateTime(now)
-        val payload = PenWidgetCommitPayload(
-            version = PEN_WIDGET_PAYLOAD_VERSION,
-            commitId = UUID.randomUUID().toString(),
-            commitAtEpochMillis = now + UNDO_WINDOW_MILLIS,
-            productId = loaded.product.id,
-            productUuid = loaded.product.productUuid,
-            seconds = draft.draftSeconds,
-            secondsPerUse = secondsPerUse,
-            uses = secondsToUses(draft.draftSeconds.toDouble(), secondsPerUse),
-            date = at.date,
-            time = at.time,
-        )
-        if (state.submitCommit(appWidgetId, payload)) {
-            PenWidgetScheduler.scheduleCommit(context, appWidgetId, payload.commitId)
+        val commitId = UUID.randomUUID().toString()
+        val eventId = UUID.randomUUID().toString()
+        val payload = state.submitCommit(appWidgetId) { seconds ->
+            PenWidgetCommitPayload(
+                version = PEN_WIDGET_PAYLOAD_VERSION,
+                commitId = commitId,
+                eventId = eventId,
+                submittedAtEpochMillis = now,
+                commitAtEpochMillis = now + COMMIT_DELAY_MILLIS,
+                productId = loaded.product.id,
+                productUuid = loaded.product.productUuid,
+                seconds = seconds,
+                secondsPerUse = secondsPerUse,
+                uses = secondsToUses(seconds.toDouble(), secondsPerUse),
+                date = at.date,
+                time = at.time,
+            )
         }
-    }
-
-    private fun openMainActivity(context: Context, startRoute: String) {
-        context.startActivity(
-            Intent(context, MainActivity::class.java).apply {
-                putExtra(EXTRA_START_ROUTE, startRoute)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            },
-        )
+        if (payload != null) {
+            PenWidgetRuntime.scheduleCommitTimer(context, appWidgetId, payload.commitId)
+            // The timer is the primary path. Failure to enqueue its durable backstop must not
+            // suppress in-process delivery; lazy overdue flushing remains the final recovery tier.
+            runCatching { PenWidgetScheduler.scheduleCommit(context, appWidgetId, payload.commitId) }
+        }
     }
 
     private fun launchForWidget(
@@ -153,13 +155,9 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
     ) {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
-        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-            try {
-                PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
-                action(appContext)
-            } finally {
-                pendingResult.finish()
-            }
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
+            action(appContext)
         }
     }
 }

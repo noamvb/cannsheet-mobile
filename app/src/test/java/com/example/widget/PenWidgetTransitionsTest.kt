@@ -25,11 +25,11 @@ class PenWidgetTransitionsTest {
 
         assertEquals(
             PenWidgetCommitResolution.Committed(payload),
-            resolveCommit(payload, "commit-1", nowMillis = 1_001L),
+            resolveCommit(payload, "commit-1", nowMillis = 5_000L),
         )
         assertEquals(
             PenWidgetCommitResolution.NoOp,
-            resolveCommit(null, "commit-1", nowMillis = 1_001L),
+            resolveCommit(null, "commit-1", nowMillis = 5_000L),
         )
     }
 
@@ -50,6 +50,65 @@ class PenWidgetTransitionsTest {
     }
 
     @Test
+    fun graceDeadlineAndPendingAgeCeilingAreExplicit() {
+        val payload = payload().copy(
+            submittedAtEpochMillis = 10_000L,
+            commitAtEpochMillis = 10_000L + COMMIT_DELAY_MILLIS,
+        )
+
+        assertEquals(
+            PenWidgetCommitResolution.NoOp,
+            resolveCommit(payload, payload.commitId, nowMillis = payload.commitAtEpochMillis - 1L),
+        )
+        assertTrue(
+            resolveCommit(payload, payload.commitId, nowMillis = payload.commitAtEpochMillis)
+                is PenWidgetCommitResolution.Committed,
+        )
+        assertTrue(
+            resolveCommit(
+                payload.copy(commitAtEpochMillis = Long.MAX_VALUE),
+                null,
+                nowMillis = payload.submittedAtEpochMillis + MAX_PENDING_AGE_MILLIS,
+            ) is PenWidgetCommitResolution.Committed,
+        )
+    }
+
+    @Test
+    fun backwardsClockJumpAndStaleClaimRecoverTowardCommit() {
+        val submittedAt = 100_000L
+        val payload = payload().copy(
+            submittedAtEpochMillis = submittedAt,
+            commitAtEpochMillis = submittedAt + COMMIT_DELAY_MILLIS,
+        )
+        assertTrue(
+            resolveCommit(
+                payload,
+                null,
+                nowMillis = submittedAt - CLOCK_ROLLBACK_TOLERANCE_MILLIS - 1L,
+            ) is PenWidgetCommitResolution.Committed,
+        )
+
+        val claimed = payload.copy(claimId = "claim-1", claimedAtEpochMillis = 1_000L)
+        assertEquals(
+            PenWidgetCommitResolution.NoOp,
+            resolveCommit(claimed, null, nowMillis = 1_000L + CLAIM_STALE_MILLIS - 1L, force = true),
+        )
+        assertTrue(
+            resolveCommit(claimed, null, nowMillis = 1_000L + CLAIM_STALE_MILLIS, force = true)
+                is PenWidgetCommitResolution.Committed,
+        )
+        assertTrue(
+            resolveCommit(
+                claimed.copy(claimId = "old-process:claim-1"),
+                null,
+                nowMillis = 1_001L,
+                force = true,
+                claimOwnerId = "new-process",
+            ) is PenWidgetCommitResolution.Committed,
+        )
+    }
+
+    @Test
     fun undoThenCommitHasNoPayload() {
         val payload = payload()
         val undone = resolveUndo(payload, payload.commitId)
@@ -64,6 +123,8 @@ class PenWidgetTransitionsTest {
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",
+        eventId = "event-1",
+        submittedAtEpochMillis = 0L,
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = null,

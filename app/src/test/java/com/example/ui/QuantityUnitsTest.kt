@@ -21,6 +21,20 @@ class QuantityUnitsTest {
     }
 
     @Test
+    fun roundsSecondsRoundTripForNonDivisorRatesAtPresentationOnly() {
+        listOf(
+            Triple(10.0, 7.0, "10s"),
+            Triple(10.0, 3.0, "10s"),
+            Triple(20.0, 3.0, "20s"),
+            Triple(10.0, 7.5, "10s"),
+            Triple(10.0, 10.0, "10s"),
+        ).forEach { (seconds, rate, expected) ->
+            val storedUses = secondsToUses(seconds, rate)
+            assertEquals(expected, formatQuantityInInputUnit(storedUses, rate))
+        }
+    }
+
+    @Test
     fun formatsPlainUsesWhenNoRateIsSet() {
         assertEquals("1.5", formatQuantityInInputUnit(1.5, null))
     }
