@@ -51,6 +51,7 @@ documents, not in this file.
   the canonical shared-context documents instead of duplicating project facts.
 - For Android adaptive icons, keep `<monochrome>` drawables (`ic_launcher_monochrome.xml`) transparent (`#00000000`) except for emblem/symbol paths (`#000000`) so Android 13+ Material You themed icon tinting renders cleanly without solid background blobs.
 - For Jetpack Compose `DatePicker` components, always use UTC-based date helpers (`pickerDateToWire`, `currentLocalDateAsPickerMillis`, `parsePickerDateToMillis`) in `ConsumptionDateTime.kt` when converting between `DatePickerState.selectedDateMillis` and ISO `"yyyy-MM-dd"` strings. Never format `selectedDateMillis` using device-local `SimpleDateFormat` without setting UTC timezone, as midnight UTC shifts to the prior day in negative UTC offset timezones.
+- For the pen home-screen widget, quantities are displayed in seconds but must be converted with `secondsToUses` before reaching Room, the offline queue, or the wire; the undo window defers the Room write and never deletes a queued row.
 
 
 ## Change and release rules

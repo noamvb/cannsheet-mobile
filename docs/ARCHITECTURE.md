@@ -55,6 +55,10 @@ flowchart LR
   the optional Purchase-screen defaults in a separate version-1 JSON
   Preferences DataStore. `CannsheetGraph` creates the one process-wide
   instance used by the view model.
+- `app/src/main/java/com/example/widget` contains the classic
+  `AppWidgetProvider`/`RemoteViews` pen quick-log widget. It reuses the loaded
+  cart, rate, date, and consumption logging boundaries rather than introducing
+  a second Room or network contract.
 
 ### Background queue synchronization
 
@@ -204,6 +208,54 @@ and Room/offline queue. A successful local pen log moves the loaded-cart ID to
 that product; finishing it clears the ID. No wire, Room, Apps Script, or
 spreadsheet contract changes are involved.
 
+### Home-screen pen widget
+
+The pen quick-log widget is implemented with the platform `AppWidgetProvider`
+and `RemoteViews` APIs, with no Glance dependency, so the same implementation
+supports the project's minimum API 24 and is covered by the API 24 and API 36
+validation paths. It displays the shared loaded-cart state and uses the same
+`buildPenQuickLogState` rules as the Log screen:
+
+- `Unavailable` has no usable loaded pen cart; `NoCart` has no selected or
+  recently logged cart; `RateOff` requires Settings because a zero seconds-per-
+  use rate cannot produce a safe quantity; `Composing` is the editable draft;
+  and `AwaitingCommit` is the five-second undo window with a countdown.
+- The draft starts at zero, changes in ten-second steps, and is clamped to
+  0..600 seconds. Submit is enabled only for a positive draft; reset returns
+  to zero and a counter tap returns to composing state.
+- A submit broadcast performs one `DataStore.edit` that captures the product,
+  stable consumption ID, date, time, seconds, rate, and converted `uses`
+  payload. The Room write is intentionally deferred for five seconds. The
+  worker then takes that exact payload atomically and calls the shared
+  `ConsumptionLogger`, which is the only path that creates the existing Room
+  action and schedules synchronization.
+- Undo removes the pending payload only when its `commitId` still matches and
+  restores the captured seconds draft. Cancelling WorkManager is only an
+  optimization; the `commitId` arbitration makes a late worker a no-op, and
+  the implementation never deletes an already queued Room row.
+
+The deferred commit is represented by the following boundary sequence:
+
+```mermaid
+flowchart LR
+    Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture payload\nsecondsToUses"]
+    Capture --> Window["AwaitingCommit\n5-second WorkManager delay"]
+    Window --> Decision{"Undo wins?"}
+    Decision -->|yes| Restore["Remove pending payload\nrestore seconds draft"]
+    Decision -->|no| Take["DataStore edit\ntake payload atomically"]
+    Take --> Logger["ConsumptionLogger\nuses only"]
+    Logger --> Room["Room consumption_actions"]
+    Room --> Sync["SyncScheduler.enqueueImmediate"]
+```
+
+Widget broadcasts and application startup lazily flush overdue pending
+payloads, so a process death or missed delayed-work callback does not leave a
+captured submission stranded. View-model log/finish/loaded-cart changes,
+acknowledged sync work, application startup, and provider actions request a
+widget refresh. The widget's local state remains usable when background sync
+is disabled; the existing queue and acknowledgement rules continue to govern
+delivery to Apps Script.
+
 ### Insights and History
 
 1. `AnalyticsCoordinator` requests versioned Insights or paginated History data.
@@ -275,6 +327,11 @@ the pending queue only, not a replacement for server history. DataStore holds
 user preferences that do not require relational transactions. Purchase defaults
 are an independent full-map JSON value in the `purchase_defaults` DataStore;
 they do not enter the Room schema or Apps Script synchronization payload.
+The pen widget's draft and deferred-submit payload live in a separate
+`pen_widget_state` DataStore and are excluded from backup because they are
+short-lived UI state. The payload stores both the displayed seconds and the
+derived uses for the five-second arbitration window; only uses cross the
+`ConsumptionLogger` boundary into Room, the offline queue, and the wire.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
@@ -316,7 +373,9 @@ source values.
 - `app/src/androidTest`: Room migration/queue tests and Compose UI tests that
   require a device or emulator, including pending-usage aggregation, the 9-to-10
   migration, selected/recent usage-total rendering, and Purchase type-filtered
-  suggestion/autofill behavior.
+  suggestion/autofill behavior. Widget renderer tests cover API-safe
+  `RemoteViews` actions, and widget state tests cover seconds-to-uses
+  conversion, deferred commit/undo arbitration, and lazy overdue flushing.
 - `tests`: Node scripts execute the checked-in Apps Script source against fake
   Apps Script/Sheets implementations; a Python unittest covers deterministic
   backend benchmark tooling.
