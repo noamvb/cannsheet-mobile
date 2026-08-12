@@ -24,6 +24,9 @@ data class ConsumptionPreferences(
     val quantityPresets: List<Double>,
     val includeUnopened: Boolean,
     val quantityPresetOverrides: Map<ProductTypeKey, List<Double>> = emptyMap(),
+    val secondsPerUseOverrides: Map<ProductTypeKey, Double> =
+        ConsumptionPreferencesRepository.DEFAULT_SECONDS_PER_USE_OVERRIDES,
+    val loadedPenProductId: String? = null,
 )
 
 @ConsistentCopyVisibility
@@ -36,6 +39,8 @@ data class ProductTypeKey private constructor(val type: String) {
 
 internal const val QUANTITY_PRESET_OVERRIDES_JSON_KEY = "quantity_preset_overrides_json"
 internal const val QUANTITY_PRESET_OVERRIDES_PAYLOAD_VERSION = 1
+internal const val SECONDS_PER_USE_OVERRIDES_JSON_KEY = "seconds_per_use_overrides_json"
+internal const val SECONDS_PER_USE_OVERRIDES_PAYLOAD_VERSION = 1
 
 class ConsumptionPreferencesRepository private constructor(
     private val dataStore: DataStore<Preferences>,
@@ -65,6 +70,11 @@ class ConsumptionPreferencesRepository private constructor(
                 quantityPresetOverrides = decodeQuantityPresetOverrides(
                     storedPreferences[QUANTITY_PRESET_OVERRIDES_JSON],
                 ),
+                secondsPerUseOverrides = decodeSecondsPerUseOverrides(
+                    storedPreferences[SECONDS_PER_USE_OVERRIDES_JSON],
+                ),
+                loadedPenProductId = storedPreferences[LOADED_PEN_PRODUCT_ID]
+                    ?.takeIf(String::isNotBlank),
             )
         }
         .distinctUntilChanged()
@@ -79,6 +89,14 @@ class ConsumptionPreferencesRepository private constructor(
 
     val quantityPresetOverrides: Flow<Map<ProductTypeKey, List<Double>>> = preferences
         .map { it.quantityPresetOverrides }
+        .distinctUntilChanged()
+
+    val secondsPerUseOverrides: Flow<Map<ProductTypeKey, Double>> = preferences
+        .map { it.secondsPerUseOverrides }
+        .distinctUntilChanged()
+
+    val loadedPenProductId: Flow<String?> = preferences
+        .map { it.loadedPenProductId }
         .distinctUntilChanged()
 
     suspend fun setQuantityPresets(presets: List<Double>) {
@@ -135,17 +153,69 @@ class ConsumptionPreferencesRepository private constructor(
         }
     }
 
+    suspend fun setSecondsPerUseForType(
+        type: ProductTypeKey,
+        secondsPerUse: Double,
+    ) {
+        require(type.type.isNotBlank()) { "Product type is required." }
+        require(isValidSecondsPerUse(secondsPerUse)) {
+            "Seconds per use must be finite, greater than 0, and no more than $MAX_SECONDS_PER_USE."
+        }
+
+        dataStore.edit { storedPreferences ->
+            val updatedOverrides = decodeSecondsPerUseOverrides(
+                storedPreferences[SECONDS_PER_USE_OVERRIDES_JSON],
+            ).toMutableMap().apply {
+                this[type] = secondsPerUse
+            }
+            storedPreferences[SECONDS_PER_USE_OVERRIDES_JSON] =
+                encodeSecondsPerUseOverrides(updatedOverrides, moshi)
+        }
+    }
+
+    suspend fun clearSecondsPerUseForType(type: ProductTypeKey) {
+        dataStore.edit { storedPreferences ->
+            val updatedOverrides = decodeSecondsPerUseOverrides(
+                storedPreferences[SECONDS_PER_USE_OVERRIDES_JSON],
+            ).toMutableMap().apply {
+                remove(type)
+            }
+            storedPreferences[SECONDS_PER_USE_OVERRIDES_JSON] =
+                encodeSecondsPerUseOverrides(updatedOverrides, moshi)
+        }
+    }
+
+    suspend fun setLoadedPenProductId(productId: String) {
+        val normalizedProductId = productId.trim()
+        require(normalizedProductId.isNotBlank()) { "Product ID is required." }
+        dataStore.edit { storedPreferences ->
+            storedPreferences[LOADED_PEN_PRODUCT_ID] = normalizedProductId
+        }
+    }
+
+    suspend fun clearLoadedPenProductId() {
+        dataStore.edit { storedPreferences ->
+            storedPreferences.remove(LOADED_PEN_PRODUCT_ID)
+        }
+    }
+
     companion object {
         const val MIN_QUANTITY_PRESETS = 1
         const val MAX_QUANTITY_PRESETS = 10
+        const val MAX_SECONDS_PER_USE = 3600.0
         private const val LEGACY_QUANTITY_PRESET_COUNT = 3
 
         val DEFAULT_QUANTITY_PRESETS: List<Double> = listOf(0.5, 1.0, 2.0)
+        val DEFAULT_SECONDS_PER_USE_OVERRIDES: Map<ProductTypeKey, Double> =
+            mapOf(ProductTypeKey("P") to 10.0)
 
         fun isValidQuantityPresets(presets: List<Double>): Boolean =
             presets.size in MIN_QUANTITY_PRESETS..MAX_QUANTITY_PRESETS &&
                 presets.all { it.isFinite() && it > 0.0 } &&
                 presets.distinct().size == presets.size
+
+        fun isValidSecondsPerUse(value: Double): Boolean =
+            value.isFinite() && value > 0.0 && value <= MAX_SECONDS_PER_USE
 
         fun effectiveQuantityPresets(
             globalPresets: List<Double>,
@@ -155,6 +225,16 @@ class ConsumptionPreferencesRepository private constructor(
             if (productType.isNullOrBlank()) return globalPresets
             val override = overrides[ProductTypeKey(productType)] ?: return globalPresets
             return override.takeIf(::isValidQuantityPresets) ?: globalPresets
+        }
+
+        /** The duration rate for [productType], or null when quantities are entered as uses. */
+        fun effectiveSecondsPerUse(
+            overrides: Map<ProductTypeKey, Double>,
+            productType: String?,
+        ): Double? {
+            if (productType.isNullOrBlank()) return null
+            return overrides[ProductTypeKey(productType)]
+                ?.takeIf(::isValidSecondsPerUse)
         }
 
         internal fun resolveQuantityPresets(
@@ -180,6 +260,9 @@ class ConsumptionPreferencesRepository private constructor(
         private val INCLUDE_UNOPENED = booleanPreferencesKey("include_unopened")
         private val QUANTITY_PRESET_OVERRIDES_JSON =
             stringPreferencesKey(QUANTITY_PRESET_OVERRIDES_JSON_KEY)
+        private val SECONDS_PER_USE_OVERRIDES_JSON =
+            stringPreferencesKey(SECONDS_PER_USE_OVERRIDES_JSON_KEY)
+        private val LOADED_PEN_PRODUCT_ID = stringPreferencesKey("loaded_pen_product_id")
     }
 }
 
@@ -244,4 +327,70 @@ internal data class PersistedQuantityPresetOverridesPayload(
 internal data class PersistedQuantityPresetOverride(
     val type: String? = null,
     val presets: List<Double>? = null,
+)
+
+internal fun encodeSecondsPerUseOverrides(
+    overrides: Map<ProductTypeKey, Double>,
+    moshi: Moshi = Moshi.Builder().build(),
+): String = moshi.adapter(PersistedSecondsPerUseOverridesPayload::class.java).toJson(
+    PersistedSecondsPerUseOverridesPayload(
+        version = SECONDS_PER_USE_OVERRIDES_PAYLOAD_VERSION,
+        overrides = overrides.entries
+            .sortedBy { it.key.type }
+            .map { (key, secondsPerUse) ->
+                PersistedSecondsPerUseOverride(
+                    type = key.type,
+                    secondsPerUse = secondsPerUse,
+                )
+            },
+    ),
+)
+
+internal fun decodeSecondsPerUseOverrides(
+    payload: String?,
+): Map<ProductTypeKey, Double> {
+    if (payload == null) return ConsumptionPreferencesRepository.DEFAULT_SECONDS_PER_USE_OVERRIDES
+
+    return runCatching {
+        val decoded = SecondsPerUseOverridesJson.valueAdapter.fromJson(payload) as? Map<*, *>
+            ?: return emptyMap()
+        val version = (decoded["version"] as? Number)?.toDouble()
+        if (version != SECONDS_PER_USE_OVERRIDES_PAYLOAD_VERSION.toDouble()) return emptyMap()
+        val records = decoded["overrides"] as? List<*> ?: return emptyMap()
+
+        records
+            .fold(linkedMapOf<ProductTypeKey, Double>()) { overrides, record ->
+                val fields = record as? Map<*, *> ?: return@fold overrides
+                val rawType = fields["type"] as? String ?: return@fold overrides
+                val key = ProductTypeKey(rawType)
+                if (key.type.isBlank()) return@fold overrides
+
+                val secondsPerUse = (fields["secondsPerUse"] as? Number)?.toDouble()
+                    ?: return@fold overrides
+                if (!ConsumptionPreferencesRepository.isValidSecondsPerUse(secondsPerUse)) {
+                    return@fold overrides
+                }
+                overrides[key] = secondsPerUse
+                overrides
+            }
+            .entries
+            .sortedBy { it.key.type }
+            .associateTo(linkedMapOf()) { it.toPair() }
+    }.getOrDefault(emptyMap())
+}
+
+private object SecondsPerUseOverridesJson {
+    val valueAdapter = Moshi.Builder().build().adapter(Any::class.java)
+}
+
+@JsonClass(generateAdapter = true)
+internal data class PersistedSecondsPerUseOverridesPayload(
+    val version: Int? = null,
+    val overrides: List<PersistedSecondsPerUseOverride>? = null,
+)
+
+@JsonClass(generateAdapter = true)
+internal data class PersistedSecondsPerUseOverride(
+    val type: String? = null,
+    val secondsPerUse: Double? = null,
 )

@@ -138,6 +138,38 @@ Last updated: 2026-08-11
   install and package readback are recorded in the Repository state section
   above and in `docs/HANDOFF.md`.
 
+## One-tap pen logging feature work
+
+- The submission countdown now uses one `PendingSubmission` holder. A new
+  purchase, consumption, borrowed-consumption, or finish action flushes the
+  displaced callback immediately before starting its own countdown, so a
+  second quick submission is never silently discarded. The holder's
+  take-once behavior is covered by JVM regression tests. This prerequisite was
+  delivered through PR #48 and merged as
+  `19f00174268bc5b93065c61a8407aeeaebf388b9`.
+- The pen quick-log implementation adds a version-1 seconds-per-use map and a
+  loaded-pen product ID to the existing `consumption_preferences` DataStore.
+  A missing duration payload seeds `P` at 10 seconds per use; an explicit
+  payload without `P` preserves the user's decision to turn that rate off,
+  including after a clear and relaunch. Invalid duration records are skipped
+  defensively.
+- The Log screen resolves an explicit selectable `P` cart first and otherwise
+  uses the most recently logged selectable pen. Its duration chips display
+  seconds but pass uses through the existing countdown, Room queue, sync, and
+  cancellation controls. Successful local pen logs auto-select the logged cart;
+  finishing the loaded cart clears it. The Settings type editor can enable,
+  save, preview, and clear a seconds-per-use rate. No Room schema, queue
+  payload, Apps Script contract, endpoint, package ID, or release metadata is
+  changed.
+- Local validation for the implementation branch passed with JDK 17.0.20,
+  Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  The run completed with `BUILD SUCCESSFUL`; 161 JVM tests completed,
+  Android-test Kotlin compilation completed, lint completed, and the debug APK
+  assembled. The bundled Node runtime also passed
+  `tests/backend_analytics_test.js`. The connected emulator/device acceptance
+  walkthrough and release APK installation remain separate follow-up evidence.
+
 ## Purchase autofill defaults feature work
 
 - The approved implementation was delivered through

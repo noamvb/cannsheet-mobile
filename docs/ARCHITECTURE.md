@@ -48,7 +48,8 @@ flowchart LR
 - `app/src/main/java/com/example/data/AnalyticsData.kt` defines the versioned
   analytics/history contract, repository, and cache serialization.
 - `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
-  stores global quick-log presets, per-product-type quick-log overrides, and the
+  stores global quick-log presets, per-product-type quick-log overrides,
+  per-type seconds-per-use overrides, the loaded pen product ID, and the
   unopened-product preference in the `consumption_preferences` DataStore.
 - `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt` stores
   the optional Purchase-screen defaults in a separate version-1 JSON
@@ -191,6 +192,17 @@ collected after the quantity chips have already been rendered, so no reliable
 type is available at chip-selection time. Overrides are keyed by type rather
 than by individual product and do not change Room, the offline queues, or the
 Apps Script contract.
+
+Pen quick logging adds a second local preference map for seconds per use and a
+single loaded-pen product ID. A missing seconds payload seeds `P` at 10 seconds
+per use; an explicit versioned payload without `P` means the user turned that
+rate off and must not be reseeded. The loaded cart resolves from an explicit
+selectable `P` product first, then the most recently logged selectable `P`
+product. The Log screen renders duration chips for that cart, but chip values
+are converted back to uses before entering the existing submission countdown
+and Room/offline queue. A successful local pen log moves the loaded-cart ID to
+that product; finishing it clears the ID. No wire, Room, Apps Script, or
+spreadsheet contract changes are involved.
 
 ### Insights and History
 

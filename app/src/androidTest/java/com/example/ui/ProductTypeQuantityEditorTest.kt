@@ -10,6 +10,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -116,6 +117,73 @@ class ProductTypeQuantityEditorTest {
         composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.RESET).assertIsEnabled().performClick()
 
         composeRule.runOnIdle { assertEquals("S", resetType) }
+    }
+
+    @Test
+    fun savingDurationCapturesTypeAndSecondsPerUse() {
+        var savedType: String? = null
+        var savedSeconds: Double? = null
+
+        composeRule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    ProductTypeQuantityEditor(
+                        productTypes = listOf("P", "S"),
+                        globalPresets = listOf(0.5, 1.0, 2.0),
+                        overrides = emptyMap(),
+                        onSave = { _, _ -> Result.success(Unit) },
+                        onReset = {},
+                        secondsPerUseOverrides = emptyMap(),
+                        onSaveSecondsPerUse = { type, seconds ->
+                            savedType = type
+                            savedSeconds = seconds
+                            Result.success(Unit)
+                        },
+                        onClearSecondsPerUse = {},
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.DURATION_SWITCH).performClick()
+        composeRule
+            .onNodeWithTag(ProductTypeQuantityEditorTestTags.SECONDS_PER_USE)
+            .performTextReplacement("10")
+        composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.SAVE_DURATION).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals("P", savedType)
+            assertEquals(10.0, savedSeconds ?: 0.0, 0.0)
+        }
+    }
+
+    @Test
+    fun clearingDurationCallsBackForTheSelectedTypeAndPreviewUses() {
+        var clearedType: String? = null
+
+        composeRule.setContent {
+            MaterialTheme {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    ProductTypeQuantityEditor(
+                        productTypes = listOf("P"),
+                        globalPresets = listOf(0.5, 1.0, 2.0),
+                        overrides = emptyMap(),
+                        onSave = { _, _ -> Result.success(Unit) },
+                        onReset = {},
+                        secondsPerUseOverrides = mapOf(ProductTypeKey("P") to 10.0),
+                        onSaveSecondsPerUse = { _, _ -> Result.success(Unit) },
+                        onClearSecondsPerUse = { clearedType = it },
+                    )
+                }
+            }
+        }
+
+        composeRule
+            .onNodeWithTag(ProductTypeQuantityEditorTestTags.DURATION_PREVIEW)
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(ProductTypeQuantityEditorTestTags.DURATION_SWITCH).performClick()
+
+        composeRule.runOnIdle { assertEquals("P", clearedType) }
     }
 }
 
