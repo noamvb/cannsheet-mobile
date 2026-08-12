@@ -146,7 +146,6 @@ object PenWidgetRenderer {
             "setBackgroundResource",
             if (enabled) R.drawable.widget_step_button else R.drawable.widget_step_button_disabled,
         )
-        remoteViews.setFloat(viewId, "setAlpha", if (enabled) 1.0f else 0.45f)
     }
 
     private fun setSubmitButtonEnabled(remoteViews: RemoteViews, viewId: Int, enabled: Boolean) {
@@ -156,6 +155,5 @@ object PenWidgetRenderer {
             "setBackgroundResource",
             if (enabled) R.drawable.widget_submit_button else R.drawable.widget_submit_button_disabled,
         )
-        remoteViews.setFloat(viewId, "setAlpha", if (enabled) 1.0f else 0.45f)
     }
 }

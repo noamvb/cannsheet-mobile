@@ -75,6 +75,7 @@
             android:minHeight="0dp"
             android:minWidth="0dp"
             android:padding="0dp"
+            android:stateListAnimator="@null"
             android:textColor="@color/widget_on_submit"
             android:textSize="20sp"
             android:textStyle="bold" />
@@ -96,6 +97,7 @@
             android:minHeight="0dp"
             android:minWidth="0dp"
             android:padding="0dp"
+            android:stateListAnimator="@null"
             android:text="−"
             android:textColor="@color/widget_on_step"
             android:textSize="24sp"
@@ -112,6 +114,7 @@
             android:minHeight="0dp"
             android:minWidth="0dp"
             android:padding="0dp"
+            android:stateListAnimator="@null"
             android:text="+"
             android:textColor="@color/widget_on_step"
             android:textSize="24sp"
