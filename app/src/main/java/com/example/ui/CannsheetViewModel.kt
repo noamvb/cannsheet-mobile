@@ -185,10 +185,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     val pendingCountdown: StateFlow<Int> = _pendingCountdown
 
     private var countdownJob: Job? = null
-    private var pendingPurchaseAction: (() -> Unit)? = null
-    private var pendingConsumptionAction: (() -> Unit)? = null
-    private var pendingBorrowedConsumptionAction: (() -> Unit)? = null
-    private var pendingFinishAction: (() -> Unit)? = null
+    private val pendingSubmission = PendingSubmission()
     private val syncMutex = graph.syncMutex
 
     init {
@@ -273,14 +270,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun queuePurchase(submission: PurchaseSubmission) {
-        countdownJob?.cancel()
-        pendingConsumptionAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = null
-        pendingPurchaseAction = {
+        queueSubmission {
             submitPurchase(submission)
         }
-        startCountdown()
     }
 
     fun queuePurchase(
@@ -315,14 +307,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         uses: Double,
         isFinished: Boolean,
     ) {
-        countdownJob?.cancel()
-        pendingPurchaseAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = null
-        pendingConsumptionAction = {
+        queueSubmission {
             addConsumption(date, time, productId, uses, isFinished)
         }
-        startCountdown()
     }
 
     fun queueBorrowedConsumption(
@@ -332,11 +319,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         name: String,
         uses: Double,
     ) {
-        countdownJob?.cancel()
-        pendingPurchaseAction = null
-        pendingConsumptionAction = null
-        pendingFinishAction = null
-        pendingBorrowedConsumptionAction = {
+        queueSubmission {
             addBorrowedConsumption(
                 date = date,
                 time = time,
@@ -345,7 +328,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 uses = uses,
             )
         }
-        startCountdown()
     }
 
     fun queueFinishProduct(productId: String) {
@@ -355,11 +337,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             return
         }
         val submissionDateTime = currentSubmissionDateTime()
-        countdownJob?.cancel()
-        pendingPurchaseAction = null
-        pendingConsumptionAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = {
+        queueSubmission {
             addFinishProduct(
                 date = submissionDateTime.date,
                 time = submissionDateTime.time,
@@ -367,6 +345,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 productUuid = product.productUuid,
             )
         }
+    }
+
+    private fun queueSubmission(action: () -> Unit) {
+        countdownJob?.cancel()
+        countdownJob = null
+        _pendingCountdown.value = 0
+        pendingSubmission.replaceWith(action)?.invoke()
         startCountdown()
     }
 
@@ -377,38 +362,23 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 delay(1_000)
             }
             _pendingCountdown.value = 0
-            pendingPurchaseAction?.invoke()
-            pendingConsumptionAction?.invoke()
-            pendingBorrowedConsumptionAction?.invoke()
-            pendingFinishAction?.invoke()
-            pendingPurchaseAction = null
-            pendingConsumptionAction = null
-            pendingBorrowedConsumptionAction = null
-            pendingFinishAction = null
+            pendingSubmission.take()?.invoke()
         }
     }
 
     fun cancelPendingAction() {
         countdownJob?.cancel()
+        countdownJob = null
         _pendingCountdown.value = 0
-        pendingPurchaseAction = null
-        pendingConsumptionAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = null
+        pendingSubmission.take()
         _syncStatus.value = "Action cancelled"
     }
 
     fun forceSubmitNow() {
         countdownJob?.cancel()
+        countdownJob = null
         _pendingCountdown.value = 0
-        pendingPurchaseAction?.invoke()
-        pendingConsumptionAction?.invoke()
-        pendingBorrowedConsumptionAction?.invoke()
-        pendingFinishAction?.invoke()
-        pendingPurchaseAction = null
-        pendingConsumptionAction = null
-        pendingBorrowedConsumptionAction = null
-        pendingFinishAction = null
+        pendingSubmission.take()?.invoke()
     }
 
     fun addPurchase(
