@@ -4,145 +4,153 @@ Last updated: 2026-08-11
 
 ## Current outcome
 
-The per-product-type quick-log quantity preset feature is implemented, merged,
-released, and installed as Cannsheet Mobile v1.2.23. The source release is
-commit `2e251a1d71aedbfe44e265c907a58d77ccd4d720`; the public signed APK is
-published in the separate releases repository and was installed in place on
-the intended production device.
+One-tap pen logging with duration chips is implemented, merged, released, and
+installed as Cannsheet Mobile v1.2.24. The feature source was merged as
+`76dc95a60a45b699471e6b9ca93c5132307b6081`; the versioned release source is
+`7a112d315d5b6666bca8f582bc50f6db430345ab`, tagged `v1.2.24`. The public
+signed APK is published in the separate releases repository and was installed
+in place on the intended production device.
 
-The implementation preserves the existing global quick-log presets as the
-fallback and adds version-1 per-type overrides in the same
-`consumption_preferences` DataStore. No Room schema, offline queue, Apps Script
-contract, production endpoint, package ID, or signing configuration was
-changed.
+The feature keeps uses as the only Room, offline-queue, wire, Apps Script, and
+spreadsheet quantity unit. It adds seconds-per-use settings and a loaded-pen
+ID to the existing `consumption_preferences` DataStore, while preserving the
+existing global quantity presets as the fallback. No Room schema, queue
+payload, Apps Script contract, production endpoint, package ID, or signing
+configuration was changed.
 
-For device validation, a temporary debug-signed `devicecheck` variant was
-assembled and installed alongside production as
-`the isolated devicecheck application`. The production package was not
-overwritten, uninstalled, downgraded, or cleared.
+Bounded device validation used a separate debug-signed package
+`com.noamv.cannsheet.mobile.devicecheck124` with the deliberately invalid
+endpoint `https://devicecheck.invalid/exec`. The production package was not
+used for test actions, and its existing data directory was preserved during
+the in-place v1.2.24 update.
 
 ## Implementation and validation
 
-- `ConsumptionPreferencesRepository` now decodes and writes a defensive,
-  versioned override payload atomically with the existing preferences snapshot.
-  Product-type keys are normalized with `Locale.ROOT`; invalid records are
-  ignored and invalid preset lists fall back to the global list.
-- `ProductTypes` defines the canonical code/label set and merges it with
-  normalized catalog types. `CannsheetViewModel` exposes the effective
-  type-aware presets and uses them for consumption defaults.
-- Settings keeps the existing global editor and adds a reusable editor for
-  per-type custom quantities, reset behavior, status, and a custom-type
-  summary. Purchase type choices now use the same canonical codes.
-- New JVM coverage covers payload validation, normalization, duplicate
-  handling, ordering, atomic writes, failure behavior, persistence, and
-  effective-preset resolution. New Compose coverage covers selecting a type,
-  reseeding on type changes, saving, and reset behavior.
-- Feature PR [#44](https://github.com/noamvb/cannsheet-mobile/pull/44) merged as
-  `b9302edcc309e7ada5a30e528a091801df8fb568`; its PR checks were run in
-  [31541378270](https://github.com/noamvb/cannsheet-mobile/actions/runs/31541378270)
-  and its exact merged-main validation passed in
-  [31541684164](https://github.com/noamvb/cannsheet-mobile/actions/runs/31541684164).
-- Version PR [#45](https://github.com/noamvb/cannsheet-mobile/pull/45) merged as
-  `2e251a1d71aedbfe44e265c907a58d77ccd4d720`; its PR checks passed in
-  [31542822264](https://github.com/noamvb/cannsheet-mobile/actions/runs/31542822264)
-  and exact versioned-main validation passed in
-  [31543271407](https://github.com/noamvb/cannsheet-mobile/actions/runs/31543271407).
-- Signed publication [run 31544318700](https://github.com/noamvb/cannsheet-mobile/actions/runs/31544318700)
-  passed its exact-main, signed-build, checksum, public-publication, and
-  post-publication checks. The downloaded APK is 13,525,786 bytes and has
-  SHA-256 `f9f319ba892f4e0f09c9bebc7a581fc1326bf162b1c21c06db653d051c8aab98`.
-- The public APK reports package `com.noamv.cannsheet.mobile`, version code
-  `26`, and version name `1.2.23`; local `apksigner` verification passed using
-  APK Signature Scheme v2.
-- The production package readback before installation was version code `25`,
-  version name `1.2.22`, signing identity `the release signing identity`, and data directory
-  `the production app data directory`. `adb install -r` completed with
-  `Success`; the after-install readback was version code `26`, version name
-  `1.2.23`, the same signing identity and data directory, and an unchanged
-  install-time metadata. Launching `com.example.MainActivity` succeeded before
-  the app was force-stopped for handoff.
+- `ConsumptionPreferencesRepository` stores the version-1 seconds-per-use map
+  and loaded-pen product ID atomically with the existing preferences snapshot.
+  Missing duration data seeds `P` at `10.0`; an explicit payload without `P`
+  preserves the user's choice to turn the rate off. Invalid duration records
+  are ignored defensively.
+- The Log screen resolves an explicit selectable pen first and otherwise uses
+  the most recently logged selectable pen. Duration chips display seconds but
+  convert back to uses before entering the existing countdown, Room queue,
+  synchronization, and cancellation path. Successful local logs select the
+  logged pen, and finishing it clears the loaded ID.
+- The pending countdown callbacks now use one take-once `PendingSubmission`
+  holder. Replacing an action flushes the displaced callback before starting
+  the new countdown; cancellation takes it without invoking it. The holder is
+  covered by JVM regression tests.
+- New JVM and Compose coverage covers duration conversion, preference payload
+  validation, loaded-pen selection, quick-log submission, countdown flush and
+  cancellation, Settings save/clear behavior, persistence, and UI rendering.
+- PR [#48](https://github.com/noamvb/cannsheet-mobile/pull/48) merged as
+  `19f00174268bc5b93065c61a8407aeeaebf388b9` after six-job run
+  [31550011273](https://github.com/noamvb/cannsheet-mobile/actions/runs/31550011273).
+  Feature PR [#49](https://github.com/noamvb/cannsheet-mobile/pull/49) merged as
+  `76dc95a60a45b699471e6b9ca93c5132307b6081`; its five-job gate
+  [31551639733](https://github.com/noamvb/cannsheet-mobile/actions/runs/31551639733)
+  and exact merged-main matrix
+  [31552090083](https://github.com/noamvb/cannsheet-mobile/actions/runs/31552090083)
+  passed. Version PR [#50](https://github.com/noamvb/cannsheet-mobile/pull/50)
+  merged as `7a112d315d5b6666bca8f582bc50f6db430345ab` after its PR gate
+  [31552545541](https://github.com/noamvb/cannsheet-mobile/actions/runs/31552545541)
+  and exact versioned-main matrix
+  [31552869317](https://github.com/noamvb/cannsheet-mobile/actions/runs/31552869317)
+  passed.
+- Signed publication [run 31553283041](https://github.com/noamvb/cannsheet-mobile/actions/runs/31553283041)
+  passed exact-main proof, signed build, checksum, public publication, and
+  post-publication checks. The public APK reports package
+  `com.noamv.cannsheet.mobile`, version code `27`, and version name `1.2.24`;
+  local v2 signature verification passed. Published SHA-256:
+  `b899a98d4c48cc20663a05270e56535af90f3584e91bcf0e53cc3e6ea244d6d0`.
+- The production package readback before installation was version code `26`,
+  version name `1.2.23`, and the existing production data directory. After the
+  in-place update it reported version code `27`, version name `1.2.24`, the
+  same package/data directory, unchanged install-time metadata, and a
+  successful launch of `com.example.MainActivity`.
 - The final local command passed with JDK 17.0.20 and Gradle 9.3.1:
   `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
-  Result: `BUILD SUCCESSFUL`; 138 JVM tests completed, Android-test Kotlin
-  compilation completed, lint completed, and the debug APK assembled.
-- The temporary device-check APK was built with
-  `./gradlew --no-daemon assembleDevicecheck`, installed successfully, and
-  reported version name `1.2.22-devicecheck` / version code `25`. The artifact
-  was `app/build/outputs/apk/devicecheck/app-devicecheck.apk` with SHA-256
-  `6a748680fc91c2830d222beeb7b00050f9145a629ccc8f464e5a3c0d9ef6734a`.
+  Result: `BUILD SUCCESSFUL`; 161 JVM tests completed, Android-test Kotlin
+  compilation completed, lint completed, and the debug APK assembled. The
+  bundled Node runtime also passed `tests/backend_analytics_test.js`.
 - `git diff --check` passed. Existing CRLF files caused only the repository's
   line-ending conversion warnings; no whitespace errors were reported.
-- Backend Node/Python suites were not run because backend sources were not
-  changed. Connected instrumentation was not run because the temporary
-  `devicecheck` build type has no dedicated connected-test task; the new
-  Android test source compiled successfully. No CI run was started.
+- The required backend suites and emulator instrumentation passed in the
+  GitHub Actions gates. The bounded manual device walkthrough was performed
+  with a separate package and is not a connected instrumentation run of the
+  signed production APK.
 
 ## Device state
 
-- Device: intended wireless Android production device, Android API 36; exact model and transport identifiers are retained only in the local handoff.
-- The public v1.2.23 APK was installed with `adb install -r`; package metadata, signing continuity, data preservation, and successful launch were read back locally.
-- An isolated devicecheck application was used for the bounded UI walkthrough; it remained separate from the production package.
-- The isolated app's temporary Shatter override was reset before finishing; its Settings state showed `Using the default quantities` and `No product types have custom quantities.` Pending actions remained zero.
+- Device: Samsung SM-F966W, Android API 36, reached over wireless ADB for the
+  bounded validation window.
+- The public v1.2.24 APK was installed in place with `adb install -r`; package
+  metadata, data-directory preservation, and successful launch were read back
+  locally. The production app was not used for test taps or submissions.
+- The isolated package `com.noamv.cannsheet.mobile.devicecheck124` was used for
+  the UI walkthrough and remains separate from the production package. It was
+  configured with the deliberately invalid `devicecheck.invalid` endpoint.
+- After the walkthrough, temporary remote screenshots/XML were removed and
+  the wireless ADB connection was disconnected. The phone is available for
+  normal personal use.
+
 ## Manual validation boundary
 
 The phone was occupied from the explicit start notification through the final
-ADB check. The completed bounded walkthrough was:
+ADB check. The completed bounded walkthrough used only the isolated package:
 
-- Settings displayed the existing global presets `0.5 / 1 / 2` and the new
-  product-type editor.
-- The existing global editor was changed to `0.5 / 1.25 / 2`, saved, confirmed
-  after force-stop/relaunch, and restored to `0.5 / 1 / 2`.
-- The picker exposed exactly `E — Edible`, `F — Flower`, `J — Joint`,
-  `K — Keef`, `P — Pen`, and `S — Shatter`.
-- Shatter was edited to `0.1 / 0.25 / 0.5`, saved, displayed a custom status
-  and summary, and retained that override after force-stop/relaunch.
-- The Shatter Log form displayed `0.1 / 0.25 / 0.5`; after reset, the same
-  Shatter form displayed the global `0.5 / 1 / 2` values. The Pen form also
-  displayed the global values.
-- Edible with no override displayed `Using the default quantities` and seeded
-  its fields from the global list.
-- Selecting products was local UI state only. No Log Consumption, Mark
-  product as finished, Purchase, or Sync Now action was pressed. No real
-  production data was changed.
+- The Log screen loaded `BH Raspberry Riptide` and showed the one-tap pen card
+  with `5s`, `15s`, and `20s` chips; the `15s` chip represented `1.5` uses.
+- Tapping a chip showed the existing cancellable countdown with `CANCEL` and
+  `SUBMIT NOW`. Two rapid chips preserved `Pending: +2 uses`; cancelling a
+  third chip did not add another pending action.
+- `Swap cart` opened the selectable pen picker and showed the available
+  `BH Raspberry Riptide` pen. No swap or production submission was made.
+- Settings saved the seeded `10` seconds-per-use rate and showed the preview
+  `5s · 15s · 20s`. Clearing the setting showed `Using the default quantities`
+  and that off state persisted after force-stop/relaunch. Returning to Log
+  showed the plain `0.5 / 1.5 / 2` use chips.
+- No production Log Consumption, Mark product as finished, Purchase, or Sync
+  Now action was pressed. The isolated app used an invalid endpoint, so its
+  pending test actions could not reach the production Apps Script backend.
 
 This is a manual UI readback, not a physical-device instrumentation result.
-The new Compose instrumentation test was compiled but not connected-run.
-The isolated debug-signed package was used for the UI walkthrough because a
-debug APK cannot safely overlay the production-signed package without an
-uninstall; the production package was deliberately left untouched during that
-walkthrough.
+The new Compose instrumentation tests compiled and the GitHub emulator jobs
+passed, but the signed production APK was not action-tested on the phone.
+The screenshots are attached to the PR #49 conversation.
 
-The signed v1.2.23 APK was then physically installed on the production package
-after a separate notification that phone use was starting. The before/after
-readbacks prove an in-place update while preserving the production signing
-identity and data directory. No real log, purchase, finish, or sync action was
-submitted during the launch check.
+The signed v1.2.24 APK was separately installed on the production package.
+Before/after package readbacks prove an in-place update from version `1.2.23`
+to `1.2.24` while preserving the existing data directory. No production data
+action was submitted during the install or launch check.
 
 ## Data-safety notes
 
-- The override data is stored in the isolated app's Preferences DataStore for
-  this device check. Existing Room data, pending actions, and production app
-  data were not cleared or migrated.
+- The isolated package's Settings changes and pending `+2 uses` test state are
+  contained in its separate application data. Existing Room data, pending
+  actions, and production app data were not cleared or migrated.
 - The implementation does not alter synchronization acknowledgement rules,
   immutable IDs, retries, backend writes, or release metadata.
 - The production install used only `adb install -r`; no uninstall, data clear,
   downgrade, or destructive migration was performed. Existing Room data and
   pending actions therefore remained in place.
 - The temporary `devicecheck` build configuration is removed from the final
-  source diff after validation. The installed APK remains on the device as the
-  isolated validation app from the earlier bounded walkthrough; it is not the
-  v1.2.23 production release.
+  source diff after validation. The installed isolated APK remains on the
+  device as a separate validation app; it is not the v1.2.24 production
+  release.
 
 ## Relevant files
 
 - `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`
-- `app/src/main/java/com/example/ui/ProductTypes.kt`
+- `app/src/main/java/com/example/ui/QuantityUnits.kt`
+- `app/src/main/java/com/example/ui/PenQuickLog.kt`
 - `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
 - `app/src/main/java/com/example/ui/ConsumptionScreen.kt`
-- `app/src/main/java/com/example/ui/PurchaseScreen.kt`
 - `app/src/main/java/com/example/ui/SettingsScreen.kt`
-- `app/src/test/java/com/example/data/QuantityPresetOverridesTest.kt`
-- `app/src/test/java/com/example/ui/ProductTypesTest.kt`
+- `app/src/test/java/com/example/data/SecondsPerUseOverridesTest.kt`
+- `app/src/test/java/com/example/ui/QuantityUnitsTest.kt`
+- `app/src/test/java/com/example/ui/PenQuickLogTest.kt`
+- `app/src/androidTest/java/com/example/ui/PenQuickLogCardTest.kt`
 - `app/src/androidTest/java/com/example/ui/ProductTypeQuantityEditorTest.kt`
 - `docs/ARCHITECTURE.md`
 - `docs/DECISIONS.md`

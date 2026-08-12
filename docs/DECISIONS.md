@@ -195,8 +195,8 @@ historical rationale.
 
 ## ADR-012: Make pen quick logging duration-based without changing the wire unit
 
-- Status: Accepted; implementation delivered through the one-tap pen logging
-  feature branch
+- Status: Accepted; merged through [PR #49](https://github.com/noamvb/cannsheet-mobile/pull/49)
+  and released as Cannsheet Mobile v1.2.24 through version-only [PR #50](https://github.com/noamvb/cannsheet-mobile/pull/50)
 - Date: 2026-08-11
 - Context: Pen entries are the common consumption path, but the battery reports
   pull duration in seconds while the app stores and transmits uses. A single
@@ -229,9 +229,10 @@ historical rationale.
   user-cleared rate from silently returning on a later read.
 - Consequences: The app gains two local DataStore values and a pen-specific Log
   card plus Settings controls. No Room migration, Apps Script change, endpoint
-  change, spreadsheet write change, or release metadata change is required.
-  Physical-device acceptance still needs a bounded isolated build because the
-  debug APK must not overlay the production-signed package.
+  change, or spreadsheet write change is required. The feature was accepted
+  with a bounded isolated debug-signed walkthrough using a deliberately invalid
+  endpoint; the signed v1.2.24 production APK was then installed in place
+  without submitting a production data action.
 - Related files: `app/src/main/java/com/example/data/ConsumptionPreferencesRepository.kt`,
   `app/src/main/java/com/example/ui/QuantityUnits.kt`,
   `app/src/main/java/com/example/ui/PenQuickLog.kt`,
