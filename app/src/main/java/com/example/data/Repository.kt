@@ -56,7 +56,7 @@ class CannsheetRepository(
 
     override suspend fun addConsumption(
         action: ConsumptionAction,
-        loggedAtEpochMillis: Long = System.currentTimeMillis(),
+        loggedAtEpochMillis: Long,
     ) {
         dao.recordConsumption(
             action = action,
@@ -66,6 +66,10 @@ class CannsheetRepository(
                 lastQuantity = action.uses,
             ),
         )
+    }
+
+    suspend fun addConsumption(action: ConsumptionAction) {
+        addConsumption(action, System.currentTimeMillis())
     }
 
     suspend fun addBorrowedConsumption(
