@@ -1,3 +1,16 @@
 <resources>
     <string name="app_name">Cannsheet Mobile</string>
+    <string name="pen_widget_label">Pen quick log</string>
+    <string name="pen_widget_description">Log a loaded pen cart from your home screen.</string>
+    <string name="pen_widget_no_carts">No pen carts</string>
+    <string name="pen_widget_no_cart_loaded">No cart loaded</string>
+    <string name="pen_widget_no_cart_loaded_hint">Tap to choose a pen cart.</string>
+    <string name="pen_widget_rate_off">Pen duration rate is off</string>
+    <string name="pen_widget_rate_off_hint">Tap to set it in Settings.</string>
+    <string name="pen_widget_undo">Undo pen log</string>
+    <string name="pen_widget_submit">Submit pen log</string>
+    <string name="pen_widget_queued">Queued</string>
+    <string name="pen_widget_increase">Increase duration by 10 seconds</string>
+    <string name="pen_widget_decrease">Decrease duration by 10 seconds</string>
+    <string name="pen_widget_reset">Reset duration to zero</string>
 </resources>

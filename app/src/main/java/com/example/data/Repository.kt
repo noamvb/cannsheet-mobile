@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.map
 
 class CannsheetRepository(
     private val database: AppDatabase,
-) : SyncQueueGateway, ProductCatalogGateway {
+) : SyncQueueGateway, ProductCatalogGateway, ConsumptionLogRepository {
     private val dao = database.cannsheetDao()
 
     val allProducts: Flow<List<Product>> = dao.getAllProducts()
@@ -54,7 +54,7 @@ class CannsheetRepository(
         }
     }
 
-    suspend fun addConsumption(
+    override suspend fun addConsumption(
         action: ConsumptionAction,
         loggedAtEpochMillis: Long = System.currentTimeMillis(),
     ) {

@@ -40,7 +40,10 @@ val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CannsheetApp(viewModel: CannsheetViewModel = viewModel()) {
+fun CannsheetApp(
+    viewModel: CannsheetViewModel = viewModel(),
+    startDestination: String = Screen.Consumption.route,
+) {
     val navController = rememberNavController()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
     val countdown by viewModel.pendingCountdown.collectAsState()
@@ -78,7 +81,7 @@ fun CannsheetApp(viewModel: CannsheetViewModel = viewModel()) {
         }
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            NavHost(navController, startDestination = Screen.Consumption.route) {
+            NavHost(navController, startDestination = startDestination) {
                 composable(Screen.Consumption.route) { ConsumptionScreen(viewModel) }
                 composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
                 composable(Screen.Insights.route) { InsightsScreen(viewModel) }

@@ -3,6 +3,7 @@ package com.example
 import android.app.Application
 import com.example.data.CannsheetGraph
 import com.example.data.sync.SyncScheduler
+import com.example.widget.PenWidgetCommitCoordinator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -17,6 +18,9 @@ class CannsheetApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val graph = CannsheetGraph.get(this)
+        applicationScope.launch {
+            PenWidgetCommitCoordinator.flushOverdue(this@CannsheetApplication, System.currentTimeMillis())
+        }
         applicationScope.launch {
             graph.syncPreferences.preferences
                 .map { preferences -> preferences.enabled }

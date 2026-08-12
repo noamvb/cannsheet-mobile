@@ -1,9 +1,9 @@
 package com.example.ui
 
-import java.util.Locale
+import com.example.data.ProductTypeCodes
 
 internal object ProductTypes {
-    const val PEN = "P"
+    const val PEN = ProductTypeCodes.PEN
 
     /** Keep this exact order: it is the Purchase screen's dropdown order. */
     val CODES: List<String> = listOf("P", "E", "J", "F", "S", "K")
@@ -17,7 +17,7 @@ internal object ProductTypes {
         "K" to "Keef",
     )
 
-    fun normalize(type: String): String = type.trim().uppercase(Locale.ROOT)
+    fun normalize(type: String): String = ProductTypeCodes.normalize(type)
 
     /** "F — Flower" for known codes; the raw normalized code for anything else. */
     fun displayName(type: String): String {

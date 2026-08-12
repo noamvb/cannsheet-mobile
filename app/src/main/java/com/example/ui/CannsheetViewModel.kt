@@ -24,6 +24,7 @@ import com.example.data.PendingConsumptionCorrection
 import com.example.data.SyncOutcome
 import com.example.data.SyncPreferences
 import com.example.data.sync.SyncScheduler
+import com.example.widget.PenWidgetUpdater
 import com.example.data.productStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -59,7 +60,7 @@ data class PurchaseFeedback(
 class CannsheetViewModel(application: Application) : AndroidViewModel(application) {
     private val graph = CannsheetGraph.get(application)
     private val repository = graph.repository
-    private val consumptionPreferences = ConsumptionPreferencesRepository(application)
+    private val consumptionPreferences = graph.consumptionPreferences
 
     private val analyticsCoordinator = AnalyticsCoordinator(
         repository = graph.analyticsRepository,
@@ -335,6 +336,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             runCatching {
                 consumptionPreferences.setLoadedPenProductId(productId)
+                PenWidgetUpdater.updateAll(getApplication())
             }.onFailure { _syncStatus.value = it.message ?: "Could not save the loaded pen cart" }
         }
     }
@@ -544,32 +546,23 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         isFinished: Boolean,
     ) {
         viewModelScope.launch {
-            val action = ConsumptionAction(
-                eventId = UUID.randomUUID().toString(),
+            val product = allProducts.value.firstOrNull { it.id == productId }
+            graph.consumptionLogger.log(
                 date = date,
                 time = time,
                 productId = productId,
+                productUuid = product?.productUuid,
+                productType = product?.type,
                 uses = uses,
                 isFinished = isFinished,
-                productUuid = allProducts.value.firstOrNull { it.id == productId }?.productUuid,
             )
-            repository.addConsumption(action, System.currentTimeMillis())
-            val loggedType = allProducts.value.firstOrNull { it.id == productId }
-                ?.type
-                ?.let(ProductTypes::normalize)
-            if (loggedType == ProductTypes.PEN) {
-                if (isFinished) {
-                    consumptionPreferences.clearLoadedPenProductId()
-                } else {
-                    consumptionPreferences.setLoadedPenProductId(productId)
-                }
-            }
             if (isFinished && _consumptionFormState.value.selectedProductId == productId) {
                 clearConsumptionSelection()
             }
             _syncStatus.value = "Consumption saved offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
+            PenWidgetUpdater.updateAll(getApplication())
         }
     }
 
@@ -645,6 +638,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             _syncStatus.value = "Product marked finished offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
+            PenWidgetUpdater.updateAll(getApplication())
         }
     }
 
@@ -782,6 +776,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     if (!outcome.plan.finishCapabilityMissing) {
                         fetchProducts()
                     }
+                    PenWidgetUpdater.updateAll(getApplication())
                 }
             }
 
