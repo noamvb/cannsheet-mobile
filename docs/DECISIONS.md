@@ -471,3 +471,59 @@ historical rationale.
   `app/src/test/java/com/example/ui/ProductTypesTest.kt`,
   `app/src/androidTest/java/com/example/ui/ProductTypeQuantityEditorTest.kt`,
   `docs/ARCHITECTURE.md`
+
+## ADR-013: Use a RemoteViews widget with a DataStore-arbitrated deferred commit
+
+- Status: Accepted; merged through [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
+  and released as Cannsheet Mobile v1.2.25 through version-only
+  [PR #53](https://github.com/noamvb/cannsheet-mobile/pull/53)
+- Date: 2026-08-12
+- Context: Pen consumption is frequent enough to benefit from a home-screen
+  entry point, but the existing data boundary is deliberately expressed in
+  uses, not seconds. The widget also needs a short Undo affordance without
+  creating a second persistence or synchronization path, and an undo/worker
+  race must not delete or duplicate an existing Room queue row.
+- Decision:
+  1. Use the platform `AppWidgetProvider` and `RemoteViews` APIs, with no
+     Glance dependency, and keep the implementation compatible with API 24.
+     Cover rendering and action compatibility in the API 24/API 36 validation
+     paths.
+  2. Keep seconds as input/display units only. On submit, capture the product,
+     stable consumption ID, date, time, seconds, rate, and `uses` in a versioned
+     `pen_widget_state` DataStore payload after applying `secondsToUses`. Only
+     the converted uses enter `ConsumptionLogger`, Room, the offline queue, and
+     the Apps Script wire contract.
+  3. Defer the Room write for five seconds. Schedule one unique WorkManager
+     request per commit, and use a single `DataStore.edit`/`commitId` arbitration
+     boundary for both Undo and worker take. Cancelling work is an optimization;
+     lazy flushing of overdue payloads on broadcasts and application startup is
+     the recovery path.
+  4. Reuse the shared loaded-cart and logging boundaries, refresh the widget
+     after relevant view-model, provider, startup, and acknowledged-sync events,
+     and add no Room migration, queue field, network endpoint, or Apps Script
+     path.
+- Rationale: Classic `RemoteViews` keeps the widget small and compatible with
+  the existing minimum API while avoiding a new UI/runtime dependency. A
+  DataStore-captured immutable payload lets the widget show Undo without
+  partially writing or later reconstructing a submission; commit IDs make late
+  worker callbacks harmless. Reusing `ConsumptionLogger` preserves the
+  existing stable-ID, queue, acknowledgement, and retry guarantees.
+- Consequences: The app gains `Unavailable`, `NoCart`, `RateOff`, `Composing`,
+  and `AwaitingCommit` widget states, a bounded 0..600-second draft, and a
+  five-second local pending payload. The payload is short-lived UI state and is
+  excluded from backup. A future physical visual/action walkthrough must use a
+  separate sandbox/debug package; the v1.2.25 production install was verified
+  by package/readback only and no production widget action was submitted.
+- Related files: `app/src/main/java/com/example/widget/PenConsumptionWidgetProvider.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetCommitCoordinator.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetCommitWorker.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`,
+  `app/src/main/java/com/example/data/ConsumptionLogger.kt`,
+  `app/src/main/java/com/example/data/sync/SyncScheduler.kt`,
+  `app/src/main/java/com/example/data/sync/SyncWorker.kt`,
+  `app/src/main/java/com/example/CannsheetApplication.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
+  `app/src/test/java/com/example/widget`,
+  `app/src/androidTest/java/com/example/widget`,
+  `docs/ARCHITECTURE.md`
