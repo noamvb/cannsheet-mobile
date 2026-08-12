@@ -19,6 +19,12 @@ data class BackgroundSyncEvent(
 )
 
 class CannsheetGraph private constructor(context: Context) {
+    @Volatile
+    private var installedWidgetRefresher: WidgetRefresher = NoOpWidgetRefresher
+
+    val widgetRefresher: WidgetRefresher
+        get() = installedWidgetRefresher
+
     val database: AppDatabase = Room.databaseBuilder(
         context.applicationContext,
         AppDatabase::class.java,
@@ -88,6 +94,10 @@ class CannsheetGraph private constructor(context: Context) {
 
     suspend fun emitBackgroundSyncEvent(event: BackgroundSyncEvent) {
         mutableBackgroundSyncEvents.emit(event)
+    }
+
+    fun installWidgetRefresher(widgetRefresher: WidgetRefresher) {
+        installedWidgetRefresher = widgetRefresher
     }
 
     companion object {

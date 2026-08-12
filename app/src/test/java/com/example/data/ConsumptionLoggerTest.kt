@@ -84,6 +84,31 @@ class ConsumptionLoggerTest {
         assertNotEquals(repository.actions[0].eventId, repository.actions[1].eventId)
     }
 
+    @Test
+    fun widgetCanReuseEventIdWithoutChangingTheLoadedCart() = runBlocking {
+        val repository = RecordingRepository()
+        val preferences = RecordingLoadedPenStore().apply { loadedProductId = "newer-cart" }
+        val logger = ConsumptionLogger(repository, preferences)
+
+        repeat(2) {
+            logger.log(
+                date = "2026-08-12",
+                time = "12:00",
+                productId = "submitted-cart",
+                productUuid = null,
+                productType = "P",
+                uses = 3.0,
+                isFinished = false,
+                eventId = "stable-event-id",
+                updateLoadedCart = false,
+            )
+        }
+
+        assertEquals(listOf("stable-event-id", "stable-event-id"), repository.actions.map { it.eventId })
+        assertEquals("newer-cart", preferences.loadedProductId)
+        assertEquals(0, preferences.mutationCount)
+    }
+
     private class RecordingRepository : ConsumptionLogRepository {
         val actions = mutableListOf<ConsumptionAction>()
 

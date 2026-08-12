@@ -489,15 +489,15 @@ historical rationale.
      Cover rendering and action compatibility in the API 24/API 36 validation
      paths.
   2. Keep seconds as input/display units only. On submit, capture the product,
-     stable consumption ID, date, time, seconds, rate, and `uses` in a versioned
+     stable consumption event ID, date, time, seconds, rate, and `uses` in a versioned
      `pen_widget_state` DataStore payload after applying `secondsToUses`. Only
      the converted uses enter `ConsumptionLogger`, Room, the offline queue, and
      the Apps Script wire contract.
-  3. Defer the Room write for five seconds. Schedule one unique WorkManager
-     request per commit, and use a single `DataStore.edit`/`commitId` arbitration
-     boundary for both Undo and worker take. Cancelling work is an optimization;
-     lazy flushing of overdue payloads on broadcasts and application startup is
-     the recovery path.
+  3. Present a five-second Undo window. Use a process-local timer for the common
+     commit path, one unique WorkManager request as the durable backstop, and
+     lazy overdue flushing on broadcasts and application startup as recovery.
+     Every delivery tier must use the same DataStore arbitration boundary;
+     cancelling work is an optimization.
   4. Reuse the shared loaded-cart and logging boundaries, refresh the widget
      after relevant view-model, provider, startup, and acknowledged-sync events,
      and add no Room migration, queue field, network endpoint, or Apps Script
@@ -510,8 +510,8 @@ historical rationale.
   existing stable-ID, queue, acknowledgement, and retry guarantees.
 - Consequences: The app gains `Unavailable`, `NoCart`, `RateOff`, `Composing`,
   and `AwaitingCommit` widget states, a bounded 0..600-second draft, and a
-  five-second local pending payload. The payload is short-lived UI state and is
-  excluded from backup. A future physical visual/action walkthrough must use a
+  short-lived local pending payload. The payload is excluded from backup. A
+  future physical visual/action walkthrough must use a
   separate sandbox/debug package; the v1.2.25 production install was verified
   by package/readback only and no production widget action was submitted.
 - Related files: `app/src/main/java/com/example/widget/PenConsumptionWidgetProvider.kt`,
@@ -526,4 +526,58 @@ historical rationale.
   `app/src/main/java/com/example/ui/CannsheetViewModel.kt`,
   `app/src/test/java/com/example/widget`,
   `app/src/androidTest/java/com/example/widget`,
+  `docs/ARCHITECTURE.md`
+
+## ADR-014: Make widget delivery retry-safe before removing captured state
+
+- Status: Accepted; implemented through
+  [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55)
+- Date: 2026-08-12
+- Context: The initial widget implementation removed its DataStore payload
+  before the Room write, generated the consumption event ID only at write time,
+  depended on WorkManager latency for a five-second interaction, and allowed a
+  late widget commit to re-point the loaded cart. A Room failure could therefore
+  lose the submission, while a naive retry could duplicate it.
+- Decision:
+  1. Use payload version 2 with a submit-time `eventId`,
+     `submittedAtEpochMillis`, and claim metadata. Decode known version-1
+     payloads into the new shape with a deterministic event ID; reject only
+     malformed or unknown payloads.
+  2. Claim a due payload in DataStore without deleting it, write the same
+     immutable event ID through `ConsumptionLogger`, and remove the payload only
+     after Room persistence succeeds. Release a failed claim for retry. A unique
+     claim token prevents an older attempt from completing a newer claim, and a
+     new process can immediately recover a claim left by process death.
+  3. Show Undo for five seconds, reserve a 1.5-second delivery grace interval,
+     use a serialized process-local timer as the primary path, retain unique
+     WorkManager work as the durable backstop, and force resolution after a
+     bounded maximum age or a material backwards wall-clock jump. All paths use
+     the same claim/complete arbitration.
+  4. A widget commit records consumption without changing the loaded-cart
+     preference. Widget deletion force-commits a fresh payload before clearing
+     per-widget state and cancels its timer/work only after no payload remains.
+  5. Serialize provider mutation-plus-render operations and join WorkManager to
+     that boundary. Use direct activity PendingIntents and one-shot navigation
+     route events so opening the widget does not rely on a background activity
+     launch or recreate an existing Compose tree.
+  6. Keep widget copy in Android resources, announce values and actions through
+     accessibility descriptions, provide full and compact layouts plus a real
+     picker preview, and round display-only quantities without changing stored
+     six-decimal uses.
+- Rationale: The durable payload becomes a tiny local outbox: failure retains
+  retryable state, the stable event ID makes a repeated Room insert idempotent,
+  and completion is the only destructive transition. Timer, worker, startup,
+  receiver, and deletion paths can race without losing or duplicating the
+  logical event.
+- Consequences: The change adds no Room migration, queue field, Apps Script
+  contract, production endpoint, application ID, signing, or release-metadata
+  change. A v1 pending payload is upgraded at decode/claim time. Physical
+  launcher sizing, Doze timing, and TalkBack behavior still require a separate
+  sandbox-package walkthrough; local tests and CI are not device evidence.
+- Related files: `app/src/main/java/com/example/widget`,
+  `app/src/main/java/com/example/domain`,
+  `app/src/main/java/com/example/data/ConsumptionLogger.kt`,
+  `app/src/main/java/com/example/data/WidgetRefresher.kt`,
+  `app/src/main/java/com/example/MainActivity.kt`,
+  `app/src/main/java/com/example/ui/AppNavigation.kt`, `AGENTS.md`,
   `docs/ARCHITECTURE.md`

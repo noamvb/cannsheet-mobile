@@ -12,6 +12,15 @@ Last updated: 2026-08-12
 - Home-screen pen widget feature [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
   was squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`; its final
   six-job gate passed in [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764).
+- Widget remediation [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55)
+  implements the source-review findings without a version, Room schema, queue,
+  backend, endpoint, package, or signing change. Its local Android gate passed
+  with JDK 17.0.20, Android platform 36.1, and Build Tools 36.0.0:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  The run completed with `BUILD SUCCESSFUL`; 186 JVM tests passed, Android-test
+  Kotlin compilation and lint completed, and the debug APK assembled. All eight
+  checked-in Node.js backend suites passed with the bundled runtime, and
+  `python3 -m unittest tests/test_backend_sync_benchmark.py` passed all 13 tests.
 - Version-only release [PR #53](https://github.com/noamvb/cannsheet-mobile/pull/53)
   was squash-merged as `7c652fb48b4de5ba20b003abc828df9111124d73`; its five-job
   PR gate passed in [run 31621733498](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621733498).
@@ -205,16 +214,27 @@ Last updated: 2026-08-12
   `ConsumptionLogger` boundaries. Seconds are display/input units only;
   `secondsToUses` runs before Room, the offline queue, or Apps Script payloads.
 - A submit captures the stable consumption ID and immutable product/date/time/
-  rate/seconds/uses payload in the `pen_widget_state` DataStore, waits five
-  seconds in a unique WorkManager request, and then atomically takes the
-  payload before writing the existing Room queue. Undo arbitrates on the same
-  `commitId`; it never deletes an existing queued Room row. Overdue payloads
-  are lazily flushed on widget broadcasts and application startup.
+  rate/seconds/uses payload in the `pen_widget_state` DataStore. PR #55 adds a
+  five-second process-local Undo timer with 1.5 seconds of delivery grace,
+  keeps unique WorkManager work as a process-death backstop, and lazily flushes
+  overdue payloads on widget broadcasts and application startup.
+- PR #55 replaces destructive payload removal with claim/write/complete:
+  the payload remains until its stable event is durably inserted into Room,
+  failed writes release the claim for idempotent retry, process-owned claim
+  tokens recover process death, and widget deletion force-commits instead of
+  discarding a fresh submission. A widget commit never re-points the user's
+  currently loaded cart.
 - Widget states are `Unavailable`, `NoCart`, `RateOff`, `Composing`, and
   `AwaitingCommit`. The editable draft starts at zero, moves in ten-second
   steps, clamps to 0..600 seconds, and enables submit only for a positive
   value. Widget refreshes are requested by provider actions, application
-  startup, loaded-cart/log/finish changes, and acknowledged sync work.
+  startup, reactive pen-state changes, and acknowledged sync work through a
+  data-facing refresher interface.
+- PR #55 also adds serialized provider/worker execution, exception-safe
+  receiver completion, one-shot `singleTop` app navigation, resource-backed
+  copy and dynamic accessibility descriptions, neutral and representative
+  previews, full/compact layouts with corrected provider dimensions, and
+  presentation-only rounding for seconds converted from stored uses.
 - The change does not alter the Room schema, existing queue payloads, Apps
   Script contract, endpoint, package ID, or signing configuration. API-safe
   `RemoteViews` rendering is covered by the final CI API 24/API 36 paths.
@@ -222,6 +242,10 @@ Last updated: 2026-08-12
   widget was tapped in the production package during the v1.2.25 install.
   The device evidence is limited to signed package installation and readback;
   a sandbox package is required for any future visual/action walkthrough.
+- The PR #55 preview asset is a generated representative widget-picker image,
+  not physical-device evidence. No PR #55 launcher screenshot, physical widget
+  interaction, emulator instrumentation execution, or production-data action
+  has been performed; Android instrumentation source was compiled only.
 
 ## Purchase autofill defaults feature work
 

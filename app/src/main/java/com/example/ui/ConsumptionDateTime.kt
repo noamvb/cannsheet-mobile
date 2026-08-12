@@ -6,15 +6,10 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-data class SubmissionDateTime(val date: String, val time: String)
+typealias SubmissionDateTime = com.example.domain.SubmissionDateTime
 
-fun currentSubmissionDateTime(nowEpochMillis: Long = System.currentTimeMillis()): SubmissionDateTime {
-    val instant = Date(nowEpochMillis)
-    return SubmissionDateTime(
-        date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(instant),
-        time = SimpleDateFormat("HH:mm", Locale.US).format(instant),
-    )
-}
+fun currentSubmissionDateTime(nowEpochMillis: Long = System.currentTimeMillis()): SubmissionDateTime =
+    com.example.domain.currentSubmissionDateTime(nowEpochMillis)
 
 fun pickerDateToWire(selectedDateMillis: Long): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {

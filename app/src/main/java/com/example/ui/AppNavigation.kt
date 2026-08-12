@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -28,6 +29,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emptyFlow
 
 sealed class Screen(val route: String, val title: String, val icon: @Composable () -> Unit) {
     object Consumption : Screen("consumption", "Log", { Icon(Icons.Filled.List, contentDescription = "Consumption") })
@@ -43,10 +47,25 @@ val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.
 fun CannsheetApp(
     viewModel: CannsheetViewModel = viewModel(),
     startDestination: String = Screen.Consumption.route,
+    routeRequests: Flow<String> = emptyFlow(),
 ) {
     val navController = rememberNavController()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
     val countdown by viewModel.pendingCountdown.collectAsState()
+
+    LaunchedEffect(navController, routeRequests) {
+        routeRequests.collect { route ->
+            if (items.any { it.route == route }) {
+                navController.navigate(route) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {

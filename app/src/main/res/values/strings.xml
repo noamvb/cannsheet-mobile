@@ -3,14 +3,49 @@
     <string name="pen_widget_label">Pen quick log</string>
     <string name="pen_widget_description">Log a loaded pen cart from your home screen.</string>
     <string name="pen_widget_no_carts">No pen carts</string>
+    <string name="pen_widget_no_carts_hint">Tap to open Cannsheet Mobile.</string>
     <string name="pen_widget_no_cart_loaded">No cart loaded</string>
     <string name="pen_widget_no_cart_loaded_hint">Tap to choose a pen cart.</string>
     <string name="pen_widget_rate_off">Pen duration rate is off</string>
     <string name="pen_widget_rate_off_hint">Tap to set it in Settings.</string>
-    <string name="pen_widget_undo">Undo pen log</string>
     <string name="pen_widget_submit">Submit pen log</string>
-    <string name="pen_widget_queued">Queued</string>
+    <string name="pen_widget_queued">Queued ✓</string>
+    <string name="pen_widget_queued_symbol" translatable="false">✓</string>
+    <string name="pen_widget_submit_symbol" translatable="false">✓</string>
+    <string name="pen_widget_undo_symbol">UNDO</string>
+    <string name="pen_widget_saving_symbol" translatable="false">…</string>
+    <string name="pen_widget_saving">Saving…</string>
+    <string name="pen_widget_loading">Loading…</string>
+    <string name="pen_widget_generic_cart">Pen cart</string>
+    <string name="pen_widget_undo_window">Undo within %1$d seconds</string>
+    <string name="pen_widget_seconds_short" translatable="false">%1$ds</string>
+    <string name="pen_widget_status_synced">%1$s · synced %2$s uses</string>
+    <string name="pen_widget_status_unavailable">%1$s · synced unavailable</string>
+    <string name="pen_widget_status_synced_pending">%1$s · synced %2$s uses · Pending: +%3$s uses</string>
+    <string name="pen_widget_status_unavailable_pending">%1$s · synced unavailable · Pending: +%2$s uses</string>
+    <string name="pen_widget_preview_product">Blue Dream cart</string>
+    <string name="pen_widget_preview_subtitle">Active · synced 12 uses</string>
+    <string name="pen_widget_preview_seconds" translatable="false">30s</string>
     <string name="pen_widget_increase">Increase duration by 10 seconds</string>
     <string name="pen_widget_decrease">Decrease duration by 10 seconds</string>
-    <string name="pen_widget_reset">Reset duration to zero</string>
+    <plurals name="pen_widget_reset_seconds_description">
+        <item quantity="one">%1$d second. Double tap to reset.</item>
+        <item quantity="other">%1$d seconds. Double tap to reset.</item>
+    </plurals>
+    <plurals name="pen_widget_logging_seconds_description">
+        <item quantity="one">Logging %1$d second. Double tap to undo.</item>
+        <item quantity="other">Logging %1$d seconds. Double tap to undo.</item>
+    </plurals>
+    <plurals name="pen_widget_submit_seconds">
+        <item quantity="one">Submit %1$d second pen log</item>
+        <item quantity="other">Submit %1$d second pen log</item>
+    </plurals>
+    <plurals name="pen_widget_undo_seconds">
+        <item quantity="one">Undo %1$d second pen log</item>
+        <item quantity="other">Undo %1$d second pen log</item>
+    </plurals>
+    <plurals name="pen_widget_saving_seconds_description">
+        <item quantity="one">Saving %1$d second pen log</item>
+        <item quantity="other">Saving %1$d second pen log</item>
+    </plurals>
 </resources>

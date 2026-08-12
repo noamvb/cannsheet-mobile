@@ -7,8 +7,9 @@ import com.example.data.ProductTypeCodes
 import com.example.data.sync.SyncScheduler
 
 /**
- * Delivers a widget payload after DataStore has atomically won the commit race. The widget never
- * talks to the network; it records through the normal Room queue and schedules shared sync work.
+ * Delivers a widget payload after DataStore has atomically claimed the commit. The claim remains
+ * durable until Room persistence succeeds. The widget never talks to the network; it records
+ * through the normal Room queue and schedules shared sync work.
  */
 class PenWidgetCommitCoordinator(
     private val stateRepository: PenWidgetStateRepository,
@@ -16,31 +17,70 @@ class PenWidgetCommitCoordinator(
     private val enqueueSync: (Context) -> Unit,
     private val updateWidget: suspend (Context, Int) -> Unit,
 ) {
-    suspend fun commit(context: Context, appWidgetId: Int, commitId: String?) {
-        val payload = stateRepository.takeCommit(
+    suspend fun commit(
+        context: Context,
+        appWidgetId: Int,
+        commitId: String?,
+        nowMillis: Long = System.currentTimeMillis(),
+        force: Boolean = false,
+    ): Boolean {
+        val claim = stateRepository.claimCommit(
             appWidgetId = appWidgetId,
             commitId = commitId,
-            nowMillis = System.currentTimeMillis(),
+            nowMillis = nowMillis,
+            force = force,
         )
-        if (payload != null) {
-            logPayload(context, payload)
+        if (claim == null) {
+            runCatching { updateWidget(context.applicationContext, appWidgetId) }
+            return false
         }
-        updateWidget(context.applicationContext, appWidgetId)
+
+        val completed = try {
+            logPayload(claim.payload)
+            stateRepository.completeCommit(
+                appWidgetId = appWidgetId,
+                commitId = claim.payload.commitId,
+                claimId = claim.claimId,
+                nowMillis = nowMillis,
+            )
+        } catch (error: Throwable) {
+            runCatching {
+                stateRepository.releaseClaim(
+                    appWidgetId = appWidgetId,
+                    commitId = claim.payload.commitId,
+                    claimId = claim.claimId,
+                )
+            }
+            throw error
+        } finally {
+            runCatching { updateWidget(context.applicationContext, appWidgetId) }
+        }
+
+        if (completed) {
+            // Scheduling is recoverable and must not turn a durable Room row into a failed commit.
+            runCatching { enqueueSync(context.applicationContext) }
+        }
+        return completed
     }
 
     suspend fun flushOverdue(context: Context, nowMillis: Long) {
+        var firstFailure: Throwable? = null
         stateRepository.pendingCommits().forEach { pending ->
-            val payload = stateRepository.takeCommit(
-                appWidgetId = pending.appWidgetId,
-                commitId = null,
-                nowMillis = nowMillis,
-            ) ?: return@forEach
-            logPayload(context, payload)
-            updateWidget(context.applicationContext, pending.appWidgetId)
+            try {
+                commit(
+                    context = context,
+                    appWidgetId = pending.appWidgetId,
+                    commitId = null,
+                    nowMillis = nowMillis,
+                )
+            } catch (error: Throwable) {
+                if (firstFailure == null) firstFailure = error
+            }
         }
+        firstFailure?.let { throw it }
     }
 
-    private suspend fun logPayload(context: Context, payload: PenWidgetCommitPayload) {
+    private suspend fun logPayload(payload: PenWidgetCommitPayload) {
         consumptionLogger.log(
             date = payload.date,
             time = payload.time,
@@ -49,14 +89,20 @@ class PenWidgetCommitCoordinator(
             productType = ProductTypeCodes.PEN,
             uses = payload.uses,
             isFinished = false,
+            loggedAtEpochMillis = payload.submittedAtEpochMillis,
+            eventId = payload.eventId,
+            updateLoadedCart = false,
         )
-        enqueueSync(context.applicationContext)
     }
 
     companion object {
-        suspend fun commit(context: Context, appWidgetId: Int, commitId: String?) {
-            forContext(context).commit(context, appWidgetId, commitId)
-        }
+        suspend fun commit(
+            context: Context,
+            appWidgetId: Int,
+            commitId: String?,
+            nowMillis: Long = System.currentTimeMillis(),
+            force: Boolean = false,
+        ): Boolean = forContext(context).commit(context, appWidgetId, commitId, nowMillis, force)
 
         suspend fun flushOverdue(context: Context, nowMillis: Long) {
             forContext(context).flushOverdue(context, nowMillis)

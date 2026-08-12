@@ -2,4 +2,5 @@
 <resources>
     <dimen name="widget_corner_radius">16dp</dimen>
     <dimen name="widget_inner_radius">12dp</dimen>
+    <dimen name="widget_subtitle_min_height">160dp</dimen>
 </resources>

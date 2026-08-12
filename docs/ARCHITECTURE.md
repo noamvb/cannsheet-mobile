@@ -25,6 +25,8 @@ flowchart LR
   dependency initialization and work scheduling. Its `CannsheetGraph` owns the
   one Room database, repositories, preferences, sync engine, catalog refresher,
   and the shared `syncMutex` that serializes every queue synchronization attempt.
+  It also installs the widget implementation behind the data-facing
+  `WidgetRefresher` interface; data and UI callers do not import widget code.
 - `app/src/main/java/com/example/MainActivity.kt` starts the Compose application.
 - `app/src/main/java/com/example/ui/AppNavigation.kt` owns the bottom navigation
   between Log, Purchase, Insights, and Settings.
@@ -59,6 +61,9 @@ flowchart LR
   `AppWidgetProvider`/`RemoteViews` pen quick-log widget. It reuses the loaded
   cart, rate, date, and consumption logging boundaries rather than introducing
   a second Room or network contract.
+- `app/src/main/java/com/example/domain` contains the pen-state, quantity-unit,
+  and submit-time helpers shared by Compose and the widget, avoiding a
+  `ui -> widget -> ui` dependency cycle.
 
 ### Background queue synchronization
 
@@ -223,36 +228,48 @@ validation paths. It displays the shared loaded-cart state and uses the same
 - The draft starts at zero, changes in ten-second steps, and is clamped to
   0..600 seconds. Submit is enabled only for a positive draft; reset returns
   to zero and a counter tap returns to composing state.
-- A submit broadcast performs one `DataStore.edit` that captures the product,
-  stable consumption ID, date, time, seconds, rate, and converted `uses`
-  payload. The Room write is intentionally deferred for five seconds. The
-  worker then takes that exact payload atomically and calls the shared
-  `ConsumptionLogger`, which is the only path that creates the existing Room
-  action and schedules synchronization.
+- A submit broadcast performs one `DataStore.edit` that reads the current draft
+  and captures payload version 2: product, stable consumption `eventId`, submit
+  and deadline timestamps, date, time, seconds, rate, and converted `uses`.
+  Draft capture and payload construction are one atomic transaction.
+- The displayed Undo window is five seconds, followed by 1.5 seconds of
+  delivery grace. A serialized process-local timer is the primary delivery
+  path; unique WorkManager work is the durable process-death backstop; lazy
+  overdue flushing is the final recovery tier.
+- Delivery claims the exact payload in DataStore without removing it, writes
+  its stable event ID through `ConsumptionLogger`, and completes/removes the
+  claim only after Room succeeds. A failure releases the claim for retry. A
+  process owner plus unique claim token recovers process-death state without
+  allowing an older attempt to complete a newer claim.
 - Undo removes the pending payload only when its `commitId` still matches and
-  restores the captured seconds draft. Cancelling WorkManager is only an
-  optimization; the `commitId` arbitration makes a late worker a no-op, and
-  the implementation never deletes an already queued Room row.
+  restores the captured seconds draft. Timer/WorkManager cancellation is only
+  an optimization; no widget path deletes an already queued Room row. Widget
+  deletion force-commits a fresh payload before clearing per-widget UI state.
 
 The deferred commit is represented by the following boundary sequence:
 
 ```mermaid
 flowchart LR
     Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture payload\nsecondsToUses"]
-    Capture --> Window["AwaitingCommit\n5-second WorkManager delay"]
-    Window --> Decision{"Undo wins?"}
+    Capture --> Window["AwaitingCommit\n5-second window + grace"]
+    Window --> Tiers["Process timer primary\nWorkManager backstop\nlazy flush recovery"]
+    Tiers --> Decision{"Undo wins?"}
     Decision -->|yes| Restore["Remove pending payload\nrestore seconds draft"]
-    Decision -->|no| Take["DataStore edit\ntake payload atomically"]
-    Take --> Logger["ConsumptionLogger\nuses only"]
+    Decision -->|no| Claim["DataStore edit\nclaim; payload remains"]
+    Claim --> Logger["ConsumptionLogger\nstable eventId; uses only"]
     Logger --> Room["Room consumption_actions"]
-    Room --> Sync["SyncScheduler.enqueueImmediate"]
+    Room --> Complete["DataStore edit\ncomplete and remove payload"]
+    Complete --> Sync["SyncScheduler.enqueueImmediate"]
 ```
 
 Widget broadcasts and application startup lazily flush overdue pending
-payloads, so a process death or missed delayed-work callback does not leave a
-captured submission stranded. View-model log/finish/loaded-cart changes,
+payloads. A ten-minute maximum pending age and backwards-clock recovery prevent
+a wall-clock change from stranding the widget. A widget commit never re-points
+the loaded cart at delayed write time. View-model pen-state changes,
 acknowledged sync work, application startup, and provider actions request a
-widget refresh. The widget's local state remains usable when background sync
+widget refresh through the `WidgetRefresher` boundary. Provider work is
+serialized across mutation and render, and WorkManager joins the same mutex.
+The widget's local state remains usable when background sync
 is disabled; the existing queue and acknowledgement rules continue to govern
 delivery to Apps Script.
 
@@ -329,9 +346,10 @@ are an independent full-map JSON value in the `purchase_defaults` DataStore;
 they do not enter the Room schema or Apps Script synchronization payload.
 The pen widget's draft and deferred-submit payload live in a separate
 `pen_widget_state` DataStore and are excluded from backup because they are
-short-lived UI state. The payload stores both the displayed seconds and the
-derived uses for the five-second arbitration window; only uses cross the
-`ConsumptionLogger` boundary into Room, the offline queue, and the wire.
+short-lived UI state. Payload version 2 stores displayed seconds, derived uses,
+the stable event ID, timing, and claim metadata. It is removed only after the
+Room write is durable; only uses cross the `ConsumptionLogger` boundary into
+Room, the offline queue, and the wire.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
@@ -375,7 +393,9 @@ source values.
   migration, selected/recent usage-total rendering, and Purchase type-filtered
   suggestion/autofill behavior. Widget renderer tests cover API-safe
   `RemoteViews` actions, and widget state tests cover seconds-to-uses
-  conversion, deferred commit/undo arbitration, and lazy overdue flushing.
+  conversion, payload migration, claim/complete retry behavior, timer/grace
+  boundaries, deferred commit/undo arbitration, fixed-size layout inflation,
+  and lazy overdue flushing.
 - `tests`: Node scripts execute the checked-in Apps Script source against fake
   Apps Script/Sheets implementations; a Python unittest covers deterministic
   backend benchmark tooling.
@@ -404,6 +424,8 @@ validation.
 - Repository/database operations own local persistence and transaction safety.
 - Network DTOs and environment checks form a compatibility boundary.
 - Pending queue rows are removed only through the acknowledgement rules.
+- A captured widget payload is removed only after its stable event has been
+  durably written to the Room queue.
 - `SyncEngine`, protected by `CannsheetGraph.syncMutex`, is the sole queue
   synchronization boundary for foreground and WorkManager-triggered attempts.
 - Android source, Apps Script source, live deployment state, spreadsheet state,

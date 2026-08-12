@@ -14,7 +14,6 @@ import com.example.data.InsightsResponseDto
 import com.example.data.ProductCatalogRefreshResult
 import com.example.data.SyncAcknowledgementPlan
 import com.example.data.SyncOutcome
-import com.example.widget.PenWidgetUpdater
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -29,6 +28,8 @@ interface BackgroundSyncWorkerRuntime {
     suspend fun recordMeaningfulResult(result: BackgroundSyncResult)
 
     suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome
+
+    fun refreshWidgets()
 }
 
 class SyncWorker(
@@ -51,7 +52,8 @@ class SyncWorker(
 
             is BackgroundSyncRunResult.Applied -> {
                 runtime.recordMeaningfulResult(result.outcome.plan.toBackgroundSyncResult())
-                PenWidgetUpdater.updateAll(applicationContext)
+                // A presentation refresh cannot turn an acknowledged queue delivery into a retry.
+                runCatching { runtime.refreshWidgets() }
                 Result.success()
             }
 
@@ -164,6 +166,10 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     }
 
     override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome = prefetcher.prefetch()
+
+    override fun refreshWidgets() {
+        graph.widgetRefresher.refreshAll()
+    }
 }
 
 private fun SyncAcknowledgementPlan.toBackgroundSyncResult(): BackgroundSyncResult = when {

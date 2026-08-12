@@ -1,7 +1,8 @@
 package com.example.widget
 
+import com.example.R
 import com.example.data.Product
-import com.example.ui.PenQuickLogState
+import com.example.domain.PenQuickLogState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,6 +26,11 @@ class PenWidgetUiModelTest {
             (buildPenWidgetUiModel(loaded(rate = null), composing(), null, 0L)
                 as PenWidgetUiModel.Message).kind,
         )
+        assertEquals(
+            R.string.pen_widget_no_carts,
+            (buildPenWidgetUiModel(PenQuickLogState.Unavailable, composing(), null, 0L)
+                as PenWidgetUiModel.Message).title.resourceId,
+        )
     }
 
     @Test
@@ -36,8 +42,11 @@ class PenWidgetUiModelTest {
         assertTrue(model.canDecrement)
         assertTrue(model.canIncrement)
         assertTrue(model.canSubmit)
-        assertEquals("Queued ✓", (buildPenWidgetUiModel(loaded(), PenWidgetDraft.Composing(0), 1_000L, 8_999L)
-            as PenWidgetUiModel.Composing).subtitle)
+        assertEquals(
+            R.string.pen_widget_queued,
+            ((buildPenWidgetUiModel(loaded(), PenWidgetDraft.Composing(0), 1_000L, 8_999L)
+                as PenWidgetUiModel.Composing).subtitle as PenWidgetText.Resource).resourceId,
+        )
         assertFalse((buildPenWidgetUiModel(loaded(), PenWidgetDraft.Composing(0), null, 0L)
             as PenWidgetUiModel.Composing).canSubmit)
         assertFalse((buildPenWidgetUiModel(loaded(), PenWidgetDraft.Composing(0), null, 0L)
@@ -50,7 +59,10 @@ class PenWidgetUiModelTest {
     fun queuedSubtitleExpiresAndAwaitingCommitFreezesSeconds() {
         val normal = buildPenWidgetUiModel(loaded(), PenWidgetDraft.Composing(20), 1_000L, 9_001L)
             as PenWidgetUiModel.Composing
-        assertFalse(normal.subtitle == "Queued ✓")
+        assertFalse(
+            normal.subtitle is PenWidgetText.Resource &&
+                normal.subtitle.resourceId == R.string.pen_widget_queued,
+        )
 
         val awaiting = buildPenWidgetUiModel(
             loaded(),
@@ -60,7 +72,8 @@ class PenWidgetUiModelTest {
         ) as PenWidgetUiModel.AwaitingCommit
         assertEquals(30, awaiting.frozenSeconds)
         assertEquals("commit-1", awaiting.commitId)
-        assertEquals(3_000L, awaiting.remainingMillis)
+        assertEquals(1_500L, awaiting.remainingMillis)
+        assertEquals(R.string.pen_widget_undo_window, awaiting.subtitle.resourceId)
     }
 
     private fun composing() = PenWidgetDraft.Composing(0)
@@ -82,6 +95,8 @@ class PenWidgetUiModelTest {
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",
+        eventId = "event-1",
+        submittedAtEpochMillis = 0L,
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = null,

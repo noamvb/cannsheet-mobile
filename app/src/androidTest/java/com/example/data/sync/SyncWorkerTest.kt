@@ -121,6 +121,30 @@ class SyncWorkerTest {
 
         assertEquals(ListenableWorker.Result.success(), result)
         assertEquals(listOf(BackgroundSyncResult.SUCCESS), runtime.recordedResults)
+        assertEquals(1, runtime.refreshWidgetCalls)
+    }
+
+    @Test
+    fun widgetRefreshFailureDoesNotRetryAnAppliedSync() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.Applied(
+                SyncOutcome.Applied(
+                    plan = SyncAcknowledgementPlan(
+                        acknowledgedPurchaseActionIds = setOf("purchase-action"),
+                    ),
+                    pendingCorrectionsAtSnapshot = emptyList(),
+                    snapshot = QueuedSyncSnapshot(emptySet(), emptySet()),
+                ),
+                completedPasses = 1,
+            ),
+            refreshWidgetError = IllegalStateException("widget refresh failed"),
+        )
+
+        val result = worker(runtime).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(listOf(BackgroundSyncResult.SUCCESS), runtime.recordedResults)
+        assertEquals(1, runtime.refreshWidgetCalls)
     }
 
     @Test
@@ -305,9 +329,11 @@ class SyncWorkerTest {
         private val enabled: Boolean = true,
         private val result: BackgroundSyncRunResult,
         private val prefetchError: Throwable? = null,
+        private val refreshWidgetError: Throwable? = null,
     ) : BackgroundSyncWorkerRuntime {
         var runCalls = 0
         var prefetchCalls = 0
+        var refreshWidgetCalls = 0
         val recordedResults = mutableListOf<BackgroundSyncResult>()
 
         override suspend fun isEnabled(): Boolean = enabled
@@ -328,6 +354,11 @@ class SyncWorkerTest {
                 insights = AnalyticsPrefetchStatus.REFRESHED,
                 history = AnalyticsPrefetchStatus.REFRESHED,
             )
+        }
+
+        override fun refreshWidgets() {
+            refreshWidgetCalls += 1
+            refreshWidgetError?.let { throw it }
         }
     }
 
@@ -361,6 +392,7 @@ class SyncWorkerTest {
     ) : BackgroundSyncWorkerRuntime {
         val recordedResults = mutableListOf<BackgroundSyncResult>()
         var prefetchCalls = 0
+        var refreshWidgetCalls = 0
 
         override suspend fun isEnabled(): Boolean = true
 
@@ -376,6 +408,10 @@ class SyncWorkerTest {
                 insights = AnalyticsPrefetchStatus.REFRESHED,
                 history = AnalyticsPrefetchStatus.REFRESHED,
             )
+        }
+
+        override fun refreshWidgets() {
+            refreshWidgetCalls += 1
         }
     }
 

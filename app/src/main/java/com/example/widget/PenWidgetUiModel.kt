@@ -1,20 +1,19 @@
 package com.example.widget
 
+import androidx.annotation.StringRes
+import com.example.R
 import com.example.data.productStatus
-import com.example.ui.PenQuickLogState
+import com.example.domain.PenQuickLogState
 import java.math.BigDecimal
 import java.math.RoundingMode
 
-internal object PenWidgetText {
-    const val UNAVAILABLE_TITLE = "No pen carts"
-    const val UNAVAILABLE_HINT = "Tap to open Cannsheet Mobile."
-    const val NO_CART_TITLE = "No cart loaded"
-    const val NO_CART_HINT = "Tap to choose a pen cart."
-    const val RATE_OFF_TITLE = "Pen duration rate is off"
-    const val RATE_OFF_HINT = "Tap to set it in Settings."
-    const val UNDO = "UNDO"
-    const val SUBMIT = "✓"
-    const val QUEUED = "Queued ✓"
+sealed interface PenWidgetText {
+    data class Resource(
+        @param:StringRes val resourceId: Int,
+        val arguments: List<Any> = emptyList(),
+    ) : PenWidgetText
+
+    data class Literal(val value: String) : PenWidgetText
 }
 
 enum class PenWidgetMessageKind {
@@ -31,23 +30,24 @@ enum class PenWidgetOpenTarget {
 sealed interface PenWidgetUiModel {
     data class Message(
         val kind: PenWidgetMessageKind,
-        val title: String,
-        val hint: String,
+        val title: PenWidgetText.Resource,
+        val hint: PenWidgetText.Resource,
         val openTarget: PenWidgetOpenTarget,
     ) : PenWidgetUiModel
 
     data class Composing(
-        val productName: String,
-        val subtitle: String,
+        val productName: PenWidgetText,
+        val subtitle: PenWidgetText,
         val seconds: Int,
+        val recentlyQueued: Boolean,
         val canDecrement: Boolean,
         val canIncrement: Boolean,
         val canSubmit: Boolean,
     ) : PenWidgetUiModel
 
     data class AwaitingCommit(
-        val productName: String,
-        val subtitle: String,
+        val productName: PenWidgetText,
+        val subtitle: PenWidgetText.Resource,
         val frozenSeconds: Int,
         val commitId: String,
         val remainingMillis: Long,
@@ -63,11 +63,17 @@ fun buildPenWidgetUiModel(
     if (draft is PenWidgetDraft.AwaitingCommit) {
         val product = (penState as? PenQuickLogState.Loaded)?.product
         return PenWidgetUiModel.AwaitingCommit(
-            productName = product?.name ?: "Pen cart",
-            subtitle = "Undo within 5 seconds",
+            productName = product?.name?.let { PenWidgetText.Literal(it) }
+                ?: PenWidgetText.Resource(R.string.pen_widget_generic_cart),
+            subtitle = PenWidgetText.Resource(
+                R.string.pen_widget_undo_window,
+                listOf(UNDO_WINDOW_MILLIS / 1_000L),
+            ),
             frozenSeconds = draft.payload.seconds,
             commitId = draft.payload.commitId,
-            remainingMillis = (draft.payload.commitAtEpochMillis - nowMillis).coerceAtLeast(0L),
+            remainingMillis = (
+                draft.payload.commitAtEpochMillis - COMMIT_GRACE_MILLIS - nowMillis
+            ).coerceAtLeast(0L),
         )
     }
 
@@ -75,15 +81,15 @@ fun buildPenWidgetUiModel(
     return when (penState) {
         PenQuickLogState.Unavailable -> PenWidgetUiModel.Message(
             kind = PenWidgetMessageKind.Unavailable,
-            title = PenWidgetText.UNAVAILABLE_TITLE,
-            hint = PenWidgetText.UNAVAILABLE_HINT,
+            title = PenWidgetText.Resource(R.string.pen_widget_no_carts),
+            hint = PenWidgetText.Resource(R.string.pen_widget_no_carts_hint),
             openTarget = PenWidgetOpenTarget.Log,
         )
 
         PenQuickLogState.NoCartLoaded -> PenWidgetUiModel.Message(
             kind = PenWidgetMessageKind.NoCart,
-            title = PenWidgetText.NO_CART_TITLE,
-            hint = PenWidgetText.NO_CART_HINT,
+            title = PenWidgetText.Resource(R.string.pen_widget_no_cart_loaded),
+            hint = PenWidgetText.Resource(R.string.pen_widget_no_cart_loaded_hint),
             openTarget = PenWidgetOpenTarget.Log,
         )
 
@@ -91,15 +97,16 @@ fun buildPenWidgetUiModel(
             if (penState.secondsPerUse == null) {
                 PenWidgetUiModel.Message(
                     kind = PenWidgetMessageKind.RateOff,
-                    title = PenWidgetText.RATE_OFF_TITLE,
-                    hint = PenWidgetText.RATE_OFF_HINT,
+                    title = PenWidgetText.Resource(R.string.pen_widget_rate_off),
+                    hint = PenWidgetText.Resource(R.string.pen_widget_rate_off_hint),
                     openTarget = PenWidgetOpenTarget.Settings,
                 )
             } else {
                 PenWidgetUiModel.Composing(
-                    productName = penState.product.name,
+                    productName = PenWidgetText.Literal(penState.product.name),
                     subtitle = buildSubtitle(penState, lastQueuedAtMillis, nowMillis),
                     seconds = composing.seconds,
+                    recentlyQueued = wasRecentlyQueued(lastQueuedAtMillis, nowMillis),
                     canDecrement = composing.seconds > 0,
                     canIncrement = composing.seconds < MAX_SECONDS,
                     canSubmit = composing.seconds > 0,
@@ -113,23 +120,39 @@ private fun buildSubtitle(
     state: PenQuickLogState.Loaded,
     lastQueuedAtMillis: Long?,
     nowMillis: Long,
-): String {
-    if (lastQueuedAtMillis != null &&
-        nowMillis - lastQueuedAtMillis in 0..QUEUED_SUBTITLE_WINDOW_MILLIS
-    ) {
-        return PenWidgetText.QUEUED
+): PenWidgetText {
+    if (wasRecentlyQueued(lastQueuedAtMillis, nowMillis)) {
+        return PenWidgetText.Resource(R.string.pen_widget_queued)
     }
 
-    val synced = state.syncedUses?.let { "synced ${formatAmount(it)} uses" }
-        ?: "synced unavailable"
+    val status = state.product.productStatus.label
     return if (state.pendingUses > 0.0) {
-        "${state.product.productStatus.label} · $synced · Pending: +${formatAmount(state.pendingUses)} uses"
+        if (state.syncedUses == null) {
+            PenWidgetText.Resource(
+                R.string.pen_widget_status_unavailable_pending,
+                listOf(status, formatAmount(state.pendingUses)),
+            )
+        } else {
+            PenWidgetText.Resource(
+                R.string.pen_widget_status_synced_pending,
+                listOf(status, formatAmount(state.syncedUses), formatAmount(state.pendingUses)),
+            )
+        }
+    } else if (state.syncedUses == null) {
+        PenWidgetText.Resource(R.string.pen_widget_status_unavailable, listOf(status))
     } else {
-        "${state.product.productStatus.label} · $synced"
+        PenWidgetText.Resource(
+            R.string.pen_widget_status_synced,
+            listOf(status, formatAmount(state.syncedUses)),
+        )
     }
 }
 
+private fun wasRecentlyQueued(lastQueuedAtMillis: Long?, nowMillis: Long): Boolean =
+    lastQueuedAtMillis != null &&
+        nowMillis - lastQueuedAtMillis in 0..QUEUED_SUBTITLE_WINDOW_MILLIS
+
 private fun formatAmount(value: Double): String = BigDecimal.valueOf(value)
-    .setScale(6, RoundingMode.HALF_UP)
+    .setScale(3, RoundingMode.HALF_UP)
     .stripTrailingZeros()
     .toPlainString()

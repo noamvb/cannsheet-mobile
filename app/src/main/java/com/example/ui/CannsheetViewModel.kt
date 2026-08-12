@@ -24,11 +24,13 @@ import com.example.data.PendingConsumptionCorrection
 import com.example.data.SyncOutcome
 import com.example.data.SyncPreferences
 import com.example.data.sync.SyncScheduler
-import com.example.widget.PenWidgetUpdater
 import com.example.data.productStatus
+import com.example.domain.PenQuickLogState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -245,6 +247,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             graph.backgroundSyncEvents.collect(::applyBackgroundSyncEvent)
         }
+        viewModelScope.launch {
+            penQuickLogState
+                .drop(1)
+                .distinctUntilChanged()
+                .collect { graph.widgetRefresher.refreshAll() }
+        }
         fetchProducts()
     }
 
@@ -336,7 +344,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             runCatching {
                 consumptionPreferences.setLoadedPenProductId(productId)
-                PenWidgetUpdater.updateAll(getApplication())
             }.onFailure { _syncStatus.value = it.message ?: "Could not save the loaded pen cart" }
         }
     }
@@ -562,7 +569,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             _syncStatus.value = "Consumption saved offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
-            PenWidgetUpdater.updateAll(getApplication())
         }
     }
 
@@ -638,7 +644,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             _syncStatus.value = "Product marked finished offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
-            PenWidgetUpdater.updateAll(getApplication())
         }
     }
 
@@ -776,7 +781,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     if (!outcome.plan.finishCapabilityMissing) {
                         fetchProducts()
                     }
-                    PenWidgetUpdater.updateAll(getApplication())
                 }
             }
 
