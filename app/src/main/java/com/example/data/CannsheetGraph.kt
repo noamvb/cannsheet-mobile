@@ -35,6 +35,8 @@ class CannsheetGraph private constructor(context: Context) {
     ).build()
 
     val repository = CannsheetRepository(database)
+    val consumptionPreferences = ConsumptionPreferencesRepository(context.applicationContext)
+    val consumptionLogger = ConsumptionLogger(repository, consumptionPreferences)
     val purchaseDefaultsRepository = PurchaseDefaultsRepository(context.applicationContext)
     val syncPreferences = SyncPreferencesRepository(context.applicationContext)
 

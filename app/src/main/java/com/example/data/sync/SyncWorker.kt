@@ -14,6 +14,7 @@ import com.example.data.InsightsResponseDto
 import com.example.data.ProductCatalogRefreshResult
 import com.example.data.SyncAcknowledgementPlan
 import com.example.data.SyncOutcome
+import com.example.widget.PenWidgetUpdater
 import kotlinx.coroutines.CancellationException
 
 /**
@@ -50,6 +51,7 @@ class SyncWorker(
 
             is BackgroundSyncRunResult.Applied -> {
                 runtime.recordMeaningfulResult(result.outcome.plan.toBackgroundSyncResult())
+                PenWidgetUpdater.updateAll(applicationContext)
                 Result.success()
             }
 

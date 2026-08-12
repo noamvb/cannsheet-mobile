@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="widget_background">#FF1C1B1F</color>
+    <color name="widget_on_background">#FFE6E1E5</color>
+    <color name="widget_on_background_muted">#FFCAC4D0</color>
+    <color name="widget_counter_panel">#FF4F378B</color>
+    <color name="widget_on_counter_panel">#FFEADDFF</color>
+    <color name="widget_submit">#FFD0BCFF</color>
+    <color name="widget_on_submit">#FF381E72</color>
+    <color name="widget_submit_disabled">#FF49454F</color>
+    <color name="widget_step">#FF49454F</color>
+    <color name="widget_on_step">#FFE6E1E5</color>
+    <color name="widget_step_disabled">#FF373438</color>
+</resources>

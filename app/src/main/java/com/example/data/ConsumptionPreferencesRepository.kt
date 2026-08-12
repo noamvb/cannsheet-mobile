@@ -45,7 +45,7 @@ internal const val SECONDS_PER_USE_OVERRIDES_PAYLOAD_VERSION = 1
 class ConsumptionPreferencesRepository private constructor(
     private val dataStore: DataStore<Preferences>,
     private val moshi: Moshi,
-) {
+) : LoadedPenProductStore {
     constructor(context: Context) : this(
         dataStore = context.applicationContext.consumptionPreferencesDataStore,
         moshi = Moshi.Builder().build(),
@@ -185,7 +185,7 @@ class ConsumptionPreferencesRepository private constructor(
         }
     }
 
-    suspend fun setLoadedPenProductId(productId: String) {
+    override suspend fun setLoadedPenProductId(productId: String) {
         val normalizedProductId = productId.trim()
         require(normalizedProductId.isNotBlank()) { "Product ID is required." }
         dataStore.edit { storedPreferences ->
@@ -193,7 +193,7 @@ class ConsumptionPreferencesRepository private constructor(
         }
     }
 
-    suspend fun clearLoadedPenProductId() {
+    override suspend fun clearLoadedPenProductId() {
         dataStore.edit { storedPreferences ->
             storedPreferences.remove(LOADED_PEN_PRODUCT_ID)
         }
