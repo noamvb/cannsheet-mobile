@@ -109,8 +109,8 @@ class QueueAlertNotifierTest {
         val expected = mapOf(
             QueueAlertReason.STUCK_QUEUE to (
                 R.string.queue_alert_stuck_title to
-                    "2 entries have been waiting on this phone for over a day. " +
-                    "Open Cannsheet to sync."
+                    "2 entries are waiting to sync. This phone has had unsent " +
+                    "entries for over a day. Open Cannsheet."
                 ),
             QueueAlertReason.PARTIAL_REJECTIONS to
                 (R.string.queue_alert_rejected_title to
