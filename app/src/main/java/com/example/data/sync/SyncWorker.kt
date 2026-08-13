@@ -26,6 +26,8 @@ interface BackgroundSyncWorkerRuntime {
 
     suspend fun isEnabled(): Boolean
 
+    suspend fun reconcileQueueAlert()
+
     suspend fun run(): BackgroundSyncRunResult
 
     suspend fun recordMeaningfulResult(result: BackgroundSyncResult)
@@ -48,7 +50,10 @@ class SyncWorker(
 
     override suspend fun doWork(): Result {
         observeQueueDepthBestEffort()
-        if (!runtime.isEnabled()) return Result.success()
+        if (!runtime.isEnabled()) {
+            reconcileQueueAlertBestEffort()
+            return Result.success()
+        }
 
         val result = runtime.run()
         val workerResult = when (result) {
@@ -78,6 +83,8 @@ class SyncWorker(
 
         val requested = inputData.getBoolean(SyncScheduler.PREFETCH_ANALYTICS_KEY, false)
         if (shouldPrefetchAnalytics(result, requested)) prefetchAnalyticsBestEffort()
+        // Notification work is advisory and cannot replace the queue result decided above.
+        reconcileQueueAlertBestEffort()
         return workerResult
     }
 
@@ -103,6 +110,17 @@ class SyncWorker(
             throw error
         } catch (error: Throwable) {
             // The application-level collector and a later worker can observe the queue again.
+        }
+    }
+
+    /** Queue-alert delivery is advisory and cannot alter an existing worker decision. */
+    private suspend fun reconcileQueueAlertBestEffort() {
+        try {
+            runtime.reconcileQueueAlert()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // The next application/worker reconciliation can try again.
         }
     }
 
@@ -179,6 +197,10 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     }
 
     override suspend fun isEnabled(): Boolean = graph.syncPreferences.isEnabled()
+
+    override suspend fun reconcileQueueAlert() {
+        graph.queueAlertDelivery.reconcile()
+    }
 
     override suspend fun run(): BackgroundSyncRunResult = runner.run()
 

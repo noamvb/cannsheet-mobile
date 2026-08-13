@@ -63,6 +63,7 @@ class SyncWorkerTest {
 
         assertEquals(ListenableWorker.Result.success(), result)
         assertEquals(1, runtime.observeQueueDepthCalls)
+        assertEquals(1, runtime.reconcileQueueAlertCalls)
         assertEquals(0, runtime.runCalls)
         assertTrue(runtime.recordedResults.isEmpty())
     }
@@ -336,6 +337,46 @@ class SyncWorkerTest {
         assertEquals(listOf(BackgroundSyncResult.SUCCESS), runtime.recordedResults)
     }
 
+    @Test
+    fun queueAlertFailureCannotReplaceSuccessRetryOrFailureResults() = runBlocking {
+        val success = FakeRuntime(
+            result = BackgroundSyncRunResult.NothingToSync,
+            reconcileQueueAlertError = IllegalStateException("notification failed"),
+        )
+        val retry = FakeRuntime(
+            result = BackgroundSyncRunResult.Retry(SyncOutcome.HtmlResponse(emptyList())),
+            reconcileQueueAlertError = IllegalStateException("notification failed"),
+        )
+        val failure = FakeRuntime(
+            result = BackgroundSyncRunResult.EnvironmentMismatch(
+                SyncOutcome.EnvironmentMismatch(emptyList()),
+            ),
+            reconcileQueueAlertError = IllegalStateException("notification failed"),
+        )
+
+        assertEquals(ListenableWorker.Result.success(), worker(success).doWork())
+        assertEquals(ListenableWorker.Result.retry(), worker(retry).doWork())
+        assertEquals(ListenableWorker.Result.failure(), worker(failure).doWork())
+        assertEquals(1, success.reconcileQueueAlertCalls)
+        assertEquals(1, retry.reconcileQueueAlertCalls)
+        assertEquals(1, failure.reconcileQueueAlertCalls)
+    }
+
+    @Test
+    fun queueAlertCancellationCancelsTheWorker() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.NothingToSync,
+            reconcileQueueAlertError = CancellationException("cancelled"),
+        )
+
+        try {
+            worker(runtime).doWork()
+            fail("CancellationException should escape")
+        } catch (_: CancellationException) {
+            // Expected.
+        }
+    }
+
     private fun worker(
         runtime: BackgroundSyncWorkerRuntime,
         runAttemptCount: Int = 0,
@@ -366,11 +407,13 @@ class SyncWorkerTest {
         private val observeQueueDepthError: Throwable? = null,
         private val prefetchError: Throwable? = null,
         private val refreshWidgetError: Throwable? = null,
+        private val reconcileQueueAlertError: Throwable? = null,
     ) : BackgroundSyncWorkerRuntime {
         var observeQueueDepthCalls = 0
         var runCalls = 0
         var prefetchCalls = 0
         var refreshWidgetCalls = 0
+        var reconcileQueueAlertCalls = 0
         val recordedResults = mutableListOf<BackgroundSyncResult>()
 
         override suspend fun observeQueueDepth() {
@@ -379,6 +422,11 @@ class SyncWorkerTest {
         }
 
         override suspend fun isEnabled(): Boolean = enabled
+
+        override suspend fun reconcileQueueAlert() {
+            reconcileQueueAlertCalls += 1
+            reconcileQueueAlertError?.let { throw it }
+        }
 
         override suspend fun run(): BackgroundSyncRunResult {
             runCalls += 1
@@ -436,12 +484,17 @@ class SyncWorkerTest {
         var observeQueueDepthCalls = 0
         var prefetchCalls = 0
         var refreshWidgetCalls = 0
+        var reconcileQueueAlertCalls = 0
 
         override suspend fun observeQueueDepth() {
             observeQueueDepthCalls += 1
         }
 
         override suspend fun isEnabled(): Boolean = true
+
+        override suspend fun reconcileQueueAlert() {
+            reconcileQueueAlertCalls += 1
+        }
 
         override suspend fun run(): BackgroundSyncRunResult = runner.run()
 

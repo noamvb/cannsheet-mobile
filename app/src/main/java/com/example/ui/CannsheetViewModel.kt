@@ -27,6 +27,7 @@ import com.example.data.sync.SyncScheduler
 import com.example.data.productStatus
 import com.example.domain.PenQuickLogState
 import com.example.domain.buildPenQuickLogState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
@@ -307,6 +308,38 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 .onFailure { error ->
                     _syncStatus.value = error.message ?: "Could not update background sync"
                 }
+        }
+    }
+
+    fun canPresentQueueAlerts(): Boolean = graph.queueAlertPresenter.canPresent()
+
+    fun setQueueAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                graph.syncPreferences.setQueueAlertsEnabled(enabled)
+                if (enabled) {
+                    // Evaluate an already-actionable queue without starting a sync request.
+                    try {
+                        graph.queueAlertDelivery.reconcile()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        // The durable alert-only threshold work can retry this advisory delivery.
+                    }
+                } else {
+                    try {
+                        graph.queueAlertDelivery.clearIfCurrentAlertInactive()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        // Preference write succeeded; later state reconciliation can clear again.
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                _syncStatus.value = error.message ?: "Could not update queue alerts"
+            }
         }
     }
 

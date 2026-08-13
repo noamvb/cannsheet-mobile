@@ -3,11 +3,15 @@ package com.example.data
 import android.content.Context
 import androidx.room.Room
 import com.example.BuildConfig
+import com.example.data.sync.NoOpQueueAlertPresenter
+import com.example.data.sync.QueueAlertDeliveryCoordinator
+import com.example.data.sync.QueueAlertPresenter
 import com.squareup.moshi.Moshi
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -22,8 +26,14 @@ class CannsheetGraph private constructor(context: Context) {
     @Volatile
     private var installedWidgetRefresher: WidgetRefresher = NoOpWidgetRefresher
 
+    @Volatile
+    private var installedQueueAlertPresenter: QueueAlertPresenter = NoOpQueueAlertPresenter
+
     val widgetRefresher: WidgetRefresher
         get() = installedWidgetRefresher
+
+    internal val queueAlertPresenter: QueueAlertPresenter
+        get() = installedQueueAlertPresenter
 
     val database: AppDatabase = Room.databaseBuilder(
         context.applicationContext,
@@ -45,6 +55,22 @@ class CannsheetGraph private constructor(context: Context) {
     val consumptionLogger = ConsumptionLogger(repository, consumptionPreferences)
     val purchaseDefaultsRepository = PurchaseDefaultsRepository(context.applicationContext)
     val syncPreferences = SyncPreferencesRepository(context.applicationContext)
+
+    internal val queueAlertDelivery = QueueAlertDeliveryCoordinator(
+        presenter = { queueAlertPresenter },
+        inspectCurrentAlert = {
+            syncPreferences.inspectCurrentQueueAlert(
+                readPendingActionCount = { repository.pendingActionCount.first() },
+            )
+        },
+        evaluateAndClaim = {
+            syncPreferences.evaluateAndClaimCurrentQueueAlert(
+                readPendingActionCount = { repository.pendingActionCount.first() },
+            )
+        },
+        completeClaim = syncPreferences::completeQueueAlertClaim,
+        releaseClaim = syncPreferences::releaseQueueAlertClaim,
+    )
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
@@ -98,6 +124,10 @@ class CannsheetGraph private constructor(context: Context) {
 
     fun installWidgetRefresher(widgetRefresher: WidgetRefresher) {
         installedWidgetRefresher = widgetRefresher
+    }
+
+    internal fun installQueueAlertPresenter(presenter: QueueAlertPresenter) {
+        installedQueueAlertPresenter = presenter
     }
 
     companion object {

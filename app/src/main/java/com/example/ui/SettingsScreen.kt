@@ -1,5 +1,12 @@
 package com.example.ui
 
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
@@ -12,7 +19,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
 import com.example.BuildConfig
@@ -25,6 +34,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.R
 import kotlinx.coroutines.launch
 
 @Composable
@@ -38,6 +53,13 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val productTypeOptions by viewModel.productTypeOptions.collectAsState()
     val timerValue by viewModel.submissionTimer.collectAsState()
     val backgroundSyncPreferences by viewModel.backgroundSyncPreferences.collectAsState()
+    val context = LocalContext.current
+    var runtimePermissionResult by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        runtimePermissionResult = granted
+    }
     val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
         lastRunEpochMillis = backgroundSyncPreferences.lastMeaningfulSyncAtEpochMillis,
         lastResult = backgroundSyncPreferences.lastResult,
@@ -116,6 +138,31 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
                 .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
                 .semantics { contentDescription = backgroundSyncLastRunLabel },
             style = MaterialTheme.typography.bodyMedium,
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+        QueueAlertSettingsCoordinator(
+            preferenceEnabled = backgroundSyncPreferences.queueAlertsEnabled,
+            pendingActionCount = pendingCount,
+            queueNonEmptySinceEpochMillis =
+                backgroundSyncPreferences.queueNonEmptySinceEpochMillis,
+            nowEpochMillis = System.currentTimeMillis(),
+            notificationsAvailable = viewModel::canPresentQueueAlerts,
+            runtimePermissionRequired =
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
+            runtimePermissionGranted = {
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                    ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) == PackageManager.PERMISSION_GRANTED
+            },
+            runtimePermissionResult = runtimePermissionResult,
+            onRuntimePermissionResultConsumed = { runtimePermissionResult = null },
+            requestRuntimePermission = {
+                permissionLauncher.launchPostNotificationsPermission()
+            },
+            onPreferenceChanged = viewModel::setQueueAlertsEnabled,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -596,6 +643,259 @@ internal object BackgroundSyncSettingsTestTags {
     const val LAST_RUN = "settings-background-sync-last-run"
 }
 
+internal object QueueAlertSettingsTestTags {
+    const val SWITCH = "settings-queue-alerts-switch"
+    const val STATUS = "settings-queue-alerts-status"
+    const val PERMISSION = "settings-queue-alerts-permission"
+}
+
+internal enum class QueueAlertEnableDecision {
+    ENABLE,
+    REQUEST_PERMISSION,
+    BLOCKED,
+}
+
+internal fun queueAlertEnableDecision(
+    runtimePermissionRequired: Boolean,
+    runtimePermissionGranted: Boolean,
+    notificationsAvailable: Boolean,
+): QueueAlertEnableDecision = when {
+    runtimePermissionRequired && !runtimePermissionGranted ->
+        QueueAlertEnableDecision.REQUEST_PERMISSION
+    notificationsAvailable -> QueueAlertEnableDecision.ENABLE
+    else -> QueueAlertEnableDecision.BLOCKED
+}
+
+internal fun queueAlertsEffectivelyEnabled(
+    preferenceEnabled: Boolean,
+    notificationsAvailable: Boolean,
+): Boolean = preferenceEnabled && notificationsAvailable
+
+/**
+ * Stateful permission and lifecycle boundary extracted from the full Settings screen so the
+ * API-24 direct path and API-33 denial path can be exercised without a real application graph.
+ */
+@Composable
+internal fun QueueAlertSettingsCoordinator(
+    preferenceEnabled: Boolean,
+    pendingActionCount: Int,
+    queueNonEmptySinceEpochMillis: Long?,
+    nowEpochMillis: Long,
+    notificationsAvailable: () -> Boolean,
+    runtimePermissionRequired: Boolean,
+    runtimePermissionGranted: () -> Boolean,
+    runtimePermissionResult: Boolean?,
+    onRuntimePermissionResultConsumed: () -> Unit,
+    requestRuntimePermission: () -> Unit,
+    onPreferenceChanged: (Boolean) -> Unit,
+    lifecycleOwner: LifecycleOwner = LocalLifecycleOwner.current,
+) {
+    var available by remember { mutableStateOf(notificationsAvailable()) }
+    var notificationsBlocked by rememberSaveable { mutableStateOf(false) }
+    var permissionRequestPending by rememberSaveable { mutableStateOf(false) }
+    var disableRequested by remember { mutableStateOf(false) }
+    val currentPreference by rememberUpdatedState(preferenceEnabled)
+    val currentAvailabilityReader by rememberUpdatedState(notificationsAvailable)
+    val currentPreferenceWriter by rememberUpdatedState(onPreferenceChanged)
+    val currentRuntimePermissionGranted by rememberUpdatedState(runtimePermissionGranted)
+    val currentPermissionResultConsumed by rememberUpdatedState(
+        onRuntimePermissionResultConsumed,
+    )
+
+    fun finishPermissionRequest(granted: Boolean) {
+        if (!permissionRequestPending) return
+        permissionRequestPending = false
+        val availableAfterResult = granted && currentAvailabilityReader()
+        available = availableAfterResult
+        notificationsBlocked = !availableAfterResult
+        currentPreferenceWriter(availableAfterResult)
+    }
+
+    val reconcileAvailability = {
+        val currentAvailable = currentAvailabilityReader()
+        available = currentAvailable
+        when {
+            currentPreference && !currentAvailable -> {
+                notificationsBlocked = true
+                if (!disableRequested) {
+                    disableRequested = true
+                    currentPreferenceWriter(false)
+                }
+            }
+            currentAvailable -> {
+                notificationsBlocked = false
+                disableRequested = false
+            }
+            !currentPreference -> disableRequested = false
+        }
+    }
+    val currentReconcileAvailability by rememberUpdatedState(reconcileAvailability)
+
+    // The StateFlow starts from a safe default; reconcile again when the persisted opt-in arrives.
+    LaunchedEffect(preferenceEnabled) {
+        currentReconcileAvailability()
+    }
+    LaunchedEffect(runtimePermissionResult) {
+        runtimePermissionResult?.let { granted ->
+            finishPermissionRequest(granted)
+            currentPermissionResultConsumed()
+        }
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (permissionRequestPending) {
+                    // A recreated activity can reach RESUMED while the permission dialog is
+                    // still open. A grant is safe to recover from platform state; a denial must
+                    // wait for the Activity Result callback so it cannot race a later grant.
+                    if (currentRuntimePermissionGranted()) {
+                        finishPermissionRequest(true)
+                    }
+                } else {
+                    currentReconcileAvailability()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    QueueAlertSettingsSection(
+        checked = queueAlertsEffectivelyEnabled(
+            preferenceEnabled = preferenceEnabled,
+            notificationsAvailable = available,
+        ),
+        switchEnabled = !permissionRequestPending,
+        pendingActionCount = pendingActionCount,
+        queueNonEmptySinceEpochMillis = queueNonEmptySinceEpochMillis,
+        nowEpochMillis = nowEpochMillis,
+        notificationsBlocked = notificationsBlocked,
+        onCheckedChange = { requested ->
+            if (!requested) {
+                permissionRequestPending = false
+                notificationsBlocked = false
+                disableRequested = false
+                onPreferenceChanged(false)
+            } else {
+                val currentAvailable = notificationsAvailable()
+                available = currentAvailable
+                when (
+                    queueAlertEnableDecision(
+                        runtimePermissionRequired = runtimePermissionRequired,
+                        runtimePermissionGranted = runtimePermissionGranted(),
+                        notificationsAvailable = currentAvailable,
+                    )
+                ) {
+                    QueueAlertEnableDecision.ENABLE -> {
+                        notificationsBlocked = false
+                        onPreferenceChanged(true)
+                    }
+
+                    QueueAlertEnableDecision.REQUEST_PERMISSION -> {
+                        notificationsBlocked = false
+                        permissionRequestPending = true
+                        requestRuntimePermission()
+                    }
+
+                    QueueAlertEnableDecision.BLOCKED -> {
+                        notificationsBlocked = true
+                        onPreferenceChanged(false)
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+internal fun QueueAlertSettingsSection(
+    checked: Boolean,
+    switchEnabled: Boolean,
+    pendingActionCount: Int,
+    queueNonEmptySinceEpochMillis: Long?,
+    nowEpochMillis: Long,
+    notificationsBlocked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Text(
+        text = stringResource(R.string.queue_alert_settings_heading),
+        style = MaterialTheme.typography.titleLarge,
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    val switchLabel = stringResource(R.string.queue_alert_settings_switch)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(switchLabel)
+        Switch(
+            checked = checked,
+            enabled = switchEnabled,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier
+                .testTag(QueueAlertSettingsTestTags.SWITCH)
+                .semantics { contentDescription = switchLabel },
+        )
+    }
+    val status = queueAlertStatusText(
+        pendingActionCount = pendingActionCount,
+        queueNonEmptySinceEpochMillis = queueNonEmptySinceEpochMillis,
+        nowEpochMillis = nowEpochMillis,
+    )
+    Text(
+        text = status,
+        modifier = Modifier
+            .testTag(QueueAlertSettingsTestTags.STATUS)
+            .semantics { contentDescription = status },
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    if (notificationsBlocked) {
+        Text(
+            text = stringResource(R.string.queue_alert_settings_blocked),
+            modifier = Modifier.testTag(QueueAlertSettingsTestTags.PERMISSION),
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    }
+    Spacer(modifier = Modifier.height(8.dp))
+    Text(
+        text = stringResource(R.string.queue_alert_settings_explanation),
+        style = MaterialTheme.typography.bodyMedium,
+    )
+}
+
+internal fun queueAlertStatusText(
+    pendingActionCount: Int,
+    queueNonEmptySinceEpochMillis: Long?,
+    nowEpochMillis: Long,
+): String {
+    if (pendingActionCount <= 0) return "Everything is synced."
+    val since = queueNonEmptySinceEpochMillis
+    if (since == null || since < 0L || nowEpochMillis < since) {
+        return "$pendingActionCount waiting to sync."
+    }
+    val elapsedMillis = nowEpochMillis - since
+    val duration = when {
+        elapsedMillis < MILLIS_PER_MINUTE -> "less than a minute"
+        elapsedMillis < MILLIS_PER_HOUR -> durationText(
+            elapsedMillis / MILLIS_PER_MINUTE,
+            "minute",
+        )
+        elapsedMillis < MILLIS_PER_DAY -> durationText(
+            elapsedMillis / MILLIS_PER_HOUR,
+            "hour",
+        )
+        else -> durationText(elapsedMillis / MILLIS_PER_DAY, "day")
+    }
+    return "$pendingActionCount waiting to sync for $duration."
+}
+
+@SuppressLint("InlinedApi")
+private fun ActivityResultLauncher<String>.launchPostNotificationsPermission() {
+    launch(Manifest.permission.POST_NOTIFICATIONS)
+}
+
 internal fun backgroundSyncLastRunText(
     lastRunEpochMillis: Long?,
     lastResult: Enum<*>?,
@@ -622,8 +922,12 @@ internal fun backgroundSyncLastRunText(
     return "Last run: $relativeTime — ${backgroundSyncResultText(lastResult)}"
 }
 
-private fun elapsedText(amount: Long, unit: String): String =
-    "$amount $unit${if (amount == 1L) "" else "s"} ago"
+private fun elapsedText(amount: Long, unit: String): String = "${
+    durationText(amount, unit)
+} ago"
+
+private fun durationText(amount: Long, unit: String): String =
+    "$amount $unit${if (amount == 1L) "" else "s"}"
 
 private fun backgroundSyncResultText(result: Enum<*>?): String = when (result?.name) {
     "APPLIED", "SUCCESS", "SUCCEEDED", "COMPLETED" -> "Sync successful"
