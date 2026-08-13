@@ -765,3 +765,34 @@ historical rationale.
 - Related files: `app/src/main/java/com/example/ui/WindowWidth.kt`,
   `app/src/main/java/com/example/ui/AppNavigation.kt`,
   `app/src/main/java/com/example/ui/InsightsScreen.kt`
+
+## ADR-020: Floor Log-screen-initiated analytics refreshes
+
+- Status: Accepted; implemented in v1.3.1.
+- Date: 2026-08-13
+- Context: The Log screen consumes the Insights snapshot to display per-product
+  runway estimates beside active inventory. In v1.3.0, every queue drain that
+  occurred while the Log screen was visible immediately dispatched an Apps Script
+  analytics fetch. During multi-entry logging sessions, this generated multiple
+  rapid read requests for derived data whose values rarely shifted between
+  consecutive entries.
+- Decision:
+  1. Define a 2-minute minimum interval (`RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS = 2L * 60L * 1000L`)
+     for analytics refreshes triggered solely by Log screen visibility.
+  2. Gating applies only to automatic post-drain or invalidation-driven refreshes
+     while `runwayScreenVisible` is true and `insightsScreenVisible` is false.
+  3. The cold-start initial load (`loadInsightsCacheThenRefresh()`) and any
+     refresh initiated while the **Insights** tab is visible remain immediate and
+     unfloored.
+  4. Guard against non-monotonic or backwards clock jumps so that the floor cannot
+     wedge shut.
+- Rationale: A 2-minute debounce preserves backend efficiency and matches the
+  prefetch-gating rationale in `SyncWorker`. The slight estimate lag on the Log
+  screen is acceptable given that estimates are presentation-only approximations,
+  while the full Insights tab remains immediately fresh.
+- Consequences: Estimates on the Log screen may reflect a snapshot up to two
+  minutes old following a series of rapid logs. No database, sync engine,
+  acknowledgement, or Apps Script contracts are affected.
+- Related files: `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
+  `docs/ARCHITECTURE.md`

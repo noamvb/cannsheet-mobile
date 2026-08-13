@@ -340,6 +340,14 @@ flow waits for the real Room pending-count emission and suppresses every
 estimate when the Insights snapshot is missing, cached, stale, changing range,
 or accompanied by any pending local action.
 
+The Log screen is a second consumer of the Insights snapshot. Entering it marks
+the runway surface visible, which loads the analytics cache and performs one
+live Insights fetch per process, and a queue drain while it is the only visible
+analytics surface can trigger a further refresh. This is the cost of showing a
+per-product estimate outside the Insights tab; it adds no request type, field, or
+contract, only additional reads of the existing endpoint. Runway-only refreshes
+are additionally floored at two minutes; the Insights tab is never floored.
+
 Capacity evidence is a median over the user's own finished products, with at
 least three eligible observations. Per-gram evidence is preferred only when at
 least three finished products have valid gram data; its evidence count and

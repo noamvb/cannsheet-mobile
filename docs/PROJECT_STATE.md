@@ -33,6 +33,21 @@ Last updated: 2026-08-13
   key digests match both the public v1.2.27 APK and the APK pulled from the
   production phone before update, preserving in-place update compatibility.
 
+## v1.3.1 remediation work (in progress towards v1.3.1 release)
+
+The v1.3.1 remediation plan addressed findings R1 through R7 across seven reviewable phases:
+
+| Change | Pull request | Exact merged `main` commit | Exact-main validation |
+|---|---|---|---|
+| R2: Clarify queue-stuck notification copy to describe episode age | [#75](https://github.com/noamvb/cannsheet-mobile/pull/75) | `55344161bb7d00f72365dfbcf0d52b918a221f75` | [run 31745494297](https://github.com/noamvb/cannsheet-mobile/actions/runs/31745494297) |
+| R3: Remove double bottom padding on navigation rail inset | [#76](https://github.com/noamvb/cannsheet-mobile/pull/76) | `c988aa5391a329d912fc02f72c1cba5645607fc8` | [run 31745963503](https://github.com/noamvb/cannsheet-mobile/actions/runs/31745963503) |
+| R4: Explain why runway estimates are paused via notice card | [#77](https://github.com/noamvb/cannsheet-mobile/pull/77) | `8f2eff4e1cffbce401dd796b4ef89df8b2c2bc7e` | [run 31746369062](https://github.com/noamvb/cannsheet-mobile/actions/runs/31746369062) |
+| R5 / D1: Bound Log-screen analytics refreshes with a 2-minute floor | [#78](https://github.com/noamvb/cannsheet-mobile/pull/78) | `f5222026aeecad882c40c8faeeb19f85c18e1efd` | [run 31746792541](https://github.com/noamvb/cannsheet-mobile/actions/runs/31746792541) |
+| R7: Drop unread `selectedRangeDayCount` from `RunwayEstimateState.Ready` | [#79](https://github.com/noamvb/cannsheet-mobile/pull/79) | `90a6e2578502dbd6ec03dd08ebba24197771da4d` | [run 31747331096](https://github.com/noamvb/cannsheet-mobile/actions/runs/31747331096) |
+
+### Phase 5 device measurement & Phase 9 outcome
+During Phase 5 verification, `adb devices` confirmed that the production phone was not attached over wireless ADB. In accordance with Section 5.2 of `docs/V1_3_1_FIX_PLAN.md`, physical display measurement was skipped, and Phase 9 (lowering the two-pane width threshold) was deliberately not executed without device evidence. The two-pane threshold remains at `840.dp`.
+
 ## v1.3 feature work (released in v1.3.0)
 
 The accepted v1.3 feature sequence is implemented, documented, released, and
