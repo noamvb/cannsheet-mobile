@@ -5,7 +5,7 @@
     android:minWidth="110dp"
     android:minHeight="160dp"
     android:minResizeWidth="140dp"
-    android:minResizeHeight="160dp"
+    android:minResizeHeight="@dimen/widget_min_resize_height"
     android:maxResizeWidth="360dp"
     android:maxResizeHeight="360dp"
     android:targetCellWidth="2"

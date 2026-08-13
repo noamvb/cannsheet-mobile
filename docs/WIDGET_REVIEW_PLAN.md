@@ -126,7 +126,13 @@ stage; sizing is still gated on physical Fold measurements. PR1 is now merged
 as #59. The second follow-up group applies the cancellation-safe claim release,
 stable route-flow ownership, resource/accessibility cleanup, and direct domain
 imports described by T4/T5; it does not alter the widget's data contracts or
-release metadata.
+release metadata. PR2 is now merged as #60. The sandbox-only sizing evidence
+for T3 is cover portrait `300dp`, main portrait `274dp`, main landscape
+`259dp`, and cover landscape `300dp`; the launcher did not expose a usable
+minimum-resize handle, so that value remains explicitly unmeasured. Since all
+observed defaults are at least `160dp`, T3 applies the preferred `110dp`
+minimum-resize height, a `150dp` compact breakpoint, and weighted bottom
+spacers in the full and compact layouts.
 
 ## 3. Findings
 

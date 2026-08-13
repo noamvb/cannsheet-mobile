@@ -6,7 +6,7 @@
     android:minHeight="160dp"
     android:previewImage="@drawable/pen_widget_preview"
     android:minResizeWidth="140dp"
-    android:minResizeHeight="160dp"
+    android:minResizeHeight="@dimen/widget_min_resize_height"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

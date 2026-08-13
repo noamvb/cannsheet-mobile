@@ -587,3 +587,52 @@ historical rationale.
   `app/src/main/java/com/example/MainActivity.kt`,
   `app/src/main/java/com/example/ui/AppNavigation.kt`, `AGENTS.md`,
   `docs/ARCHITECTURE.md`
+
+## ADR-015: Make the pen widget compact breakpoint reachable on the Fold
+
+- Status: Accepted; implemented in the sizing follow-up after physical
+  sandbox-package measurement; release pending the separately requested
+  versioned publication.
+- Date: 2026-08-13
+- Context: The full `RemoteViews` layout contains the cart name, subtitle,
+  counter/submit row, and +/- row. Its declared `160dp` minimum-resize height
+  therefore kept the existing compact layout unreachable. The follow-up guide
+  required launcher evidence before changing that threshold, including both
+  Fold screens and both portrait/landscape orientations.
+- Decision:
+  1. Measure `OPTION_APPWIDGET_MIN_HEIGHT` and `MAX_HEIGHT` through a temporary
+     suffixed sandbox package with a deliberately invalid non-production
+     endpoint. Do not use the production package for widget placement or
+     actions.
+  2. Record the observed default callback heights as cover portrait `300dp`,
+     main portrait `274dp`, main landscape `259dp`, and cover landscape
+     `300dp`. The Samsung free-grid selection UI did not expose a usable
+     minimum-resize handle for the pinned sandbox widget, so the minimum-resize
+     callback is not represented as measured evidence.
+  3. Since all observed defaults are at least `160dp`, lower only
+     `minResizeHeight` to the guide's preferred `110dp`, move the compact
+     breakpoint to `150dp`, and keep the provider's `minHeight` at `160dp`.
+     Reference the new minimum from one shared dimension resource in both
+     provider-info variants.
+  4. Add a weighted bottom spacer to the full and compact vertical layouts so
+     extra launcher height is absorbed without distorting the controls or
+     relying on incidental root measurement behavior.
+- Rationale: The measured defaults leave ample room for the full layout, while
+  a `110dp` resize floor makes the already-existing compact layout reachable on
+  launchers that honor the provider's minimum. A `150dp` breakpoint leaves a
+  small buffer above the compact layout's fixed control stack. Keeping the
+  higher `minHeight` preserves the provider's initial/default presentation;
+  only user-resize eligibility changes.
+- Consequences: Existing widget instances may be offered a smaller resize
+  range after the release, but no Room, DataStore payload, queue, network,
+  backend, or stored quantity contract changes. The sandbox package and its
+  temporary log/pin hook were removed after measurement. Physical minimum-size
+  evidence remains a documented launcher limitation rather than an inferred
+  value.
+- Related files: `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/main/res/values/dimens.xml`,
+  `app/src/main/res/xml/pen_consumption_widget_info.xml`,
+  `app/src/main/res/xml-v31/pen_consumption_widget_info.xml`,
+  `app/src/main/res/layout/widget_pen_consumption.xml`,
+  `app/src/main/res/layout/widget_pen_consumption_compact.xml`,
+  `docs/WIDGET_REVIEW_PLAN.md`
