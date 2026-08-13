@@ -24,6 +24,12 @@ class ProductTypesTest {
     }
 
     @Test
+    fun labelUsesHumanNameWithoutDuplicatingTheCode() {
+        assertEquals("Pen", ProductTypes.label(" p "))
+        assertEquals("X", ProductTypes.label(" x "))
+    }
+
+    @Test
     fun purchaseCodesKeepTheirExactOrder() {
         assertEquals(listOf("P", "E", "J", "F", "S", "K"), ProductTypes.CODES)
     }

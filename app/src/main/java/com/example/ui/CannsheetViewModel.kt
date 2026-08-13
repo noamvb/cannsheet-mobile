@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,6 +62,11 @@ data class PurchaseFeedback(
     val message: String,
 )
 
+internal fun shouldInvalidateRunwayForQueueTransition(
+    previousCount: Int?,
+    currentCount: Int,
+): Boolean = previousCount != null && previousCount > 0 && currentCount == 0
+
 class CannsheetViewModel(application: Application) : AndroidViewModel(application) {
     private val graph = CannsheetGraph.get(application)
     private val repository = graph.repository
@@ -73,6 +79,42 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     val insightsState: StateFlow<InsightsUiState> = analyticsCoordinator.insights
     val historyState: StateFlow<HistoryUiState> = analyticsCoordinator.history
+
+    private val observedPendingActionCount = MutableStateFlow<Int?>(null)
+
+    val pendingActionCount: StateFlow<Int> = observedPendingActionCount
+        .map { it ?: 0 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private val runwayClock: Flow<Long> = flow {
+        while (true) {
+            emit(System.currentTimeMillis())
+            delay(RUNWAY_CLOCK_INTERVAL_MILLIS)
+        }
+    }
+
+    /**
+     * One atomic source for an Insights snapshot, the first real Room queue count, and every
+     * estimate derived from them. A synthetic initial queue count must never expose an estimate.
+     */
+    val runwayPresentationState: StateFlow<RunwayPresentationState> = combine(
+        analyticsCoordinator.insights,
+        observedPendingActionCount,
+        runwayClock,
+    ) { insights, pendingActionCount, nowEpochMillis ->
+        deriveRunwayPresentationState(
+            insights = insights,
+            pendingActionCount = pendingActionCount,
+            nowEpochMillis = nowEpochMillis,
+        )
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(
+            stopTimeoutMillis = 5_000,
+            replayExpirationMillis = 0,
+        ),
+        RunwayPresentationState(),
+    )
 
     private val _gasUrl = MutableStateFlow(BuildConfig.GAS_URL)
     val gasUrl: StateFlow<String> = _gasUrl
@@ -211,9 +253,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         ConsumptionPreferencesRepository.effectiveSecondsPerUse(overrides, type)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    val pendingActionCount: StateFlow<Int> = repository.pendingActionCount
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
-
     private val pendingCorrectionTargetIds: StateFlow<Set<String>> = repository.pendingCorrectionTargetEventIds
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
@@ -246,6 +285,17 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private val syncMutex = graph.syncMutex
 
     init {
+        viewModelScope.launch {
+            repository.pendingActionCount.collect { count ->
+                val previous = observedPendingActionCount.value
+                if (shouldInvalidateRunwayForQueueTransition(previous, count)) {
+                    // Acknowledgement deletion reaches Room before its SyncOutcome callback.
+                    // Invalidate first so zero pending can never expose the old snapshot.
+                    analyticsCoordinator.markStale()
+                }
+                observedPendingActionCount.value = count
+            }
+        }
         viewModelScope.launch {
             graph.backgroundSyncEvents.collect(::applyBackgroundSyncEvent)
         }
@@ -892,9 +942,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun onInsightsVisible() = analyticsCoordinator.onVisible()
+    fun onInsightsVisible() = analyticsCoordinator.onInsightsVisible()
 
-    fun onInsightsHidden() = analyticsCoordinator.onHidden()
+    fun onInsightsHidden() = analyticsCoordinator.onInsightsHidden()
+
+    fun onRunwayVisible() = analyticsCoordinator.onRunwayVisible()
+
+    fun onRunwayHidden() = analyticsCoordinator.onRunwayHidden()
 
     fun onHistoryVisible() = analyticsCoordinator.onHistoryVisible()
 
@@ -936,6 +990,8 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         const val RECENT_PRODUCT_LIMIT = 6
     }
 }
+
+private const val RUNWAY_CLOCK_INTERVAL_MILLIS = 60_000L
 
 internal fun syncStatusMessage(outcome: SyncOutcome): String = when (outcome) {
     is SyncOutcome.NothingToSync -> "Nothing to sync"

@@ -19,6 +19,12 @@ internal object ProductTypes {
 
     fun normalize(type: String): String = ProductTypeCodes.normalize(type)
 
+    /** Human label without repeating the canonical code. */
+    fun label(type: String): String {
+        val code = normalize(type)
+        return LABELS[code] ?: code
+    }
+
     /** "F — Flower" for known codes; the raw normalized code for anything else. */
     fun displayName(type: String): String {
         val code = normalize(type)

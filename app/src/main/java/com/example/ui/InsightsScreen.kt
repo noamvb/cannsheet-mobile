@@ -62,6 +62,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,6 +76,7 @@ import com.example.data.InsightsResponseDto
 import com.example.data.MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
 import com.example.data.Product
 import com.example.data.QualityWarningsDto
+import com.example.domain.ProductRunway
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -84,14 +86,15 @@ import java.util.TimeZone
 
 @Composable
 fun InsightsScreen(viewModel: CannsheetViewModel) {
-    val insights by viewModel.insightsState.collectAsStateWithLifecycle()
+    val runwayPresentation by viewModel.runwayPresentationState.collectAsStateWithLifecycle()
+    val insights = runwayPresentation.insights
     val history by viewModel.historyState.collectAsStateWithLifecycle()
-    val pendingCount by viewModel.pendingActionCount.collectAsStateWithLifecycle()
+    val pendingCount = runwayPresentation.pendingActionCount ?: 0
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val products by viewModel.allProducts.collectAsStateWithLifecycle()
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
-    DisposableEffect(Unit) {
+    DisposableEffect(viewModel) {
         viewModel.onInsightsVisible()
         onDispose(viewModel::onInsightsHidden)
     }
@@ -111,6 +114,7 @@ fun InsightsScreen(viewModel: CannsheetViewModel) {
                 isSyncing = isSyncing,
                 onSync = viewModel::syncQueue,
                 onRefresh = viewModel::refreshInsights,
+                runwayState = runwayPresentation.estimates,
             )
         } else {
             HistoryContent(
@@ -137,6 +141,7 @@ internal fun InsightsContent(
     isSyncing: Boolean,
     onSync: () -> Unit,
     onRefresh: (InsightsRange) -> Unit,
+    runwayState: RunwayEstimateState = RunwayEstimateState.Suppressed,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
     var selectedProduct by remember { mutableStateOf<AnalyticsProductDto?>(null) }
@@ -152,8 +157,14 @@ internal fun InsightsContent(
             },
         )
     }
-    selectedProduct?.let {
-        ProductAnalyticsSheet(it, onDismiss = { selectedProduct = null })
+    selectedProduct?.let { product ->
+        ProductAnalyticsSheet(
+            product = product,
+            onDismiss = { selectedProduct = null },
+            runway = (runwayState as? RunwayEstimateState.Ready)
+                ?.runwayByProductId
+                ?.get(product.productId),
+        )
     }
 
     val data = state.data
@@ -167,7 +178,9 @@ internal fun InsightsContent(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(InsightsRunwayTestTags.CONTENT),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
@@ -180,7 +193,7 @@ internal fun InsightsContent(
                 Column {
                     Text("Insights", style = MaterialTheme.typography.headlineMedium)
                     Text(
-                        "${data.range.from} – ${data.range.to} · Toronto time",
+                        "${data.range.from} – ${data.range.to} · ${analyticsTimeZoneLabel(data.timeZone)} time",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -252,6 +265,13 @@ internal fun InsightsContent(
                     "All time: ${cad(data.spending.allTime.personalSpendCents)} personal",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                (runwayState as? RunwayEstimateState.Ready)?.spendRunRate?.let { runRate ->
+                    Text(
+                        spendRunRateText(runRate),
+                        modifier = Modifier.testTag(InsightsRunwayTestTags.SPEND_PROJECTION),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 NativeBarChart(
                     data.spending.byMonth.map {
                         formatChartMonth(it.month) to
@@ -273,6 +293,12 @@ internal fun InsightsContent(
                     Text("${data.inventory.unknownCurrentCostCount} current costs unknown")
                 }
             }
+        }
+        item {
+            RunwaySection(
+                estimates = runwayState,
+                products = data.products,
+            )
         }
         if (data.byType.isNotEmpty()) {
             item {
@@ -363,6 +389,90 @@ internal fun InsightsContent(
                         "${data.sourceRevision.purchaseRowCount} purchases",
                 )
                 Text("Server duration: ${data.serverDurationMs} ms", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+internal object InsightsRunwayTestTags {
+    const val CONTENT = "insights-content"
+    const val SECTION = "insights-runway-section"
+    const val SHOW_ALL = "insights-runway-show-all"
+    const val SPEND_PROJECTION = "insights-spend-projection"
+    const val DIAGNOSTIC_PREFIX = "insights-runway-diagnostic-"
+
+    fun row(productId: String): String = "insights-runway-row-$productId"
+
+    fun diagnostic(type: String, position: Int): String = "$DIAGNOSTIC_PREFIX$type-$position"
+
+    fun sheet(productId: String): String = "insights-runway-sheet-$productId"
+}
+
+@Composable
+internal fun RunwaySection(
+    estimates: RunwayEstimateState,
+    products: List<AnalyticsProductDto>,
+) {
+    val ready = estimates as? RunwayEstimateState.Ready ?: return
+    val productsById = remember(products) { products.associateBy(AnalyticsProductDto::productId) }
+    val rows = remember(ready.runwayByProductId, productsById) {
+        ready.runwayByProductId.values
+            .mapNotNull { runway ->
+                productsById[runway.productId]?.let { product -> product to runway }
+            }
+            .sortedWith(
+                compareBy<Pair<AnalyticsProductDto, ProductRunway>> { it.second.estimatedDaysRemaining }
+                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first.name }
+                    .thenBy { it.first.productId },
+            )
+    }
+    if (rows.isEmpty() && ready.diagnostics.isEmpty()) return
+
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    val displayedRows = if (showAll) rows else rows.take(MAX_RUNWAY_ROWS)
+    val displayedDiagnostics = if (showAll) {
+        ready.diagnostics
+    } else {
+        ready.diagnostics.take(MAX_RUNWAY_DIAGNOSTICS)
+    }
+    val hasMoreDetails =
+        rows.size > MAX_RUNWAY_ROWS || ready.diagnostics.size > MAX_RUNWAY_DIAGNOSTICS
+    Column(Modifier.testTag(InsightsRunwayTestTags.SECTION)) {
+        SectionCard("Runway") {
+            displayedRows.forEachIndexed { index, row ->
+                val (product, runway) = row
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(InsightsRunwayTestTags.row(product.productId)),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(product.name, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        runwaySummaryText(runway),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (index != displayedRows.lastIndex) {
+                    HorizontalDivider()
+                }
+            }
+            displayedDiagnostics.forEachIndexed { position, diagnostic ->
+                Text(
+                    runwayDiagnosticText(diagnostic),
+                    modifier = Modifier.testTag(
+                        InsightsRunwayTestTags.diagnostic(diagnostic.type, position),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (hasMoreDetails) {
+                TextButton(
+                    onClick = { showAll = !showAll },
+                    modifier = Modifier.testTag(InsightsRunwayTestTags.SHOW_ALL),
+                ) {
+                    Text(if (showAll) "Show fewer details" else "See all runway details")
+                }
             }
         }
     }
@@ -721,7 +831,7 @@ private fun CustomRangeDialog(onDismiss: () -> Unit, onApply: (InsightsRange.Cus
         title = { Text("Custom date range") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Use inclusive Toronto dates in YYYY-MM-DD format.")
+                Text("Use inclusive analytics dates in YYYY-MM-DD format.")
                 OutlinedTextField(from, { from = it }, label = { Text("From") }, singleLine = true)
                 OutlinedTextField(to, { to = it }, label = { Text("To") }, singleLine = true)
             }
@@ -800,9 +910,20 @@ private fun HistoryFilterSheet(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ProductAnalyticsSheet(product: AnalyticsProductDto, onDismiss: () -> Unit) {
+private fun ProductAnalyticsSheet(
+    product: AnalyticsProductDto,
+    onDismiss: () -> Unit,
+    runway: ProductRunway? = null,
+) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(20.dp)
+                .testTag(InsightsRunwayTestTags.sheet(product.productId)),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             Text(product.name, style = MaterialTheme.typography.headlineSmall)
             Text("${product.status} · ${product.type} · ${product.productId}")
             Text("${product.range.logCount} logs in range · ${product.allTime.logCount} all time")
@@ -815,6 +936,11 @@ private fun ProductAnalyticsSheet(product: AnalyticsProductDto, onDismiss: () ->
             product.costPerRecordedUnitToDateCents?.let { Text("Cost per recorded unit: ${cad(it)}") }
             product.grams?.let { Text("Grams: ${formatDecimal(it)}") }
             Text(formatThc(product.thcRaw, product.thcQuality))
+            runway?.let { estimate ->
+                HorizontalDivider()
+                Text("Runway", style = MaterialTheme.typography.titleMedium)
+                Text(runwaySummaryText(estimate))
+            }
             Spacer(Modifier.height(20.dp))
         }
     }
@@ -1246,8 +1372,10 @@ private fun hasHistoryFilters(filters: HistoryFilters) =
         !filters.type.isNullOrBlank() ||
         !filters.query.isNullOrBlank()
 
-private fun cad(cents: Long): String =
-    NumberFormat.getCurrencyInstance(Locale.CANADA).format(cents / 100.0)
+private fun cad(cents: Long): String = formatCadCents(cents)
+
+private fun analyticsTimeZoneLabel(timeZone: String): String =
+    timeZone.substringAfterLast('/').replace('_', ' ').ifBlank { timeZone }
 
 internal fun formatChartMonth(month: String): String =
     if (Regex("""\d{4}-\d{2}""").matches(month)) "${month.takeLast(2)}/${month.take(4)}" else month
@@ -1289,6 +1417,9 @@ private fun mondayFor(date: String): String {
     }
     return formatter.format(calendar.time)
 }
+
+private const val MAX_RUNWAY_ROWS = 5
+private const val MAX_RUNWAY_DIAGNOSTICS = 5
 
 private fun dateSpanInclusive(from: String, to: String): Int = runCatching {
     val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
