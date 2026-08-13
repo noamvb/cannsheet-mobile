@@ -9,17 +9,12 @@ import com.example.widget.PenWidgetRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class CannsheetApplication : Application() {
@@ -50,11 +45,9 @@ class CannsheetApplication : Application() {
         applicationScope.launch {
             collectQueueDepthChanges(
                 countChanges = graph.repository.pendingActionCount,
-                reconcileCurrentDepth = {
-                    graph.syncPreferences.reconcileCurrentQueueDepth(
-                        readPendingActionCount = {
-                            graph.repository.pendingActionCount.first()
-                        },
+                reconcileObservedDepth = { pendingActionCount ->
+                    graph.syncPreferences.reconcileObservedQueueDepth(
+                        pendingActionCount = pendingActionCount,
                     )
                 },
             )
@@ -66,26 +59,22 @@ internal const val QUEUE_DEPTH_OBSERVATION_RETRY_MILLIS = 30_000L
 
 /**
  * Treats Room emissions as reconciliation triggers and retries a failed transition without
- * requiring another database mutation. A newer count supersedes the old retry immediately.
+ * requiring another database mutation. Transitions are applied in emission order so a quick
+ * drain/refill cannot skip the empty boundary and make a new queue inherit old alert state.
  */
 internal suspend fun collectQueueDepthChanges(
     countChanges: Flow<Int>,
-    reconcileCurrentDepth: suspend () -> Unit,
+    reconcileObservedDepth: suspend (Int) -> Unit,
     retryDelay: suspend () -> Unit = { delay(QUEUE_DEPTH_OBSERVATION_RETRY_MILLIS) },
 ) {
-    val observerJob = requireNotNull(currentCoroutineContext()[Job])
     countChanges
         .distinctUntilChanged()
-        .collectLatest {
+        .collect { pendingActionCount ->
             while (true) {
                 try {
-                    reconcileCurrentDepth()
+                    reconcileObservedDepth(pendingActionCount)
                     break
                 } catch (error: CancellationException) {
-                    // collectLatest treats an explicitly thrown CancellationException as a normal
-                    // child completion. Cancel the observer itself when its child is still active;
-                    // a newer emission already marks the old child inactive and must not stop it.
-                    if (currentCoroutineContext().isActive) observerJob.cancel(error)
                     throw error
                 } catch (error: Throwable) {
                     retryDelay()

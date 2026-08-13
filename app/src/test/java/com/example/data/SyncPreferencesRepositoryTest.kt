@@ -114,6 +114,24 @@ class SyncPreferencesRepositoryTest {
     }
 
     @Test
+    fun orderedDrainAndRefillStartsANewEpisodeWithoutOldSuppression() = runBlocking {
+        val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
+        repository.setQueueAlertsEnabled(true)
+        repository.observeQueueDepthForTest(1, NOW - QUEUE_STUCK_THRESHOLD_MILLIS)
+        val oldClaim = repository.evaluateAndClaimQueueAlertForTest(1, NOW)
+        assertTrue(oldClaim.shouldPresent)
+
+        repository.observeQueueDepthForTest(0, NOW + 1)
+        repository.observeQueueDepthForTest(1, NOW + 2)
+
+        val preferences = repository.preferences.first()
+        assertEquals(NOW + 2, preferences.queueNonEmptySinceEpochMillis)
+        assertNull(preferences.lastQueueAlertReason)
+        assertNull(preferences.lastQueueAlertAtEpochMillis)
+        assertNull(preferences.lastQueueAlertClaimId)
+    }
+
+    @Test
     fun backwardsClockRebasesTheWatermark() = runBlocking {
         val dataStore = RecordingPreferencesDataStore(
             preferencesOf(
@@ -270,14 +288,13 @@ class SyncPreferencesRepositoryTest {
     }
 
     @Test
-    fun terminalResultRecoversAMissingWatermarkForCurrentNonEmptyQueue() = runBlocking {
+    fun terminalResultRecoversAMissingWatermarkWithoutAnExtraRoomRead() = runBlocking {
         val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
         repository.setQueueAlertsEnabled(true)
 
-        repository.recordMeaningfulResultForCurrentQueue(
+        repository.recordMeaningfulResult(
             result = BackgroundSyncResult.PARTIAL_REJECTIONS,
-            readPendingActionCount = { 2 },
-            clock = { NOW },
+            completedAtEpochMillis = NOW,
         )
 
         assertEquals(NOW, repository.preferences.first().queueNonEmptySinceEpochMillis)
@@ -287,13 +304,29 @@ class SyncPreferencesRepositoryTest {
     }
 
     @Test
+    fun everyNonSuccessWorkerResultRecoversAMissingWatermark() = runBlocking {
+        BackgroundSyncResult.entries
+            .filterNot { it == BackgroundSyncResult.SUCCESS }
+            .forEach { result ->
+                val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
+
+                repository.recordMeaningfulResult(result, NOW)
+
+                assertEquals(
+                    "watermark for $result",
+                    NOW,
+                    repository.preferences.first().queueNonEmptySinceEpochMillis,
+                )
+            }
+    }
+
+    @Test
     fun terminalResultDoesNotInventAQueueEpisodeWhenTheCurrentQueueIsEmpty() = runBlocking {
         val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
 
-        repository.recordMeaningfulResultForCurrentQueue(
+        repository.recordMeaningfulResult(
             result = BackgroundSyncResult.SUCCESS,
-            readPendingActionCount = { 0 },
-            clock = { NOW },
+            completedAtEpochMillis = NOW,
         )
 
         assertNull(repository.preferences.first().queueNonEmptySinceEpochMillis)
@@ -426,10 +459,9 @@ class SyncPreferencesRepositoryTest {
             ),
         )
 
-        repository.recordMeaningfulResultForCurrentQueue(
+        repository.recordMeaningfulResult(
             result = BackgroundSyncResult.ENVIRONMENT_MISMATCH,
-            readPendingActionCount = { 1 },
-            clock = { 100L },
+            completedAtEpochMillis = 100L,
         )
 
         val preferences = repository.preferences.first()
@@ -463,8 +495,8 @@ class SyncPreferencesRepositoryTest {
         pendingActionCount: Int,
         nowEpochMillis: Long,
     ) {
-        reconcileCurrentQueueDepth(
-            readPendingActionCount = { pendingActionCount },
+        reconcileObservedQueueDepth(
+            pendingActionCount = pendingActionCount,
             clock = { nowEpochMillis },
         )
     }

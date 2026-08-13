@@ -183,10 +183,7 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     override suspend fun run(): BackgroundSyncRunResult = runner.run()
 
     override suspend fun recordMeaningfulResult(result: BackgroundSyncResult) {
-        graph.syncPreferences.recordMeaningfulResultForCurrentQueue(
-            result = result,
-            readPendingActionCount = { graph.repository.pendingActionCount.first() },
-        )
+        graph.syncPreferences.recordMeaningfulResult(result)
     }
 
     override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome = prefetcher.prefetch()

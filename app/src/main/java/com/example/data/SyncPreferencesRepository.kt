@@ -102,10 +102,23 @@ class SyncPreferencesRepository internal constructor(
         }
     }
 
+    /** Applies the single application collector's Room transitions in their emitted order. */
+    internal suspend fun reconcileObservedQueueDepth(
+        pendingActionCount: Int,
+        clock: () -> Long = System::currentTimeMillis,
+    ) {
+        queueObservationMutex.withLock {
+            observeQueueDepth(
+                pendingActionCount = pendingActionCount,
+                nowEpochMillis = clock(),
+            )
+        }
+    }
+
     /**
      * Serializes the Room read with the DataStore transition and deliberately re-reads the current
-     * count after acquiring the lock. Both the application collector and WorkManager call this
-     * method, so a delayed old trigger cannot apply a stale count after a newer queue transition.
+     * count after acquiring the lock. WorkManager uses this fresh-state path; the application
+     * collector preserves its emitted transitions through [reconcileObservedQueueDepth].
      */
     suspend fun reconcileCurrentQueueDepth(
         readPendingActionCount: suspend () -> Int,
@@ -202,26 +215,10 @@ class SyncPreferencesRepository internal constructor(
         result: BackgroundSyncResult,
         completedAtEpochMillis: Long = System.currentTimeMillis(),
     ) {
-        recordMeaningfulResultLocked(
-            result = result,
-            completedAtEpochMillis = completedAtEpochMillis,
-            pendingActionCount = null,
-        )
-    }
-
-    /** Records a worker result and recovers its current queue episode under the observation lock. */
-    suspend fun recordMeaningfulResultForCurrentQueue(
-        result: BackgroundSyncResult,
-        readPendingActionCount: suspend () -> Int,
-        clock: () -> Long = System::currentTimeMillis,
-    ) {
         queueObservationMutex.withLock {
-            val pendingActionCount = readPendingActionCount()
-            val completedAtEpochMillis = clock()
             recordMeaningfulResultLocked(
                 result = result,
                 completedAtEpochMillis = completedAtEpochMillis,
-                pendingActionCount = pendingActionCount,
             )
         }
     }
@@ -229,19 +226,13 @@ class SyncPreferencesRepository internal constructor(
     private suspend fun recordMeaningfulResultLocked(
         result: BackgroundSyncResult,
         completedAtEpochMillis: Long,
-        pendingActionCount: Int?,
     ) {
         dataStore.edit { stored ->
-            // A preceding best-effort watermark write may have failed. If this worker still sees a
-            // non-empty queue, associate the terminal result with a recoverable current episode so
-            // an immediate integrity condition is not silently delayed until the stuck threshold.
-            if (pendingActionCount != null) {
-                if (pendingActionCount <= 0) {
-                    stored.remove(QUEUE_NON_EMPTY_SINCE)
-                    stored.clearLastQueueAlert()
-                } else if (stored[QUEUE_NON_EMPTY_SINCE] == null) {
-                    stored[QUEUE_NON_EMPTY_SINCE] = completedAtEpochMillis
-                }
+            // Every non-success worker result proves at least one action from its sync attempt
+            // remains queued. Recover a missing watermark in this required DataStore write instead
+            // of adding an advisory Room read after the sync outcome has already been decided.
+            if (result != BackgroundSyncResult.SUCCESS && stored[QUEUE_NON_EMPTY_SINCE] == null) {
+                stored[QUEUE_NON_EMPTY_SINCE] = completedAtEpochMillis
             }
             stored[LAST_MEANINGFUL_SYNC_AT_EPOCH_MILLIS] = completedAtEpochMillis
             stored[LAST_RESULT] = result.name

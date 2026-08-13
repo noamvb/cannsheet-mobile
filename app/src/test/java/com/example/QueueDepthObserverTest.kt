@@ -3,13 +3,8 @@ package com.example
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitCancellation
-import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -24,7 +19,7 @@ class QueueDepthObserverTest {
 
         collectQueueDepthChanges(
             countChanges = flowOf(1),
-            reconcileCurrentDepth = {
+            reconcileObservedDepth = {
                 if (attempts.incrementAndGet() == 1) throw IOException("temporary failure")
             },
             retryDelay = { delays.incrementAndGet() },
@@ -35,40 +30,26 @@ class QueueDepthObserverTest {
     }
 
     @Test
-    fun newerCountCancelsOldBackoffAndReconcilesImmediately() = runBlocking {
-        val counts = MutableStateFlow(1)
-        val attempts = AtomicInteger()
-        val oldBackoffStarted = CompletableDeferred<Unit>()
-        val oldBackoffCancelled = CompletableDeferred<Unit>()
-        val newCountReconciled = CompletableDeferred<Unit>()
+    fun emptyTransitionIsRetriedBeforeTheFollowingPositiveCount() = runBlocking {
+        val attempts = mutableListOf<Int>()
+        val applied = mutableListOf<Int>()
+        var failFirstEmpty = true
 
-        val collection = launch {
-            collectQueueDepthChanges(
-                countChanges = counts,
-                reconcileCurrentDepth = {
-                    if (attempts.incrementAndGet() == 1) {
-                        throw IOException("temporary failure")
-                    }
-                    newCountReconciled.complete(Unit)
-                },
-                retryDelay = {
-                    oldBackoffStarted.complete(Unit)
-                    try {
-                        awaitCancellation()
-                    } finally {
-                        oldBackoffCancelled.complete(Unit)
-                    }
-                },
-            )
-        }
+        collectQueueDepthChanges(
+            countChanges = flowOf(1, 0, 1),
+            reconcileObservedDepth = { count ->
+                attempts += count
+                if (count == 0 && failFirstEmpty) {
+                    failFirstEmpty = false
+                    throw IOException("temporary failure")
+                }
+                applied += count
+            },
+            retryDelay = {},
+        )
 
-        oldBackoffStarted.await()
-        counts.value = 2
-        newCountReconciled.await()
-        oldBackoffCancelled.await()
-        collection.cancelAndJoin()
-
-        assertEquals(2, attempts.get())
+        assertEquals(listOf(1, 0, 0, 1), attempts)
+        assertEquals(listOf(1, 0, 1), applied)
     }
 
     @Test
@@ -77,7 +58,7 @@ class QueueDepthObserverTest {
         val observation = async {
             collectQueueDepthChanges(
                 countChanges = flowOf(1),
-                reconcileCurrentDepth = { throw CancellationException("stop") },
+                reconcileObservedDepth = { throw CancellationException("stop") },
                 retryDelay = { retryAttempted = true },
             )
         }
