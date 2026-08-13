@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
@@ -191,10 +190,15 @@ private fun AppNavigationRail(
     onNavigate: (String) -> Unit,
 ) {
     NavigationRail(
+        // Scaffold already subtracts the navigation-bar inset through innerPadding
+        // when no bottom bar renders, and AdaptiveNavigationLayout applies that
+        // padding to the Row containing this rail. Applying navigationBarsPadding()
+        // here again would double the bottom inset at medium and expanded width.
+        // The display cutout is not part of Scaffold's systemBars insets, so it
+        // still has to be handled here.
         modifier = Modifier
             .fillMaxHeight()
             .displayCutoutPadding()
-            .navigationBarsPadding()
             .testTag(AdaptiveNavigationTestTags.RAIL),
     ) {
         items.forEach { screen ->
