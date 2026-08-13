@@ -1,6 +1,6 @@
 # Cannsheet Mobile v1.3.1 remediation plan
 
-Status: Executed. Phases 1-11 complete; Phase 9 skipped per 5.2 (phone not attached); Phase 12 documentation in progress.
+Status: COMPLETED. Released and verified as v1.3.1 (versionCode 32). Phase 9 skipped per Section 5.2.
 
 Base commit: `d36bda2` (`main`, released state v1.3.0, version code `31`).
 

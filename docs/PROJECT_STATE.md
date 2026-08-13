@@ -5,37 +5,37 @@ Last updated: 2026-08-13
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit and tag `v1.3.0`:
-  `a733a9d2741c4c6eaaa074461a354ffa6fb9751e`
-- Current release metadata in `app/build.gradle.kts`: version name `1.3.0`,
-  version code `31`
-- Version-only release [PR #73](https://github.com/noamvb/cannsheet-mobile/pull/73)
-  was squash-merged as `a733a9d2741c4c6eaaa074461a354ffa6fb9751e`. Its PR gate
-  passed in [run 31733035509](https://github.com/noamvb/cannsheet-mobile/actions/runs/31733035509),
+- Latest application release source commit and tag `v1.3.1`:
+  `b3575ea51c14cb58797f1f9e9cf2ecfcb41be408`
+- Current release metadata in `app/build.gradle.kts`: version name `1.3.1`,
+  version code `32`
+- Version-only release [PR #81](https://github.com/noamvb/cannsheet-mobile/pull/81)
+  was squash-merged as `b3575ea51c14cb58797f1f9e9cf2ecfcb41be408`. Its PR gate
+  passed in [run 31748102654](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748102654),
   and the exact post-merge `main` six-job validation passed in
-  [run 31733624463](https://github.com/noamvb/cannsheet-mobile/actions/runs/31733624463),
+  [run 31748421571](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748421571),
   including API 24, API 36, backend, static, classification, and aggregate jobs.
-- The `v1.3.0` tag points to that exact validated `main` commit. Signed
-  publication [run 31734329091](https://github.com/noamvb/cannsheet-mobile/actions/runs/31734329091)
+- The `v1.3.1` tag points to that exact validated `main` commit. Signed
+  publication [run 31748906313](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748906313)
   passed exact-main proof, protected signing, version monotonicity, signature
   and metadata checks, artifact upload, public release creation, and
   post-publication verification.
 - The public signed release is
-  [Cannsheet Mobile 1.3.0](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.3.0).
-  Its two authored assets are `Cannsheet-Mobile-1.3.0.apk` and
-  `Cannsheet-Mobile-1.3.0.apk.sha256`.
+  [Cannsheet Mobile 1.3.1](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.3.1).
+  Its two authored assets are `Cannsheet-Mobile-1.3.1.apk` and
+  `Cannsheet-Mobile-1.3.1.apk.sha256`.
 - Independently downloaded public APK SHA-256:
-  `d3d2076341afb489ddd59e479ff3cb60d8b0e7af484b9e7b829ae054ed5bf2c7`
+  `fb729f569dde1c1cd604582dc38e4bd6e8155489d7d6515f79e73879c076cdd3`
 - The independent download reports package `com.noamv.cannsheet.mobile`,
-  version code `31`, version name `1.3.0`, minimum SDK 24, target SDK 36, and
+  version code `32`, version name `1.3.1`, minimum SDK 24, target SDK 36, and
   launcher `com.example.MainActivity`. Local `aapt` and `apksigner verify`
   confirm the metadata and APK Signature Scheme v2. Its certificate and public
-  key digests match both the public v1.2.27 APK and the APK pulled from the
-  production phone before update, preserving in-place update compatibility.
+  key digests match the public v1.3.0 and v1.2.27 APKs and the APK installed
+  on the production phone, preserving in-place update compatibility.
 
-## v1.3.1 remediation work (in progress towards v1.3.1 release)
+## v1.3.1 remediation work (released in v1.3.1)
 
-The v1.3.1 remediation plan addressed findings R1 through R7 across seven reviewable phases:
+The v1.3.1 remediation plan addressed findings R1 through R7 across reviewable phases:
 
 | Change | Pull request | Exact merged `main` commit | Exact-main validation |
 |---|---|---|---|
@@ -44,6 +44,8 @@ The v1.3.1 remediation plan addressed findings R1 through R7 across seven review
 | R4: Explain why runway estimates are paused via notice card | [#77](https://github.com/noamvb/cannsheet-mobile/pull/77) | `8f2eff4e1cffbce401dd796b4ef89df8b2c2bc7e` | [run 31746369062](https://github.com/noamvb/cannsheet-mobile/actions/runs/31746369062) |
 | R5 / D1: Bound Log-screen analytics refreshes with a 2-minute floor | [#78](https://github.com/noamvb/cannsheet-mobile/pull/78) | `f5222026aeecad882c40c8faeeb19f85c18e1efd` | [run 31746792541](https://github.com/noamvb/cannsheet-mobile/actions/runs/31746792541) |
 | R7: Drop unread `selectedRangeDayCount` from `RunwayEstimateState.Ready` | [#79](https://github.com/noamvb/cannsheet-mobile/pull/79) | `90a6e2578502dbd6ec03dd08ebba24197771da4d` | [run 31747331096](https://github.com/noamvb/cannsheet-mobile/actions/runs/31747331096) |
+| R1, R6, ADR-020: Documentation updates and fix plan | [#80](https://github.com/noamvb/cannsheet-mobile/pull/80) | `0288619c96160538a7c29342ba9e68cbbfe7b2b8` | [run 31747880264](https://github.com/noamvb/cannsheet-mobile/actions/runs/31747880264) |
+| Version metadata bump to 1.3.1 (versionCode 32) | [#81](https://github.com/noamvb/cannsheet-mobile/pull/81) | `b3575ea51c14cb58797f1f9e9cf2ecfcb41be408` | [run 31748421571](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748421571) |
 
 ### Phase 5 device measurement & Phase 9 outcome
 During Phase 5 verification, `adb devices` confirmed that the production phone was not attached over wireless ADB. In accordance with Section 5.2 of `docs/V1_3_1_FIX_PLAN.md`, physical display measurement was skipped, and Phase 9 (lowering the two-pane width threshold) was deliberately not executed without device evidence. The two-pane threshold remains at `840.dp`.
