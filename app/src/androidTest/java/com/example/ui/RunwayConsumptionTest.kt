@@ -72,7 +72,10 @@ class RunwayConsumptionTest {
             runwayByProductId = mapOf(selected.id to runway(selected.id))
         }
 
-        composeRule.onNodeWithTag(ConsumptionRunwayTestTags.SELECTED_PRODUCT_RUNWAY)
+        composeRule.onNodeWithTag(
+            ConsumptionRunwayTestTags.SELECTED_PRODUCT_RUNWAY,
+            useUnmergedTree = true,
+        )
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNode(
