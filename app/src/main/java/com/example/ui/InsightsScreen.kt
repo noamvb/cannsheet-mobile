@@ -144,7 +144,7 @@ internal fun InsightsContent(
     runwayState: RunwayEstimateState = RunwayEstimateState.Suppressed,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
-    var selectedProduct by remember { mutableStateOf<AnalyticsProductDto?>(null) }
+    var selectedProductId by rememberSaveable { mutableStateOf<String?>(null) }
     var showAllProducts by rememberSaveable { mutableStateOf(false) }
     var productQuery by rememberSaveable { mutableStateOf("") }
     var productSort by rememberSaveable { mutableStateOf("Most logged") }
@@ -157,17 +157,20 @@ internal fun InsightsContent(
             },
         )
     }
+    val data = state.data
+    val selectedProduct = selectedProductId?.let { id ->
+        data?.products?.firstOrNull { it.productId == id }
+    }
     selectedProduct?.let { product ->
         ProductAnalyticsSheet(
             product = product,
-            onDismiss = { selectedProduct = null },
+            onDismiss = { selectedProductId = null },
             runway = (runwayState as? RunwayEstimateState.Ready)
                 ?.runwayByProductId
                 ?.get(product.productId),
         )
     }
 
-    val data = state.data
     if (data == null && state.isInitialLoading) {
         LoadingAnalytics("Loading synced analytics…")
         return
@@ -355,7 +358,7 @@ internal fun InsightsContent(
                     }
                 }
                 (if (showAllProducts) sorted else sorted.take(5)).forEach { product ->
-                    ProductAnalyticsRow(product, onClick = { selectedProduct = product })
+                    ProductAnalyticsRow(product, onClick = { selectedProductId = product.productId })
                     HorizontalDivider()
                 }
                 if (sorted.size > 5) {
