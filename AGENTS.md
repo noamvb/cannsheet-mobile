@@ -52,6 +52,20 @@ documents, not in this file.
 - For Android adaptive icons, keep `<monochrome>` drawables (`ic_launcher_monochrome.xml`) transparent (`#00000000`) except for emblem/symbol paths (`#000000`) so Android 13+ Material You themed icon tinting renders cleanly without solid background blobs.
 - For Jetpack Compose `DatePicker` components, always use UTC-based date helpers (`pickerDateToWire`, `currentLocalDateAsPickerMillis`, `parsePickerDateToMillis`) in `ConsumptionDateTime.kt` when converting between `DatePickerState.selectedDateMillis` and ISO `"yyyy-MM-dd"` strings. Never format `selectedDateMillis` using device-local `SimpleDateFormat` without setting UTC timezone, as midnight UTC shifts to the prior day in negative UTC offset timezones.
 - For the pen home-screen widget, quantities are displayed in seconds but must be converted with `secondsToUses` before reaching Room, the offline queue, or the wire; the undo window defers the Room write, the captured payload is removed only after the Room write is durable, and Undo never deletes a queued row.
+- Queue-integrity alerts are advisory only. Evaluation may read the existing
+  aggregate pending-action count, but no notification or presenter may receive
+  queue rows or entry details, and no alert path may write, acknowledge, or
+  delete a queue row. Notification content must never include product names,
+  quantities, or dates.
+- Runway and spend projections are presentation-only estimates derived from
+  `InsightsResponseDto`. They must not be persisted, transmitted, or treated as
+  confirmed values, and must degrade to showing nothing when the Insights
+  snapshot is cached, stale, changing range, or incomplete because a local
+  action is pending.
+- Month and day arithmetic on analytics data uses the response's own `timeZone`
+  and `range` fields, never a device-local `Calendar` or `LocalDate.now()`.
+- `EXTRA_START_ROUTE` lives in `com.example.domain` and its string value is part
+  of already-issued widget `PendingIntent`s; do not change it.
 
 
 ## Change and release rules

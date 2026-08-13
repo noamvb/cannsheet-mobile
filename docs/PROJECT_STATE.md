@@ -32,6 +32,54 @@ Last updated: 2026-08-13
   compatibility. Obtainium can discover the public release asset from the
   releases repository.
 
+## v1.3 feature work (implemented; release pending)
+
+The accepted v1.3 feature sequence is implemented through its source steps and
+this documentation step. Release metadata remains at v1.2.27 / version code 30
+until the separate version-only step. The source changes were delivered as
+eight independently reviewable squash merges from the released v1.2.27 base:
+
+| Change | Pull request | Exact merged `main` commit | Exact-main validation |
+|---|---|---|---|
+| Deliberate backup and device-transfer policy | [#64](https://github.com/noamvb/cannsheet-mobile/pull/64) | `039196f37579ec42cc7d31bdee0a30aae14e38c4` | [run 31669121074](https://github.com/noamvb/cannsheet-mobile/actions/runs/31669121074) |
+| Queue episode and alert-claim state, without presentation | [#65](https://github.com/noamvb/cannsheet-mobile/pull/65) | `8b450ab7da807860649c20cc3f4692024941807e` | [run 31672286395](https://github.com/noamvb/cannsheet-mobile/actions/runs/31672286395) |
+| Shared, byte-identical out-of-app start-route extra | [#66](https://github.com/noamvb/cannsheet-mobile/pull/66) | `aba8081fdd2d2b845276f222871160c142bf814d` | [run 31672786453](https://github.com/noamvb/cannsheet-mobile/actions/runs/31672786453) |
+| Opt-in queue-integrity notification delivery | [#67](https://github.com/noamvb/cannsheet-mobile/pull/67) | `e5a759f5a1b7961c7d9cef512d26e8d58689d5c9` | [run 31711445230](https://github.com/noamvb/cannsheet-mobile/actions/runs/31711445230) |
+| Inventory-runway and current-month spend model | [#68](https://github.com/noamvb/cannsheet-mobile/pull/68) | `e10b251edc70e6b367d0af183b6dca3de1dd88a6` | [run 31715871378](https://github.com/noamvb/cannsheet-mobile/actions/runs/31715871378) |
+| Runway and spend presentation on Insights and Log | [#69](https://github.com/noamvb/cannsheet-mobile/pull/69) | `c1c8ddc53bf6601c11408914206e09959c19c9b8` | [run 31723327998](https://github.com/noamvb/cannsheet-mobile/actions/runs/31723327998) |
+| Local width breakpoints and adaptive navigation chrome | [#70](https://github.com/noamvb/cannsheet-mobile/pull/70) | `19d61abc3f132c4e8a72d3fea04d7b2c9172cd16` | [run 31727193756](https://github.com/noamvb/cannsheet-mobile/actions/runs/31727193756) |
+| Expanded-width Insights and History detail panes | [#71](https://github.com/noamvb/cannsheet-mobile/pull/71) | `d8b9efbdb3c8b6c9603a6aa5d6d267677c3d8511` | [run 31729893399](https://github.com/noamvb/cannsheet-mobile/actions/runs/31729893399) |
+
+Each exact-main run above passed classification, backend validation, Android
+static validation, API 24 and API 36 emulator jobs, and the required aggregate
+check. The final adaptive-layout run completed in 6m44s. These are CI and
+emulator evidence, not a physical-device walkthrough.
+
+The queue alert is local, off by default, subordinate to the background-sync
+kill switch, and limited to aggregate count/reason copy. It can surface an
+environment mismatch, partial rejection, pending backend capability, or a
+continuously non-empty queue at least 24 hours old. Ordinary retry exhaustion
+does not alert by itself. Alert evaluation and presentation never mutate a
+queue row.
+
+Runway and spend pace are presentation-only estimates from the existing
+versioned Insights payload. They require a fresh live snapshot and no pending
+local actions. Capacity evidence comes from medians over the user's own
+finished products; burn windows and month eligibility use the response time
+zone and range. No new backend request, Apps Script field, Room table, queue
+payload, or spreadsheet write was introduced.
+
+Navigation uses locally derived Material width boundaries: compact below
+600dp, medium from 600dp through 839dp, and expanded from 840dp. Compact keeps
+the bottom bar; medium and expanded use a rail; expanded Insights and History
+use a 40/60 list-detail layout backed by the same detail bodies as the modal
+sheets. This is width-responsive behavior, not hinge-aware placement.
+
+No physical Samsung Fold, production notification, 24-hour queue episode,
+runway estimate, or expanded two-pane layout was exercised during these source
+steps. No screenshot or recording is claimed. The production Apps Script and
+spreadsheet were not changed or probed.
+
 ## Pen widget follow-up implementation (released in v1.2.27)
 
 - The follow-up guide is based on `00f7860`, the current v1.2.26 `main` tip.
@@ -690,20 +738,44 @@ Local and device evidence:
 - v1.2.27 phone validation was package/readback only. No production widget tap,
   consumption submission, or physical widget screenshot was performed; the
   CI emulator and source previews are separate evidence boundaries.
+- The v1.3 source set is merged but not yet released; application metadata is
+  still v1.2.27 / version code 30 until the version-only release step.
+- Queue notifications, runway/spend estimates, navigation rail behavior, and
+  the expanded Insights/History panes have CI coverage but no physical-device
+  walkthrough. A real 24-hour offline queue was not created for testing.
+- Adaptive layout decisions are width-only. They do not inspect a fold hinge or
+  guarantee that a detail divider avoids the Samsung Fold's physical crease.
 
 ## Current priorities
 
-1. If physical widget visual/action coverage is needed, build a separate
+1. Complete the v1.3 version-only pull request, exact-main validation, signed
+   publication, independent artifact verification, and only then any bounded
+   production in-place installation authorized by the owner.
+2. If physical v1.3 UI coverage is needed, use an isolated sandbox/debug
+   package and verify notification permission/channel states, queue-alert
+   routing, fresh/stale/pending runway suppression, compact/medium/expanded
+   navigation, and both Insights/History detail surfaces. Do not manufacture a
+   production queue alert or spreadsheet write.
+3. If physical widget visual/action coverage is needed, build a separate
    sandbox/debug package with a non-production endpoint and verify light/dark
    rendering, 2x2 sizing, +/- controls, reset, countdown/undo, and message
    states without creating production data.
-2. Use the next genuine production purchase to validate default persistence and
+4. Use the next genuine production purchase to validate default persistence and
    restart/autofill behavior without fabricating data.
-3. Continue analytics prefetch and correction-safe usage-total checks; CI does
+5. Continue analytics prefetch and correction-safe usage-total checks; CI does
    not substitute for device evidence for those wake/offline workflows.
 
 ## Unresolved questions
 
+- Will Android 13+ permission denial/revocation, a disabled notification
+  channel, and the 24-hour no-network alert schedule behave as expected on the
+  intended phone? CI validates API branches but not a real day-long queue.
+- Do runway and month-spend estimates remain understandable against the user's
+  real finished-product evidence, and do they disappear promptly for every
+  stale or pending-action transition on the intended phone?
+- Does the main Fold display provide enough useful width for the 40/60
+  Insights and History panes in portrait and landscape, and is the
+  width-only divider acceptable near the physical crease?
 - Obtainium's post-install refresh was not observed in this session. The full
   History UI plan remains partially unverified: the offline error inside the
   detail sheet, correction save, rotation, and missing-entry dialog.
@@ -724,9 +796,11 @@ workflow evidence alone.
 ## Relevant paths
 
 - `app/src/main/java/com/example/widget`
+- `app/src/main/java/com/example/notifications`
 - `app/src/main/java/com/example/ui`
 - `app/src/main/java/com/example/data`
 - `app/src/main/java/com/example/data/sync`
+- `app/src/main/java/com/example/domain`
 - `app/src/test`
 - `app/src/androidTest`
 - `tests/backend_corrections_test.js`
