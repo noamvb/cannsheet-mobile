@@ -591,8 +591,7 @@ historical rationale.
 ## ADR-015: Make the pen widget compact breakpoint reachable on the Fold
 
 - Status: Accepted; implemented in the sizing follow-up after physical
-  sandbox-package measurement; release pending the separately requested
-  versioned publication.
+  sandbox-package measurement and released as Cannsheet Mobile v1.2.27.
 - Date: 2026-08-13
 - Context: The full `RemoteViews` layout contains the cart name, subtitle,
   counter/submit row, and +/- row. Its declared `160dp` minimum-resize height
@@ -628,7 +627,8 @@ historical rationale.
   backend, or stored quantity contract changes. The sandbox package and its
   temporary log/pin hook were removed after measurement. Physical minimum-size
   evidence remains a documented launcher limitation rather than an inferred
-  value.
+  value. The v1.2.27 production install was verified by package/readback only;
+  no physical production widget action was performed.
 - Related files: `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
   `app/src/main/res/values/dimens.xml`,
   `app/src/main/res/xml/pen_consumption_widget_info.xml`,
