@@ -25,6 +25,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * Minimum gap between analytics refreshes initiated by the Log screen alone.
+ *
+ * The Insights tab still refreshes immediately on every invalidation. This floor
+ * exists so a logging session that drains the queue several times in a row costs
+ * one Apps Script analytics read instead of one per drained episode; the same
+ * cost reasoning is recorded in SyncWorker's prefetch-gating comment.
+ */
+internal const val RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS: Long = 2L * 60L * 1000L
+
 data class AnalyticsUiError(
     val code: String,
     val message: String,
@@ -191,6 +201,7 @@ fun canOfferProductReopen(
 class AnalyticsCoordinator(
     private val repository: AnalyticsDataSource,
     private val scope: CoroutineScope,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val _insights = MutableStateFlow(InsightsUiState())
     val insights: StateFlow<InsightsUiState> = _insights
@@ -201,6 +212,7 @@ class AnalyticsCoordinator(
     private var insightsJob: Job? = null
     private var historyRefreshJob: Job? = null
     private var historyAppendJob: Job? = null
+    private var lastInsightsRefreshStartedAtEpochMillis: Long? = null
     private var insightsLoaded = false
     private var historyLoaded = false
     private var insightsScreenVisible = false
@@ -243,6 +255,7 @@ class AnalyticsCoordinator(
 
     fun refreshInsights(range: InsightsRange = _insights.value.displayedRange) {
         insightsJob?.cancel()
+        lastInsightsRefreshStartedAtEpochMillis = clock()
         val requestInvalidationGeneration = insightsInvalidationGeneration
         val hadData = _insights.value.data != null
         _insights.update {
@@ -449,8 +462,22 @@ class AnalyticsCoordinator(
         }
     }
 
-    private fun shouldRefreshInsightsWhileVisible(): Boolean =
-        runwayScreenVisible || (insightsScreenVisible && !historyVisible)
+    private fun shouldRefreshInsightsWhileVisible(): Boolean = when {
+        // The Insights tab is the surface the user is actually looking at.
+        insightsScreenVisible && !historyVisible -> true
+        // The Log screen only carries one derived line per product. Refreshing it
+        // on every queue drain would buy freshness the user cannot see at the
+        // price of an Apps Script read per logged entry.
+        runwayScreenVisible -> runwayOnlyRefreshIsDue()
+        else -> false
+    }
+
+    private fun runwayOnlyRefreshIsDue(): Boolean {
+        val last = lastInsightsRefreshStartedAtEpochMillis ?: return true
+        val now = clock()
+        if (now < last) return true // Backwards clock: do not wedge the floor shut.
+        return now - last >= RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
+    }
 
     private fun shouldRefreshHistoryWhileVisible(): Boolean =
         insightsScreenVisible && historyVisible

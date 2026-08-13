@@ -130,7 +130,7 @@ class AnalyticsCoordinatorTest {
             val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
             val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
             try {
-                coordinator.onRunwayVisible()
+                coordinator.onInsightsVisible()
                 val preAcknowledgementRequest = repository.nextInsightsRequest()
 
                 coordinator.markStale()
@@ -186,9 +186,10 @@ class AnalyticsCoordinatorTest {
 
     @Test
     fun insightsAndRunwayTransitionOrderingKeepsTheNewConsumerVisible() = runBlocking {
+        var simulatedNow = 1_000_000L
         val repository = ControlledAnalyticsDataSource()
         val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
-        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
         try {
             coordinator.onRunwayVisible()
             repository.nextInsightsRequest().response.complete(
@@ -206,6 +207,7 @@ class AnalyticsCoordinatorTest {
             awaitState { coordinator.insights.value.lastUpdatedEpochMillis == 2L }
 
             // It may also dispose the source first; the destination must still own visibility.
+            simulatedNow += RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
             coordinator.onInsightsHidden()
             coordinator.onRunwayVisible()
             coordinator.markStale()
@@ -252,9 +254,10 @@ class AnalyticsCoordinatorTest {
 
     @Test
     fun invalidationDuringAnActiveRunwayRefreshRequiresOnePostInvalidationResponse() = runBlocking {
+        var simulatedNow = 1_000_000L
         val repository = ControlledAnalyticsDataSource()
         val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
-        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
         try {
             coordinator.onRunwayVisible()
             repository.nextInsightsRequest().response.complete(
@@ -262,6 +265,7 @@ class AnalyticsCoordinatorTest {
             )
             awaitState { coordinator.insights.value.lastUpdatedEpochMillis == 1L }
 
+            simulatedNow += RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
             coordinator.markStale()
             val refresh = repository.nextInsightsRequest()
             coordinator.markStale()
@@ -269,6 +273,7 @@ class AnalyticsCoordinatorTest {
 
             assertFalse(repository.hasQueuedInsightsRequest())
 
+            simulatedNow += RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
             refresh.response.complete(insightsResponse(generatedAtEpochMillis = 2L))
             awaitState {
                 coordinator.insights.value.lastUpdatedEpochMillis == 2L &&
@@ -406,9 +411,10 @@ class AnalyticsCoordinatorTest {
 
     @Test
     fun visibleRunwayStillRefreshesInsightsWhileInsightsHistoryIsVisible() = runBlocking {
+        var simulatedNow = 1_000_000L
         val repository = ControlledAnalyticsDataSource()
         val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
-        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
         try {
             coordinator.onInsightsVisible()
             repository.nextInsightsRequest().response.complete(
@@ -423,6 +429,7 @@ class AnalyticsCoordinatorTest {
             awaitState { coordinator.history.value.hasFreshCursor }
             coordinator.onRunwayVisible()
 
+            simulatedNow += RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
             coordinator.markStale()
             val historyRefresh = repository.nextHistoryRequest()
             val insightsRefresh = repository.nextInsightsRequest()
@@ -633,6 +640,125 @@ class AnalyticsCoordinatorTest {
             assertFalse(repository.hasQueuedHistoryRequest())
             refresh.response.complete(historyResponse(eventIds = listOf("new"), nextCursor = null))
             awaitState { coordinator.history.value.events.singleOrNull()?.eventUuid == "new" }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun markStaleWithOnlyTheLogScreenVisibleSkipsARefreshInsideTheFloor() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val initialRequest = repository.nextInsightsRequest()
+            initialRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+
+            // Advance clock by 30 seconds (less than 2 minutes floor)
+            simulatedNow += 30_000L
+            coordinator.markStale()
+            yield()
+
+            assertTrue(coordinator.insights.value.isStale)
+            assertFalse(coordinator.insights.value.isRefreshing)
+            assertFalse(repository.hasQueuedInsightsRequest())
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun markStaleWithOnlyTheLogScreenVisibleRefreshesOnceTheFloorElapses() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val initialRequest = repository.nextInsightsRequest()
+            initialRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+
+            // Advance clock by exactly RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS (2 minutes)
+            simulatedNow += RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
+            coordinator.markStale()
+
+            val secondRequest = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            secondRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun markStaleWithTheInsightsTabVisibleRefreshesImmediatelyRegardlessOfTheFloor() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onInsightsVisible()
+            val initialRequest = repository.nextInsightsRequest()
+            initialRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+
+            // Advance clock by just 5 seconds (well inside the 2-minute floor)
+            simulatedNow += 5_000L
+            coordinator.markStale()
+
+            val secondRequest = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            secondRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun aBackwardsClockDoesNotWedgeTheRunwayOnlyFloorShut() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val initialRequest = repository.nextInsightsRequest()
+            initialRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+
+            // Clock moves backward
+            simulatedNow = 500_000L
+            coordinator.markStale()
+
+            val secondRequest = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            secondRequest.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isRefreshing }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun theColdStartLoadStillFetchesOnce() = runBlocking {
+        val simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+
+            val request = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isInitialLoading)
+            assertTrue(coordinator.insights.value.isStale)
+            request.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isInitialLoading }
         } finally {
             coordinatorScope.cancel()
         }
