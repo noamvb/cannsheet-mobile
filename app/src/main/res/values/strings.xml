@@ -17,6 +17,7 @@
     <string name="pen_widget_saving">Saving…</string>
     <string name="pen_widget_loading">Loading…</string>
     <string name="pen_widget_generic_cart">Pen cart</string>
+    <string name="pen_widget_open_app_description">%1$s. Double tap to open Cannsheet Mobile.</string>
     <string name="pen_widget_undo_window">Undo within %1$d seconds</string>
     <string name="pen_widget_seconds_short" translatable="false">%1$ds</string>
     <string name="pen_widget_status_synced">%1$s · synced %2$s uses</string>
@@ -36,16 +37,7 @@
         <item quantity="one">Logging %1$d second. Double tap to undo.</item>
         <item quantity="other">Logging %1$d seconds. Double tap to undo.</item>
     </plurals>
-    <plurals name="pen_widget_submit_seconds">
-        <item quantity="one">Submit %1$d second pen log</item>
-        <item quantity="other">Submit %1$d second pen log</item>
-    </plurals>
-    <plurals name="pen_widget_undo_seconds">
-        <item quantity="one">Undo %1$d second pen log</item>
-        <item quantity="other">Undo %1$d second pen log</item>
-    </plurals>
-    <plurals name="pen_widget_saving_seconds_description">
-        <item quantity="one">Saving %1$d second pen log</item>
-        <item quantity="other">Saving %1$d second pen log</item>
-    </plurals>
+    <string name="pen_widget_submit_seconds">Submit %1$d-second pen log</string>
+    <string name="pen_widget_undo_seconds">Undo %1$d-second pen log</string>
+    <string name="pen_widget_saving_seconds_description">Saving %1$d-second pen log</string>
 </resources>

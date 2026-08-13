@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 
 class MainActivity : ComponentActivity() {
   private val routeRequests = Channel<String>(capacity = Channel.BUFFERED)
+  private val routeRequestFlow = routeRequests.receiveAsFlow()
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -31,7 +32,7 @@ class MainActivity : ComponentActivity() {
       MyApplicationTheme {
         CannsheetApp(
           startDestination = startRoute ?: "consumption",
-          routeRequests = routeRequests.receiveAsFlow(),
+          routeRequests = routeRequestFlow,
         )
       }
     }
