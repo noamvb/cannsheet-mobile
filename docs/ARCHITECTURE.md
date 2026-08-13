@@ -242,8 +242,10 @@ validation paths. It displays the shared loaded-cart state and uses the same
   process owner plus unique claim token recovers process-death state without
   allowing an older attempt to complete a newer claim.
 - Undo removes the pending payload only when its `commitId` still matches and
-  restores the captured seconds draft. Timer/WorkManager cancellation is only
-  an optimization; no widget path deletes an already queued Room row. Widget
+  the payload is unclaimed or its claim is stale; a live claim loses to the
+  in-flight Room write. It restores the captured seconds draft only when that
+  arbitration permits it. Timer/WorkManager cancellation is only an
+  optimization; no widget path deletes an already queued Room row. Widget
   deletion force-commits a fresh payload before clearing per-widget UI state.
 
 The deferred commit is represented by the following boundary sequence:
@@ -268,7 +270,12 @@ a wall-clock change from stranding the widget. A widget commit never re-points
 the loaded cart at delayed write time. View-model pen-state changes,
 acknowledged sync work, application startup, and provider actions request a
 widget refresh through the `WidgetRefresher` boundary. Provider work is
-serialized across mutation and render, and WorkManager joins the same mutex.
+serialized across mutation and render, and WorkManager joins the same
+process-local `WidgetWorkSerializer`. That serializer orders the currently
+known entry points; it does not protect future widget surfaces, another process,
+or I/O moved outside the lock. The DataStore claim state is therefore the
+correctness boundary for undo versus a live commit claim, while the mutex is an
+ordering optimization.
 The widget's local state remains usable when background sync
 is disabled; the existing queue and acknowledgement rules continue to govern
 delivery to Apps Script.

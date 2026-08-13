@@ -13,18 +13,20 @@ sealed interface PenWidgetCommitResolution {
 }
 
 /**
- * DataStore edit operations use these pure results to arbitrate the undo/commit race. WorkManager
- * cancellation is only an optimization; it cannot be the correctness boundary.
+ * Undo loses to a live claim. A claimed payload is mid-Room-write, so restoring it would leave a
+ * queued row the user believes was cancelled. Claim state — not the process-wide widget mutex —
+ * is the correctness boundary here, for the same reason WorkManager cancellation is not one.
  */
 fun resolveUndo(
     payload: PenWidgetCommitPayload?,
     commitId: String,
-): PenWidgetUndoResolution =
-    if (payload?.commitId == commitId) {
-        PenWidgetUndoResolution.Restored(payload.seconds)
-    } else {
-        PenWidgetUndoResolution.NoOp
-    }
+    nowMillis: Long,
+): PenWidgetUndoResolution = when {
+    payload == null -> PenWidgetUndoResolution.NoOp
+    payload.commitId != commitId -> PenWidgetUndoResolution.NoOp
+    payload.claimId != null && !isClaimStale(payload, nowMillis) -> PenWidgetUndoResolution.NoOp
+    else -> PenWidgetUndoResolution.Restored(payload.seconds)
+}
 
 fun resolveCommit(
     payload: PenWidgetCommitPayload?,

@@ -4,12 +4,10 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import com.example.domain.PenQuickLogState
-import com.example.domain.currentSubmissionDateTime
-import com.example.domain.secondsToUses
-import java.util.UUID
 
 class PenConsumptionWidgetProvider : AppWidgetProvider() {
+    private val router = PenWidgetActionRouter()
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -84,67 +82,8 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         val appContext = context.applicationContext
         PenWidgetRuntime.launchReceiver(pendingResult) {
             PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
-            handleAction(appContext, action, appWidgetId, intent)
+            router.handle(appContext, action, appWidgetId, intent)
             PenWidgetUpdater.update(appContext, appWidgetId)
-        }
-    }
-
-    private suspend fun handleAction(
-        context: Context,
-        action: String?,
-        appWidgetId: Int,
-        intent: Intent,
-    ) {
-        val state = PenWidgetStateRepository(context)
-        when (action) {
-            ACTION_DECREMENT -> state.adjustDraftSeconds(appWidgetId, -STEP_SECONDS)
-            ACTION_INCREMENT -> state.adjustDraftSeconds(appWidgetId, STEP_SECONDS)
-            ACTION_RESET -> state.resetDraftSeconds(appWidgetId)
-            ACTION_SUBMIT -> submit(context, appWidgetId, state)
-            ACTION_UNDO -> {
-                val commitId = intent.getStringExtra(EXTRA_COMMIT_ID) ?: return
-                if (state.undo(appWidgetId, commitId)) {
-                    PenWidgetRuntime.cancelCommitTimer(appWidgetId)
-                    PenWidgetScheduler.cancelCommit(context, appWidgetId)
-                }
-            }
-        }
-    }
-
-    private suspend fun submit(
-        context: Context,
-        appWidgetId: Int,
-        state: PenWidgetStateRepository,
-    ) {
-        val penState = PenWidgetDataSource.loadPenState(context)
-        val loaded = penState as? PenQuickLogState.Loaded ?: return
-        val secondsPerUse = loaded.secondsPerUse ?: return
-
-        val now = System.currentTimeMillis()
-        val at = currentSubmissionDateTime(now)
-        val commitId = UUID.randomUUID().toString()
-        val eventId = UUID.randomUUID().toString()
-        val payload = state.submitCommit(appWidgetId) { seconds ->
-            PenWidgetCommitPayload(
-                version = PEN_WIDGET_PAYLOAD_VERSION,
-                commitId = commitId,
-                eventId = eventId,
-                submittedAtEpochMillis = now,
-                commitAtEpochMillis = now + COMMIT_DELAY_MILLIS,
-                productId = loaded.product.id,
-                productUuid = loaded.product.productUuid,
-                seconds = seconds,
-                secondsPerUse = secondsPerUse,
-                uses = secondsToUses(seconds.toDouble(), secondsPerUse),
-                date = at.date,
-                time = at.time,
-            )
-        }
-        if (payload != null) {
-            PenWidgetRuntime.scheduleCommitTimer(context, appWidgetId, payload.commitId)
-            // The timer is the primary path. Failure to enqueue its durable backstop must not
-            // suppress in-process delivery; lazy overdue flushing remains the final recovery tier.
-            runCatching { PenWidgetScheduler.scheduleCommit(context, appWidgetId, payload.commitId) }
         }
     }
 

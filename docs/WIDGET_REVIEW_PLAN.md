@@ -112,6 +112,18 @@ applicable W-25 items are implemented with these review adjustments:
 The original findings and proposed fixes below are retained as the review
 record. Where they differ from this section, this resolution is authoritative.
 
+### Follow-up execution record
+
+The separate follow-up execution guide supplied for the v1.2.26 base refers to
+`docs/WIDGET_FOLLOWUP_PLAN.md`, but that path is not present on the base checkout
+or the review branch. This document remains the canonical review and resolution
+record. The first follow-up implementation keeps the existing process-local
+serialization order while making the DataStore claim state authoritative for
+undo-versus-commit arbitration, and extracts provider action routing into an
+injected `PenWidgetActionRouter` so the provider's mutation paths can be tested
+without a live broadcast dispatch. The follow-up remains unreleased at this
+stage; sizing is still gated on physical Fold measurements.
+
 ## 3. Findings
 
 ### A. Data safety and correctness
