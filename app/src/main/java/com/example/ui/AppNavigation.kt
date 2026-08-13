@@ -89,12 +89,14 @@ fun CannsheetApp(
         pendingCount = pendingCount,
         selectedRoute = selectedRoute,
         onNavigate = navigateTo,
-    ) {
+    ) { windowWidth ->
         Box(modifier = Modifier.fillMaxSize()) {
             NavHost(navController, startDestination = startDestination) {
                 composable(Screen.Consumption.route) { ConsumptionScreen(viewModel) }
                 composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
-                composable(Screen.Insights.route) { InsightsScreen(viewModel) }
+                composable(Screen.Insights.route) {
+                    InsightsScreen(viewModel, windowWidth = windowWidth)
+                }
                 composable(Screen.Settings.route) { SettingsScreen(viewModel) }
             }
 
@@ -123,7 +125,7 @@ internal fun AdaptiveNavigationLayout(
     selectedRoute: String?,
     onNavigate: (String) -> Unit,
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
+    content: @Composable (WindowWidth) -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val windowWidth = windowWidthFor(maxWidth)
@@ -156,7 +158,7 @@ internal fun AdaptiveNavigationLayout(
                         .fillMaxHeight()
                         .testTag(AdaptiveNavigationTestTags.CONTENT),
                 ) {
-                    content()
+                    content(windowWidth)
                 }
             }
         }

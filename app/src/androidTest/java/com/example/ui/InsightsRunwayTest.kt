@@ -220,6 +220,40 @@ class InsightsRunwayTest {
     }
 
     @Test
+    fun expandedInsightsUseInlineDetailWithoutOpeningTheCompactSheet() {
+        val product = analyticsProduct("expanded-product", "Expanded cart")
+
+        composeRule.setContent {
+            MaterialTheme {
+                InsightsContent(
+                    state = InsightsUiState(data = insights(listOf(product))),
+                    pendingCount = 0,
+                    isSyncing = false,
+                    onSync = {},
+                    onRefresh = {},
+                    windowWidth = WindowWidth.EXPANDED,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.INSIGHTS_LIST_PANE).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.INSIGHTS_DETAIL_PANE).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.DETAIL_PLACEHOLDER).assertIsDisplayed()
+
+        val productRow = hasText(product.name) and hasClickAction()
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.CONTENT)
+            .performScrollToNode(productRow)
+        composeRule.onNode(productRow).performClick()
+
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.INSIGHTS_DETAIL_PANE)
+            .assert(
+                hasAnyDescendant(hasText("${product.status} · ${product.type} · ${product.productId}")),
+            )
+        composeRule.onAllNodesWithTag(InsightsRunwayTestTags.sheet(product.productId))
+            .assertCountEquals(0)
+    }
+
+    @Test
     fun openProductDetailSurvivesSavedStateRestoration() {
         val product = analyticsProduct("restored-product", "Restored cart")
         val restorationTester = StateRestorationTester(composeRule)

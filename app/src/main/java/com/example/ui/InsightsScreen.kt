@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -85,7 +86,10 @@ import java.util.Calendar
 import java.util.TimeZone
 
 @Composable
-fun InsightsScreen(viewModel: CannsheetViewModel) {
+fun InsightsScreen(
+    viewModel: CannsheetViewModel,
+    windowWidth: WindowWidth = WindowWidth.COMPACT,
+) {
     val runwayPresentation by viewModel.runwayPresentationState.collectAsStateWithLifecycle()
     val insights = runwayPresentation.insights
     val history by viewModel.historyState.collectAsStateWithLifecycle()
@@ -115,6 +119,7 @@ fun InsightsScreen(viewModel: CannsheetViewModel) {
                 onSync = viewModel::syncQueue,
                 onRefresh = viewModel::refreshInsights,
                 runwayState = runwayPresentation.estimates,
+                windowWidth = windowWidth,
             )
         } else {
             HistoryContent(
@@ -129,6 +134,7 @@ fun InsightsScreen(viewModel: CannsheetViewModel) {
                 correctionState = viewModel.historyCorrectionState.collectAsStateWithLifecycle().value,
                 onQueueCorrection = viewModel::queueHistoryCorrection,
                 onCancelCorrection = viewModel::cancelHistoryCorrection,
+                windowWidth = windowWidth,
             )
         }
     }
@@ -142,6 +148,7 @@ internal fun InsightsContent(
     onSync: () -> Unit,
     onRefresh: (InsightsRange) -> Unit,
     runwayState: RunwayEstimateState = RunwayEstimateState.Suppressed,
+    windowWidth: WindowWidth = WindowWidth.COMPACT,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
     var selectedProductId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -161,7 +168,7 @@ internal fun InsightsContent(
     val selectedProduct = selectedProductId?.let { id ->
         data?.products?.firstOrNull { it.productId == id }
     }
-    selectedProduct?.let { product ->
+    if (windowWidth != WindowWidth.EXPANDED) selectedProduct?.let { product ->
         ProductAnalyticsSheet(
             product = product,
             onDismiss = { selectedProductId = null },
@@ -180,13 +187,24 @@ internal fun InsightsContent(
         return
     }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .testTag(InsightsRunwayTestTags.CONTENT),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
+    Row(Modifier.fillMaxSize()) {
+        Box(
+            modifier = if (windowWidth == WindowWidth.EXPANDED) {
+                Modifier
+                    .weight(0.4f)
+                    .fillMaxHeight()
+                    .testTag(AdaptiveInsightsTestTags.INSIGHTS_LIST_PANE)
+            } else {
+                Modifier.fillMaxSize()
+            },
+        ) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(InsightsRunwayTestTags.CONTENT),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
         item {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -393,6 +411,28 @@ internal fun InsightsContent(
                 )
                 Text("Server duration: ${data.serverDurationMs} ms", style = MaterialTheme.typography.bodySmall)
             }
+            }
+        }
+        }
+        if (windowWidth == WindowWidth.EXPANDED) {
+            AdaptivePaneDivider()
+            Box(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .fillMaxHeight()
+                    .testTag(AdaptiveInsightsTestTags.INSIGHTS_DETAIL_PANE),
+            ) {
+                if (selectedProduct == null) {
+                    DetailPlaceholder()
+                } else {
+                    ProductAnalyticsDetail(
+                        product = selectedProduct,
+                        runway = (runwayState as? RunwayEstimateState.Ready)
+                            ?.runwayByProductId
+                            ?.get(selectedProduct.productId),
+                    )
+                }
+            }
         }
     }
 }
@@ -409,6 +449,20 @@ internal object InsightsRunwayTestTags {
     fun diagnostic(type: String, position: Int): String = "$DIAGNOSTIC_PREFIX$type-$position"
 
     fun sheet(productId: String): String = "insights-runway-sheet-$productId"
+}
+
+internal object AdaptiveInsightsTestTags {
+    const val INSIGHTS_LIST_PANE = "adaptive-insights-list-pane"
+    const val INSIGHTS_DETAIL_PANE = "adaptive-insights-detail-pane"
+    const val HISTORY_LIST_PANE = "adaptive-history-list-pane"
+    const val HISTORY_DETAIL_PANE = "adaptive-history-detail-pane"
+    const val DETAIL_PLACEHOLDER = "adaptive-detail-placeholder"
+    const val HISTORY_SHEET = "history-event-sheet"
+    const val CORRECTION_EDITOR = "history-correction-editor"
+    const val CORRECTION_CONFIRMATION = "history-correction-confirmation"
+    const val CANCELLATION_CONFIRMATION = "history-correction-cancellation-confirmation"
+    const val CORRECTION_QUANTITY = "history-correction-quantity"
+    const val CORRECTION_REASON = "history-correction-reason"
 }
 
 @Composable
@@ -494,6 +548,7 @@ internal fun HistoryContent(
     correctionState: HistoryCorrectionUiState = HistoryCorrectionUiState(),
     onQueueCorrection: (HistoryCorrectionDraft) -> Unit = {},
     onCancelCorrection: (String) -> Unit = {},
+    windowWidth: WindowWidth = WindowWidth.COMPACT,
 ) {
     var search by rememberSaveable(state.appliedFilters.query) {
         mutableStateOf(state.appliedFilters.query.orEmpty())
@@ -506,6 +561,20 @@ internal fun HistoryContent(
     val selectedEvent = selectedEventId?.let { id ->
         state.events.firstOrNull { it.eventUuid == id }
     }
+    var editorOperationName by rememberSaveable(selectedEventId) { mutableStateOf<String?>(null) }
+    var confirmOperationName by rememberSaveable(selectedEventId) { mutableStateOf<String?>(null) }
+    var confirmCancellation by rememberSaveable(selectedEventId) { mutableStateOf(false) }
+    val selectedAvailability = selectedEvent?.let { selected ->
+        historyCorrectionAvailability(state, selected, correctionState.queuedTargetIds)
+    }
+    val selectedStatus = selectedEvent?.let { selected ->
+        correctionState.status.takeIf {
+            correctionState.statusTargetEventId == selected.eventUuid
+        }
+    }
+    val isSelectedCorrectionQueued = selectedEvent?.eventUuid?.let {
+        it in correctionState.queuedTargetIds
+    } == true
 
     // Opening an entry from a cached or stale page starts the refresh the "Editing unavailable"
     // notice describes. Keyed on the identity so it runs once per opened entry, not per recomposition.
@@ -555,25 +624,82 @@ internal fun HistoryContent(
             },
         )
     }
-    selectedEvent?.let { selected ->
+    if (windowWidth != WindowWidth.EXPANDED) selectedEvent?.let { selected ->
         HistoryEventSheet(
             event = selected,
-            products = products,
-            availability = historyCorrectionAvailability(state, selected, correctionState.queuedTargetIds),
-            status = correctionState.status.takeIf {
-                correctionState.statusTargetEventId == selected.eventUuid
-            },
-            onQueueCorrection = onQueueCorrection,
-            isCorrectionQueued = selected.eventUuid in correctionState.queuedTargetIds,
-            onCancelCorrection = onCancelCorrection,
+            availability = requireNotNull(selectedAvailability),
+            status = selectedStatus,
+            isCorrectionQueued = isSelectedCorrectionQueued,
             onRefresh = { onRefresh(state.appliedFilters) },
             isRefreshing = state.isRefreshing,
             refreshError = state.error,
+            onCorrect = { editorOperationName = HistoryCorrectionOperation.REPLACE.name },
+            onVoid = { confirmOperationName = HistoryCorrectionOperation.VOID.name },
+            onRestore = { confirmOperationName = HistoryCorrectionOperation.RESTORE.name },
+            onCancelPending = { confirmCancellation = true },
             onDismiss = { selectedEventId = null },
         )
     }
 
-    Column(Modifier.fillMaxSize()) {
+    selectedEvent?.let { selected ->
+        if (editorOperationName == HistoryCorrectionOperation.REPLACE.name) {
+            CorrectionEditorDialog(
+                event = selected,
+                products = products,
+                onDismiss = { editorOperationName = null },
+                onQueue = {
+                    onQueueCorrection(it)
+                    editorOperationName = null
+                },
+            )
+        }
+        confirmOperationName
+            ?.let { name -> HistoryCorrectionOperation.entries.firstOrNull { it.name == name } }
+            ?.let { operation ->
+                CorrectionConfirmationDialog(
+                    event = selected,
+                    operation = operation,
+                    onDismiss = { confirmOperationName = null },
+                    onQueue = {
+                        onQueueCorrection(it)
+                        confirmOperationName = null
+                    },
+                )
+            }
+        if (confirmCancellation) {
+            AlertDialog(
+                modifier = Modifier.testTag(AdaptiveInsightsTestTags.CANCELLATION_CONFIRMATION),
+                onDismissRequest = { confirmCancellation = false },
+                title = { Text("Cancel pending correction?") },
+                text = {
+                    Text(
+                        "This removes the saved local correction. It does not delete the original history entry.",
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        onCancelCorrection(selected.eventUuid)
+                        confirmCancellation = false
+                    }) { Text("Cancel correction") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmCancellation = false }) { Text("Keep it") }
+                },
+            )
+        }
+    }
+
+    Row(Modifier.fillMaxSize()) {
+        Column(
+            modifier = if (windowWidth == WindowWidth.EXPANDED) {
+                Modifier
+                    .weight(0.4f)
+                    .fillMaxHeight()
+                    .testTag(AdaptiveInsightsTestTags.HISTORY_LIST_PANE)
+            } else {
+                Modifier.fillMaxSize()
+            },
+        ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -654,6 +780,37 @@ internal fun HistoryContent(
                             else -> Text("End of downloaded history", style = MaterialTheme.typography.bodySmall)
                         }
                     }
+                }
+            }
+        }
+        }
+        if (windowWidth == WindowWidth.EXPANDED) {
+            AdaptivePaneDivider()
+            Box(
+                modifier = Modifier
+                    .weight(0.6f)
+                    .fillMaxHeight()
+                    .testTag(AdaptiveInsightsTestTags.HISTORY_DETAIL_PANE),
+            ) {
+                val selected = selectedEvent
+                val availability = selectedAvailability
+                if (selected == null || availability == null) {
+                    DetailPlaceholder()
+                } else {
+                    HistoryEventDetail(
+                        event = selected,
+                        availability = availability,
+                        status = selectedStatus,
+                        isCorrectionQueued = isSelectedCorrectionQueued,
+                        onRefresh = { onRefresh(state.appliedFilters) },
+                        isRefreshing = state.isRefreshing,
+                        refreshError = state.error,
+                        onCorrect = { editorOperationName = HistoryCorrectionOperation.REPLACE.name },
+                        onVoid = { confirmOperationName = HistoryCorrectionOperation.VOID.name },
+                        onRestore = { confirmOperationName = HistoryCorrectionOperation.RESTORE.name },
+                        onCancelPending = { confirmCancellation = true },
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }
@@ -919,33 +1076,73 @@ private fun ProductAnalyticsSheet(
     runway: ProductRunway? = null,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
+        ProductAnalyticsDetail(
+            product = product,
+            runway = runway,
+            modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp)
                 .testTag(InsightsRunwayTestTags.sheet(product.productId)),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(product.name, style = MaterialTheme.typography.headlineSmall)
-            Text("${product.status} · ${product.type} · ${product.productId}")
-            Text("${product.range.logCount} logs in range · ${product.allTime.logCount} all time")
-            Text("Last quantity: ${product.allTime.lastQuantity?.let(::formatDecimal) ?: "—"}")
-            product.purchaseDate?.let {
-                Text("Purchased $it${if (product.purchaseDateSource == "CREATED_AT_FALLBACK") " (estimated)" else ""}")
-            }
-            product.finalCostCents?.let { Text("Final cost: ${cad(it)}") }
-            product.costPerLogToDateCents?.let { Text("Cost per log: ${cad(it)}") }
-            product.costPerRecordedUnitToDateCents?.let { Text("Cost per recorded unit: ${cad(it)}") }
-            product.grams?.let { Text("Grams: ${formatDecimal(it)}") }
-            Text(formatThc(product.thcRaw, product.thcQuality))
-            runway?.let { estimate ->
-                HorizontalDivider()
-                Text("Runway", style = MaterialTheme.typography.titleMedium)
-                Text(runwaySummaryText(estimate))
-            }
-            Spacer(Modifier.height(20.dp))
+        )
+    }
+}
+
+@Composable
+internal fun ProductAnalyticsDetail(
+    product: AnalyticsProductDto,
+    runway: ProductRunway? = null,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(product.name, style = MaterialTheme.typography.headlineSmall)
+        Text("${product.status} · ${product.type} · ${product.productId}")
+        Text("${product.range.logCount} logs in range · ${product.allTime.logCount} all time")
+        Text("Last quantity: ${product.allTime.lastQuantity?.let(::formatDecimal) ?: "—"}")
+        product.purchaseDate?.let {
+            Text("Purchased $it${if (product.purchaseDateSource == "CREATED_AT_FALLBACK") " (estimated)" else ""}")
         }
+        product.finalCostCents?.let { Text("Final cost: ${cad(it)}") }
+        product.costPerLogToDateCents?.let { Text("Cost per log: ${cad(it)}") }
+        product.costPerRecordedUnitToDateCents?.let { Text("Cost per recorded unit: ${cad(it)}") }
+        product.grams?.let { Text("Grams: ${formatDecimal(it)}") }
+        Text(formatThc(product.thcRaw, product.thcQuality))
+        runway?.let { estimate ->
+            HorizontalDivider()
+            Text("Runway", style = MaterialTheme.typography.titleMedium)
+            Text(runwaySummaryText(estimate))
+        }
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
+private fun AdaptivePaneDivider() {
+    Box(
+        Modifier
+            .fillMaxHeight()
+            .width(1.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant),
+    )
+}
+
+@Composable
+private fun DetailPlaceholder() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(AdaptiveInsightsTestTags.DETAIL_PLACEHOLDER),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            "Select an entry to see details",
+            modifier = Modifier.padding(24.dp),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -953,111 +1150,102 @@ private fun ProductAnalyticsSheet(
 @Composable
 private fun HistoryEventSheet(
     event: HistoryEventDto,
-    products: List<Product>,
     availability: HistoryCorrectionAvailability,
     status: String?,
-    onQueueCorrection: (HistoryCorrectionDraft) -> Unit,
     isCorrectionQueued: Boolean,
-    onCancelCorrection: (String) -> Unit,
     onRefresh: () -> Unit,
     isRefreshing: Boolean,
     refreshError: AnalyticsUiError?,
+    onCorrect: () -> Unit,
+    onVoid: () -> Unit,
+    onRestore: () -> Unit,
+    onCancelPending: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var editorOperation by remember(event.eventUuid) { mutableStateOf<HistoryCorrectionOperation?>(null) }
-    var confirmOperation by remember(event.eventUuid) { mutableStateOf<HistoryCorrectionOperation?>(null) }
-    var confirmCancellation by remember(event.eventUuid) { mutableStateOf(false) }
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(
-            Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(event.productName, style = MaterialTheme.typography.headlineSmall)
-            Text("${event.localDate} ${event.localTime} · Toronto time")
-            Text("Quantity: ${formatDecimal(event.quantity)}${event.weightCode?.let { " $it" }.orEmpty()}")
-            Text("Type: ${event.productType}")
-            Text("Source: ${event.source}")
-            Text("Finished: ${if (event.finished) "Yes" else "No"}")
-            Text("Correction state: ${event.lifecycleState}")
-            Text("Revision: ${event.revision}")
-            event.correctionHeadId?.let { Text("Current revision: $it", style = MaterialTheme.typography.bodySmall) }
-            Text("Product ID: ${event.productId}", style = MaterialTheme.typography.bodySmall)
-            Text("Event UUID: ${event.eventUuid}", style = MaterialTheme.typography.bodySmall)
-            availability.reason?.let { reason ->
-                NoticeCard("Editing unavailable", reason)
-                if (reason.startsWith("Refresh History")) {
-                    RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
-                }
-            }
-            if (availability.canCorrect || availability.canVoid || availability.canRestore) {
-                Text("Change this entry", style = MaterialTheme.typography.titleMedium)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (availability.canCorrect) {
-                        OutlinedButton(onClick = { editorOperation = HistoryCorrectionOperation.REPLACE }) {
-                            Text("Correct")
-                        }
-                    }
-                    if (availability.canVoid) {
-                        OutlinedButton(onClick = { confirmOperation = HistoryCorrectionOperation.VOID }) {
-                            Text("Void")
-                        }
-                    }
-                    if (availability.canRestore) {
-                        Button(onClick = { confirmOperation = HistoryCorrectionOperation.RESTORE }) {
-                            Text("Restore")
-                        }
-                    }
-                }
-            }
-            status?.let { message ->
-                Text(message, color = MaterialTheme.colorScheme.primary)
-                if (message.contains("Refresh History")) {
-                    RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
-                }
-            }
-            if (isCorrectionQueued) {
-                TextButton(onClick = { confirmCancellation = true }) { Text("Cancel pending change") }
-            }
-            Spacer(Modifier.height(20.dp))
+        HistoryEventDetail(
+            event = event,
+            availability = availability,
+            status = status,
+            isCorrectionQueued = isCorrectionQueued,
+            onRefresh = onRefresh,
+            isRefreshing = isRefreshing,
+            refreshError = refreshError,
+            onCorrect = onCorrect,
+            onVoid = onVoid,
+            onRestore = onRestore,
+            onCancelPending = onCancelPending,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(AdaptiveInsightsTestTags.HISTORY_SHEET),
+        )
+    }
+}
+
+@Composable
+private fun HistoryEventDetail(
+    event: HistoryEventDto,
+    availability: HistoryCorrectionAvailability,
+    status: String?,
+    isCorrectionQueued: Boolean,
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean,
+    refreshError: AnalyticsUiError?,
+    onCorrect: () -> Unit,
+    onVoid: () -> Unit,
+    onRestore: () -> Unit,
+    onCancelPending: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(event.productName, style = MaterialTheme.typography.headlineSmall)
+        Text("${event.localDate} ${event.localTime} · Toronto time")
+        Text("Quantity: ${formatDecimal(event.quantity)}${event.weightCode?.let { " $it" }.orEmpty()}")
+        Text("Type: ${event.productType}")
+        Text("Source: ${event.source}")
+        Text("Finished: ${if (event.finished) "Yes" else "No"}")
+        Text("Correction state: ${event.lifecycleState}")
+        Text("Revision: ${event.revision}")
+        event.correctionHeadId?.let {
+            Text("Current revision: $it", style = MaterialTheme.typography.bodySmall)
         }
-    }
-    if (editorOperation == HistoryCorrectionOperation.REPLACE) {
-        CorrectionEditorDialog(
-            event = event,
-            products = products,
-            onDismiss = { editorOperation = null },
-            onQueue = {
-                onQueueCorrection(it)
-                editorOperation = null
-            },
-        )
-    }
-    confirmOperation?.let { operation ->
-        CorrectionConfirmationDialog(
-            event = event,
-            operation = operation,
-            onDismiss = { confirmOperation = null },
-            onQueue = {
-                onQueueCorrection(it)
-                confirmOperation = null
-            },
-        )
-    }
-    if (confirmCancellation) {
-        AlertDialog(
-            onDismissRequest = { confirmCancellation = false },
-            title = { Text("Cancel pending correction?") },
-            text = { Text("This removes the saved local correction. It does not delete the original history entry.") },
-            confirmButton = {
-                Button(onClick = {
-                    onCancelCorrection(event.eventUuid)
-                    confirmCancellation = false
-                }) { Text("Cancel correction") }
-            },
-            dismissButton = { TextButton(onClick = { confirmCancellation = false }) { Text("Keep it") } },
-        )
+        Text("Product ID: ${event.productId}", style = MaterialTheme.typography.bodySmall)
+        Text("Event UUID: ${event.eventUuid}", style = MaterialTheme.typography.bodySmall)
+        availability.reason?.let { reason ->
+            NoticeCard("Editing unavailable", reason)
+            if (reason.startsWith("Refresh History")) {
+                RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
+            }
+        }
+        if (availability.canCorrect || availability.canVoid || availability.canRestore) {
+            Text("Change this entry", style = MaterialTheme.typography.titleMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (availability.canCorrect) {
+                    OutlinedButton(onClick = onCorrect) { Text("Correct") }
+                }
+                if (availability.canVoid) {
+                    OutlinedButton(onClick = onVoid) { Text("Void") }
+                }
+                if (availability.canRestore) {
+                    Button(onClick = onRestore) { Text("Restore") }
+                }
+            }
+        }
+        status?.let { message ->
+            Text(message, color = MaterialTheme.colorScheme.primary)
+            if (message.contains("Refresh History")) {
+                RefreshHistoryAction(isRefreshing, refreshError, onRefresh)
+            }
+        }
+        if (isCorrectionQueued) {
+            TextButton(onClick = onCancelPending) { Text("Cancel pending change") }
+        }
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -1094,13 +1282,13 @@ private fun CorrectionEditorDialog(
     onDismiss: () -> Unit,
     onQueue: (HistoryCorrectionDraft) -> Unit,
 ) {
-    var date by remember(event.eventUuid) { mutableStateOf(event.localDate) }
-    var time by remember(event.eventUuid) { mutableStateOf(event.localTime.take(5)) }
-    var selectedProductId by remember(event.eventUuid) { mutableStateOf(event.productId) }
-    var quantity by remember(event.eventUuid) { mutableStateOf(formatDecimal(event.quantity)) }
-    var finished by remember(event.eventUuid) { mutableStateOf(event.finished) }
-    var reopenProduct by remember(event.eventUuid) { mutableStateOf(false) }
-    var reason by remember(event.eventUuid) { mutableStateOf("") }
+    var date by rememberSaveable(event.eventUuid) { mutableStateOf(event.localDate) }
+    var time by rememberSaveable(event.eventUuid) { mutableStateOf(event.localTime.take(5)) }
+    var selectedProductId by rememberSaveable(event.eventUuid) { mutableStateOf(event.productId) }
+    var quantity by rememberSaveable(event.eventUuid) { mutableStateOf(formatDecimal(event.quantity)) }
+    var finished by rememberSaveable(event.eventUuid) { mutableStateOf(event.finished) }
+    var reopenProduct by rememberSaveable(event.eventUuid) { mutableStateOf(false) }
+    var reason by rememberSaveable(event.eventUuid) { mutableStateOf("") }
     val selectedProduct = products.firstOrNull { it.id == selectedProductId }
     val canReopenProduct = canOfferProductReopen(event, selectedProductId, finished)
     val draft = HistoryCorrectionDraft(
@@ -1121,6 +1309,7 @@ private fun CorrectionEditorDialog(
         reason = reason.trim().ifBlank { null },
     )
     AlertDialog(
+        modifier = Modifier.testTag(AdaptiveInsightsTestTags.CORRECTION_EDITOR),
         onDismissRequest = onDismiss,
         title = { Text("Correct entry") },
         text = {
@@ -1131,7 +1320,13 @@ private fun CorrectionEditorDialog(
                 Text("This creates a new correction. The original history entry is kept.")
                 OutlinedTextField(date, { date = it }, label = { Text("Date (YYYY-MM-DD)") }, singleLine = true)
                 OutlinedTextField(time, { time = it }, label = { Text("Time (HH:MM)") }, singleLine = true)
-                OutlinedTextField(quantity, { quantity = it }, label = { Text("Quantity") }, singleLine = true)
+                OutlinedTextField(
+                    value = quantity,
+                    onValueChange = { quantity = it },
+                    modifier = Modifier.testTag(AdaptiveInsightsTestTags.CORRECTION_QUANTITY),
+                    label = { Text("Quantity") },
+                    singleLine = true,
+                )
                 Text("Product", style = MaterialTheme.typography.labelLarge)
                 Text("Selected: ${selectedProduct?.name ?: event.productName}", style = MaterialTheme.typography.bodySmall)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1154,8 +1349,11 @@ private fun CorrectionEditorDialog(
                     }
                 }
                 OutlinedTextField(
-                    reason,
-                    { if (it.length <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH) reason = it },
+                    value = reason,
+                    onValueChange = {
+                        if (it.length <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH) reason = it
+                    },
+                    modifier = Modifier.testTag(AdaptiveInsightsTestTags.CORRECTION_REASON),
                     label = { Text("Reason (optional)") },
                     supportingText = { Text("${reason.length}/$MAX_CONSUMPTION_CORRECTION_REASON_LENGTH") },
                 )
@@ -1177,8 +1375,8 @@ private fun CorrectionConfirmationDialog(
     onDismiss: () -> Unit,
     onQueue: (HistoryCorrectionDraft) -> Unit,
 ) {
-    var reason by remember(event.eventUuid, operation) { mutableStateOf("") }
-    var reopenProduct by remember(event.eventUuid, operation) { mutableStateOf(false) }
+    var reason by rememberSaveable(event.eventUuid, operation.name) { mutableStateOf("") }
+    var reopenProduct by rememberSaveable(event.eventUuid, operation.name) { mutableStateOf(false) }
     val label = if (operation == HistoryCorrectionOperation.VOID) "Void entry" else "Restore entry"
     val message = if (operation == HistoryCorrectionOperation.VOID) {
         "Void this entry? It will remain in history as an auditable void, not be deleted."
@@ -1186,14 +1384,18 @@ private fun CorrectionConfirmationDialog(
         "Restore this voided entry? This creates a new auditable correction."
     }
     AlertDialog(
+        modifier = Modifier.testTag(AdaptiveInsightsTestTags.CORRECTION_CONFIRMATION),
         onDismissRequest = onDismiss,
         title = { Text(label) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(message)
                 OutlinedTextField(
-                    reason,
-                    { if (it.length <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH) reason = it },
+                    value = reason,
+                    onValueChange = {
+                        if (it.length <= MAX_CONSUMPTION_CORRECTION_REASON_LENGTH) reason = it
+                    },
+                    modifier = Modifier.testTag(AdaptiveInsightsTestTags.CORRECTION_REASON),
                     label = { Text("Reason (optional)") },
                     supportingText = { Text("${reason.length}/$MAX_CONSUMPTION_CORRECTION_REASON_LENGTH") },
                 )

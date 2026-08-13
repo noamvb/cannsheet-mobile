@@ -2,12 +2,19 @@ package com.example.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import com.example.data.DataQualityDto
 import com.example.data.HistoryEventDto
 import com.example.data.HistoryFilters
@@ -55,9 +62,80 @@ class HistoryContentTest {
         }
 
         composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.HISTORY_SHEET).assertIsDisplayed()
         composeRule.onNode(hasText("2026-07-18 13:30:00 · Toronto time")).assertIsDisplayed()
         composeRule.onNode(hasText("Event UUID: ${event.eventUuid}"))
             .assertExists()
+    }
+
+    @Test
+    fun expandedHistoryUsesInlineDetailWithoutOpeningTheCompactSheet() {
+        val event = testHistoryEvent()
+
+        composeRule.setContent {
+            MaterialTheme {
+                HistoryContent(
+                    state = HistoryUiState(events = listOf(event)),
+                    products = emptyList(),
+                    pendingCount = 0,
+                    isSyncing = false,
+                    onSync = {},
+                    onRefresh = {},
+                    onLoadMore = {},
+                    windowWidth = WindowWidth.EXPANDED,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.HISTORY_LIST_PANE).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.HISTORY_DETAIL_PANE).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.DETAIL_PLACEHOLDER).assertIsDisplayed()
+
+        composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
+
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.HISTORY_DETAIL_PANE)
+            .assert(hasAnyDescendant(hasText("Event UUID: ${event.eventUuid}")))
+        composeRule.onAllNodesWithTag(AdaptiveInsightsTestTags.HISTORY_SHEET).assertCountEquals(0)
+    }
+
+    @Test
+    fun openCorrectionDraftAndInputsSurviveSavedStateRestoration() {
+        val event = testHistoryEvent().copy(
+            productUuid = "00000000-0000-4000-8000-000000000002",
+            lifecycleState = "CORRECTED",
+            correctionHeadId = "00000000-0000-4000-8000-000000000003",
+            revision = 1,
+        )
+        val restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent {
+            MaterialTheme {
+                HistoryContent(
+                    state = editableHistoryState(event),
+                    products = emptyList(),
+                    pendingCount = 0,
+                    isSyncing = false,
+                    onSync = {},
+                    onRefresh = {},
+                    onLoadMore = {},
+                )
+            }
+        }
+
+        composeRule.onNode(hasText("Test Product") and hasClickAction()).performClick()
+        composeRule.onNode(hasText("Correct") and hasClickAction()).performClick()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_EDITOR).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_QUANTITY)
+            .performTextReplacement("2.5")
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_REASON)
+            .performTextReplacement("Restored reason")
+
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_EDITOR).assertIsDisplayed()
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_QUANTITY)
+            .assertTextContains("2.5")
+        composeRule.onNodeWithTag(AdaptiveInsightsTestTags.CORRECTION_REASON)
+            .assertTextContains("Restored reason")
     }
 
     @Test
@@ -273,4 +351,29 @@ class HistoryContentTest {
         finished = false,
         source = "ANDROID",
     )
+
+    private fun editableHistoryState(event: HistoryEventDto): HistoryUiState {
+        val response = HistoryResponseDto(
+            success = true,
+            analyticsVersion = 2,
+            resource = "history",
+            environment = "SANDBOX",
+            timeZone = "America/New_York",
+            filters = HistoryFilters(),
+            sort = "TIMESTAMP_DESC_CANONICAL_ROW_DESC",
+            events = listOf(event),
+            page = HistoryPageDto(50, false),
+            dataQuality = DataQualityDto(true, QualityWarningsDto()),
+            sourceRevision = SourceRevisionDto("a".repeat(64), 1, 1),
+            generatedAtEpochMillis = 1L,
+            serverDurationMs = 1L,
+            correctionVersion = 1,
+            correctionWritesEnabled = true,
+        )
+        return HistoryUiState(
+            events = listOf(event),
+            hasFreshCursor = true,
+            response = response,
+        )
+    }
 }
