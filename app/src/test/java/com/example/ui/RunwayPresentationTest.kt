@@ -41,14 +41,14 @@ class RunwayPresentationTest {
     fun unavailableOrUntrustedSnapshotsSuppressEveryEstimate() {
         val fresh = InsightsUiState(data = insights())
         val cases = listOf(
-            InsightsUiState() to 0,
-            fresh.copy(isStale = true) to 0,
-            fresh.copy(isFromCache = true) to 0,
-            fresh.copy(pendingRange = InsightsRange.All) to 0,
-            fresh to 2,
+            Triple(InsightsUiState(), 0, RunwaySuppressionReason.NO_SNAPSHOT),
+            Triple(fresh.copy(isStale = true), 0, RunwaySuppressionReason.STALE_SNAPSHOT),
+            Triple(fresh.copy(isFromCache = true), 0, RunwaySuppressionReason.CACHED_SNAPSHOT),
+            Triple(fresh.copy(pendingRange = InsightsRange.All), 0, RunwaySuppressionReason.RANGE_CHANGING),
+            Triple(fresh, 2, RunwaySuppressionReason.PENDING_ACTIONS),
         )
 
-        cases.forEach { (insights, pendingActionCount) ->
+        cases.forEach { (insights, pendingActionCount, expectedReason) ->
             val result = deriveRunwayPresentationState(
                 insights = insights,
                 pendingActionCount = pendingActionCount,
@@ -57,7 +57,7 @@ class RunwayPresentationTest {
 
             assertSame(insights, result.insights)
             assertEquals(pendingActionCount, result.pendingActionCount)
-            assertSame(RunwayEstimateState.Suppressed, result.estimates)
+            assertEquals(RunwayEstimateState.Suppressed(expectedReason), result.estimates)
         }
     }
 
@@ -73,7 +73,67 @@ class RunwayPresentationTest {
 
         assertSame(insights, result.insights)
         assertTrue(result.pendingActionCount == null)
-        assertSame(RunwayEstimateState.Suppressed, result.estimates)
+        assertEquals(
+            RunwayEstimateState.Suppressed(RunwaySuppressionReason.QUEUE_COUNT_UNKNOWN),
+            result.estimates,
+        )
+    }
+
+    @Test
+    fun suppressionPrecedencePrefersPendingActionsOverCacheAndStaleness() {
+        val insights = InsightsUiState(
+            data = insights(),
+            isFromCache = true,
+            isStale = true,
+            pendingRange = InsightsRange.All,
+        )
+        val result = deriveRunwayPresentationState(
+            insights = insights,
+            pendingActionCount = 3,
+            nowEpochMillis = NOW,
+        )
+        assertEquals(
+            RunwayEstimateState.Suppressed(RunwaySuppressionReason.PENDING_ACTIONS),
+            result.estimates,
+        )
+    }
+
+    @Test
+    fun everyInputSuppressedBeforeIsStillSuppressed() {
+        val fresh = InsightsUiState(data = insights())
+        val suppressingStates = listOf(
+            InsightsUiState() to 0,
+            fresh to null,
+            fresh to 1,
+            fresh.copy(pendingRange = InsightsRange.All) to 0,
+            fresh.copy(isFromCache = true) to 0,
+            fresh.copy(isStale = true) to 0,
+        )
+        suppressingStates.forEach { (insights, pendingCount) ->
+            val result = deriveRunwayPresentationState(insights, pendingCount, NOW)
+            assertTrue(result.estimates is RunwayEstimateState.Suppressed)
+        }
+    }
+
+    @Test
+    fun readyStateSurvivesAFreshCompleteSnapshot() {
+        val fresh = InsightsUiState(data = insights())
+        val result = deriveRunwayPresentationState(fresh, 0, NOW)
+        assertTrue(result.estimates is RunwayEstimateState.Ready)
+    }
+
+    @Test
+    fun suppressionCopyNamesTheQueueCountAndNeverUsesSingularForPlural() {
+        val single = runwaySuppressionText(RunwaySuppressionReason.PENDING_ACTIONS, 1)
+        val plural = runwaySuppressionText(RunwaySuppressionReason.PENDING_ACTIONS, 2)
+        assertTrue(checkNotNull(single).contains("1 entry is waiting"))
+        assertTrue(checkNotNull(plural).contains("2 entries are waiting"))
+    }
+
+    @Test
+    fun noSnapshotAndUnknownQueueCountRenderNoCopy() {
+        assertEquals(null, runwaySuppressionText(RunwaySuppressionReason.NO_SNAPSHOT, 0))
+        assertEquals(null, runwaySuppressionText(RunwaySuppressionReason.QUEUE_COUNT_UNKNOWN, 0))
     }
 
     @Test
@@ -171,8 +231,14 @@ class RunwayPresentationTest {
         val afterFreshResponse = deriveRunwayPresentationState(insights, 0, NOW)
 
         assertTrue(beforeQueue.estimates is RunwayEstimateState.Ready)
-        assertSame(RunwayEstimateState.Suppressed, whileQueued.estimates)
-        assertSame(RunwayEstimateState.Suppressed, afterQueueBeforeRefresh.estimates)
+        assertEquals(
+            RunwayEstimateState.Suppressed(RunwaySuppressionReason.PENDING_ACTIONS),
+            whileQueued.estimates,
+        )
+        assertEquals(
+            RunwayEstimateState.Suppressed(RunwaySuppressionReason.STALE_SNAPSHOT),
+            afterQueueBeforeRefresh.estimates,
+        )
         assertTrue(afterFreshResponse.estimates is RunwayEstimateState.Ready)
     }
 

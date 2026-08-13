@@ -15,11 +15,33 @@ data class RunwayPresentationState(
     val insights: InsightsUiState = InsightsUiState(),
     /** Null until Room has emitted the first real queue count. */
     val pendingActionCount: Int? = null,
-    val estimates: RunwayEstimateState = RunwayEstimateState.Suppressed,
+    val estimates: RunwayEstimateState =
+        RunwayEstimateState.Suppressed(RunwaySuppressionReason.NO_SNAPSHOT),
 )
 
+/** Why estimates are withheld. Every value must produce honest user-facing copy. */
+enum class RunwaySuppressionReason {
+    /** No snapshot at all; the screen renders loading or error instead. */
+    NO_SNAPSHOT,
+
+    /** The snapshot came from analytics_cache and has not been confirmed live. */
+    CACHED_SNAPSHOT,
+
+    /** A live snapshot exists but a local action invalidated it. */
+    STALE_SNAPSHOT,
+
+    /** A range change is in flight; the displayed data does not match the request. */
+    RANGE_CHANGING,
+
+    /** Room has queued actions the snapshot cannot include. */
+    PENDING_ACTIONS,
+
+    /** Room has not emitted a real queue count yet; a synthetic zero must not estimate. */
+    QUEUE_COUNT_UNKNOWN,
+}
+
 sealed interface RunwayEstimateState {
-    data object Suppressed : RunwayEstimateState
+    data class Suppressed(val reason: RunwaySuppressionReason) : RunwayEstimateState
 
     data class Ready(
         val runwayByProductId: Map<String, ProductRunway>,
@@ -59,18 +81,22 @@ internal fun deriveRunwayPresentationState(
     nowEpochMillis: Long,
 ): RunwayPresentationState {
     val data = insights.data
-    if (
-        data == null ||
-        insights.isStale ||
-        insights.isFromCache ||
-        insights.pendingRange != null ||
-        pendingActionCount == null ||
-        pendingActionCount > 0
-    ) {
+    val suppressionReason = when {
+        data == null -> RunwaySuppressionReason.NO_SNAPSHOT
+        pendingActionCount == null -> RunwaySuppressionReason.QUEUE_COUNT_UNKNOWN
+        pendingActionCount > 0 -> RunwaySuppressionReason.PENDING_ACTIONS
+        insights.pendingRange != null -> RunwaySuppressionReason.RANGE_CHANGING
+        insights.isFromCache -> RunwaySuppressionReason.CACHED_SNAPSHOT
+        insights.isStale -> RunwaySuppressionReason.STALE_SNAPSHOT
+        else -> null
+    }
+    if (data == null || suppressionReason != null) {
         return RunwayPresentationState(
             insights = insights,
             pendingActionCount = pendingActionCount,
-            estimates = RunwayEstimateState.Suppressed,
+            estimates = RunwayEstimateState.Suppressed(
+                suppressionReason ?: RunwaySuppressionReason.NO_SNAPSHOT,
+            ),
         )
     }
 
@@ -172,6 +198,38 @@ internal fun runwayDiagnosticText(diagnostic: RunwayDiagnostic): String = when (
         "No reliable $label runway estimate for ${diagnostic.productCount} other active $noun " +
             "from this snapshot."
     }
+}
+
+/** Null means the surface renders nothing, because the screen already explains itself. */
+internal fun runwaySuppressionText(
+    reason: RunwaySuppressionReason,
+    pendingActionCount: Int,
+): String? = when (reason) {
+    RunwaySuppressionReason.NO_SNAPSHOT,
+    RunwaySuppressionReason.QUEUE_COUNT_UNKNOWN,
+    -> null
+
+    RunwaySuppressionReason.PENDING_ACTIONS -> {
+        // Build the whole clause, not a verb fragment: "1 entry is" and
+        // "2 entries are" disagree in both number and verb.
+        val clause = if (pendingActionCount == 1) {
+            "1 entry is waiting"
+        } else {
+            "$pendingActionCount entries are waiting"
+        }
+        "Runway estimates pause while $clause to sync, because this snapshot " +
+            "cannot include them."
+    }
+
+    RunwaySuppressionReason.RANGE_CHANGING ->
+        "Runway estimates pause while the range changes."
+
+    RunwaySuppressionReason.CACHED_SNAPSHOT ->
+        "Runway estimates pause until Insights refreshes from the sheet; " +
+            "this is a cached snapshot."
+
+    RunwaySuppressionReason.STALE_SNAPSHOT ->
+        "Runway estimates pause until Insights refreshes from the sheet."
 }
 
 private const val STATUS_ACTIVE = "ACTIVE"

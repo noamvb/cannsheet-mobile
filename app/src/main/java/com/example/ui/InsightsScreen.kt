@@ -147,7 +147,8 @@ internal fun InsightsContent(
     isSyncing: Boolean,
     onSync: () -> Unit,
     onRefresh: (InsightsRange) -> Unit,
-    runwayState: RunwayEstimateState = RunwayEstimateState.Suppressed,
+    runwayState: RunwayEstimateState =
+        RunwayEstimateState.Suppressed(RunwaySuppressionReason.NO_SNAPSHOT),
     windowWidth: WindowWidth = WindowWidth.COMPACT,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
@@ -319,6 +320,7 @@ internal fun InsightsContent(
             RunwaySection(
                 estimates = runwayState,
                 products = data.products,
+                pendingActionCount = pendingCount,
             )
         }
         if (data.byType.isNotEmpty()) {
@@ -442,6 +444,7 @@ internal object InsightsRunwayTestTags {
     const val SECTION = "insights-runway-section"
     const val SHOW_ALL = "insights-runway-show-all"
     const val SPEND_PROJECTION = "insights-spend-projection"
+    const val SUPPRESSION_NOTICE = "insights-runway-suppression"
     const val DIAGNOSTIC_PREFIX = "insights-runway-diagnostic-"
 
     fun row(productId: String): String = "insights-runway-row-$productId"
@@ -469,8 +472,27 @@ internal object AdaptiveInsightsTestTags {
 internal fun RunwaySection(
     estimates: RunwayEstimateState,
     products: List<AnalyticsProductDto>,
+    pendingActionCount: Int = 0,
 ) {
-    val ready = estimates as? RunwayEstimateState.Ready ?: return
+    val ready = when (estimates) {
+        is RunwayEstimateState.Ready -> estimates
+        is RunwayEstimateState.Suppressed -> {
+            val notice = runwaySuppressionText(estimates.reason, pendingActionCount)
+            if (notice != null) {
+                Column(Modifier.testTag(InsightsRunwayTestTags.SECTION)) {
+                    SectionCard("Runway") {
+                        Text(
+                            notice,
+                            modifier = Modifier
+                                .testTag(InsightsRunwayTestTags.SUPPRESSION_NOTICE),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+            return
+        }
+    }
     val productsById = remember(products) { products.associateBy(AnalyticsProductDto::productId) }
     val rows = remember(ready.runwayByProductId, productsById) {
         ready.runwayByProductId.values
