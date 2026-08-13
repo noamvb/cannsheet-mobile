@@ -4,8 +4,8 @@
     <string name="queue_alert_channel_description">Tells you when logged entries stop reaching the sheet.</string>
     <string name="queue_alert_stuck_title">Entries are waiting to sync</string>
     <plurals name="queue_alert_stuck_body">
-        <item quantity="one">%1$d entry has been waiting on this phone for over a day. Open Cannsheet to sync.</item>
-        <item quantity="other">%1$d entries have been waiting on this phone for over a day. Open Cannsheet to sync.</item>
+        <item quantity="one">%1$d entry is waiting to sync. This phone has had unsent entries for over a day. Open Cannsheet.</item>
+        <item quantity="other">%1$d entries are waiting to sync. This phone has had unsent entries for over a day. Open Cannsheet.</item>
     </plurals>
     <string name="queue_alert_rejected_title">Some entries were not accepted</string>
     <string name="queue_alert_rejected_body">The sheet refused part of your last sync. Open Cannsheet to review them.</string>
