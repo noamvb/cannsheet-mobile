@@ -203,67 +203,92 @@ class AnalyticsCoordinator(
     private var historyAppendJob: Job? = null
     private var insightsLoaded = false
     private var historyLoaded = false
-    private var visible = false
+    private var insightsScreenVisible = false
+    private var runwayScreenVisible = false
     private var historyVisible = false
+    private var insightsInvalidationGeneration = 0L
+    private var historyInvalidationGeneration = 0L
     private var historyGeneration = 0L
     private var staleCursorRestarted = false
 
-    fun onVisible() {
-        visible = true
-        if (!insightsLoaded) loadInsightsCacheThenRefresh()
-        else if (_insights.value.isStale) refreshInsights(_insights.value.displayedRange)
+    fun onInsightsVisible() {
+        insightsScreenVisible = true
+        ensureInsightsLoadedOrRefreshStale()
     }
 
-    fun onHidden() {
-        visible = false
+    fun onInsightsHidden() {
+        insightsScreenVisible = false
         historyVisible = false
+    }
+
+    fun onRunwayVisible() {
+        runwayScreenVisible = true
+        ensureInsightsLoadedOrRefreshStale()
+    }
+
+    fun onRunwayHidden() {
+        runwayScreenVisible = false
     }
 
     fun onHistoryVisible() {
         historyVisible = true
         if (!historyLoaded) loadHistoryCacheThenRefresh()
-        else if (_history.value.isStale) refreshHistory(_history.value.appliedFilters)
+        else refreshHistoryIfNeeded()
     }
 
     fun onOverviewVisible() {
         historyVisible = false
-        if (_insights.value.isStale) refreshInsights(_insights.value.displayedRange)
+        refreshInsightsIfNeeded()
     }
 
     fun refreshInsights(range: InsightsRange = _insights.value.displayedRange) {
         insightsJob?.cancel()
-        insightsJob = scope.launch {
-            val hadData = _insights.value.data != null
-            _insights.update {
-                it.copy(
-                    pendingRange = range,
-                    isInitialLoading = !hadData,
-                    isRefreshing = hadData,
-                    error = null,
-                )
-            }
+        val requestInvalidationGeneration = insightsInvalidationGeneration
+        val hadData = _insights.value.data != null
+        _insights.update {
+            it.copy(
+                pendingRange = range,
+                isInitialLoading = !hadData,
+                isRefreshing = hadData,
+                error = null,
+            )
+        }
+        var refreshAfterCompletion = false
+        val job = scope.launch {
             runCatchingCancellable { repository.fetchInsights(range) }
                 .onSuccess { response ->
                     insightsLoaded = true
+                    val invalidated = requestInvalidationGeneration != insightsInvalidationGeneration
                     _insights.value = InsightsUiState(
                         data = response,
                         displayedRange = range,
                         isFromCache = false,
-                        isStale = false,
+                        isStale = invalidated,
                         lastUpdatedEpochMillis = response.generatedAtEpochMillis,
                     )
+                    refreshAfterCompletion = invalidated
                 }
                 .onFailure { error ->
+                    val invalidated = requestInvalidationGeneration != insightsInvalidationGeneration
                     _insights.update {
                         it.copy(
                             pendingRange = null,
                             isInitialLoading = false,
                             isRefreshing = false,
-                            isStale = it.data != null,
+                            isStale = it.data != null || invalidated,
                             error = analyticsUiError(error),
                         )
                     }
+                    refreshAfterCompletion = invalidated
                 }
+        }
+        insightsJob = job
+        job.invokeOnCompletion { error ->
+            if (error == null && refreshAfterCompletion) {
+                scope.launch {
+                    if (shouldRefreshInsightsWhileVisible()) refreshInsightsIfNeeded()
+                }
+            }
         }
     }
 
@@ -290,8 +315,10 @@ class AnalyticsCoordinator(
         historyRefreshJob?.cancel()
         historyAppendJob?.cancel()
         val generation = ++historyGeneration
+        val requestInvalidationGeneration = historyInvalidationGeneration
         if (resetCursorRecovery) staleCursorRestarted = false
-        historyRefreshJob = scope.launch {
+        var refreshAfterCompletion = false
+        val job = scope.launch {
             val hadData = _history.value.events.isNotEmpty()
             _history.update {
                 it.copy(
@@ -309,19 +336,38 @@ class AnalyticsCoordinator(
                     if (generation != historyGeneration) return@onSuccess
                     historyLoaded = true
                     repository.saveHistory(filters, response)
-                    _history.value = stateFromResponse(response, filters)
+                    val invalidated = requestInvalidationGeneration != historyInvalidationGeneration
+                    _history.value = stateFromResponse(response, filters).let { state ->
+                        if (!invalidated) state else state.copy(
+                            nextCursor = null,
+                            hasMore = false,
+                            hasFreshCursor = false,
+                            isStale = true,
+                        )
+                    }
+                    refreshAfterCompletion = invalidated
                 }
                 .onFailure { error ->
                     if (generation != historyGeneration) return@onFailure
+                    val invalidated = requestInvalidationGeneration != historyInvalidationGeneration
                     _history.update {
                         it.copy(
                             isInitialLoading = false,
                             isRefreshing = false,
-                            isStale = it.events.isNotEmpty(),
+                            isStale = it.events.isNotEmpty() || invalidated,
                             error = analyticsUiError(error),
                         )
                     }
+                    refreshAfterCompletion = invalidated
                 }
+        }
+        historyRefreshJob = job
+        job.invokeOnCompletion { error ->
+            if (error == null && refreshAfterCompletion) {
+                scope.launch {
+                    if (shouldRefreshHistoryWhileVisible()) refreshHistoryIfNeeded()
+                }
+            }
         }
     }
 
@@ -337,11 +383,15 @@ class AnalyticsCoordinator(
             cursor.isNullOrBlank()
         ) return
         val generation = historyGeneration
+        val requestInvalidationGeneration = historyInvalidationGeneration
         _history.update { it.copy(isLoadingMore = true, appendError = null) }
         historyAppendJob = scope.launch {
             runCatchingCancellable { repository.fetchHistory(current.appliedFilters, cursor) }
                 .onSuccess { response ->
-                    if (generation != historyGeneration) return@onSuccess
+                    if (
+                        generation != historyGeneration ||
+                        requestInvalidationGeneration != historyInvalidationGeneration
+                    ) return@onSuccess
                     val firstVersion = current.response?.sourceRevision?.dataVersion
                     if (firstVersion != null && firstVersion != response.sourceRevision.dataVersion) {
                         restartStaleCursor()
@@ -381,20 +431,57 @@ class AnalyticsCoordinator(
     }
 
     fun markStale() {
+        insightsInvalidationGeneration++
+        historyInvalidationGeneration++
+        historyAppendJob?.cancel()
         _insights.update { it.copy(isStale = true) }
         _history.update {
-            it.copy(isStale = true, nextCursor = null, hasFreshCursor = false)
+            it.copy(
+                isStale = true,
+                nextCursor = null,
+                hasFreshCursor = false,
+                isLoadingMore = false,
+            )
         }
-        if (visible) {
-            if (historyVisible) refreshHistory(_history.value.appliedFilters)
-            else refreshInsights(_insights.value.displayedRange)
+        if (shouldRefreshHistoryWhileVisible()) refreshHistoryIfNeeded()
+        if (shouldRefreshInsightsWhileVisible()) {
+            refreshInsightsIfNeeded()
         }
+    }
+
+    private fun shouldRefreshInsightsWhileVisible(): Boolean =
+        runwayScreenVisible || (insightsScreenVisible && !historyVisible)
+
+    private fun shouldRefreshHistoryWhileVisible(): Boolean =
+        insightsScreenVisible && historyVisible
+
+    private fun ensureInsightsLoadedOrRefreshStale() {
+        when {
+            !insightsLoaded -> loadInsightsCacheThenRefresh()
+            else -> refreshInsightsIfNeeded()
+        }
+    }
+
+    private fun refreshInsightsIfNeeded() {
+        val current = _insights.value
+        if (!current.isStale) return
+        if (current.isInitialLoading || current.isRefreshing) return
+        if (insightsJob?.isActive == true) return
+        refreshInsights(current.displayedRange)
+    }
+
+    private fun refreshHistoryIfNeeded() {
+        val current = _history.value
+        if (!current.isStale) return
+        if (current.isInitialLoading || current.isRefreshing) return
+        if (historyRefreshJob?.isActive == true) return
+        refreshHistory(current.appliedFilters)
     }
 
     private fun loadInsightsCacheThenRefresh() {
         insightsLoaded = true
+        _insights.update { it.copy(isInitialLoading = true, isStale = true) }
         scope.launch {
-            _insights.update { it.copy(isInitialLoading = true) }
             repository.readCachedInsights()?.let { cached ->
                 val range = cached.cachedInsightsRange()
                 _insights.value = InsightsUiState(
@@ -411,8 +498,8 @@ class AnalyticsCoordinator(
 
     private fun loadHistoryCacheThenRefresh() {
         historyLoaded = true
+        _history.update { it.copy(isInitialLoading = true) }
         scope.launch {
-            _history.update { it.copy(isInitialLoading = true) }
             repository.readCachedHistory()?.let { cached ->
                 _history.value = stateFromResponse(cached, cached.filters).copy(
                     isFromCache = true,

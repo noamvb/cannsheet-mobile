@@ -51,6 +51,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.PenQuickLogState
+import com.example.domain.ProductRunway
 import com.example.domain.formatQuantityInInputUnit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Product
@@ -99,6 +101,7 @@ internal object PenQuickLogTestTags {
     const val CARD = "pen-quick-log-card"
     const val CHOOSE_CART = "pen-quick-log-choose-cart"
     const val SWAP_CART = "pen-quick-log-swap-cart"
+    const val RUNWAY = "pen-quick-log-runway"
 
     fun quickLogChip(position: Int) = "pen-quick-log-chip-$position"
 }
@@ -108,6 +111,7 @@ internal fun PenQuickLogCard(
     state: PenQuickLogState,
     onQuickLogPen: (Double) -> Unit,
     onChooseCart: () -> Unit,
+    runwayByProductId: Map<String, ProductRunway> = emptyMap(),
 ) {
     when (state) {
         PenQuickLogState.Unavailable -> Unit
@@ -169,6 +173,13 @@ internal fun PenQuickLogCard(
                                     style = MaterialTheme.typography.bodySmall,
                                 )
                             }
+                            runwayByProductId[state.product.id]?.let { runway ->
+                                Text(
+                                    runwaySummaryText(runway),
+                                    modifier = Modifier.testTag(PenQuickLogTestTags.RUNWAY),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                         TextButton(
                             onClick = onChooseCart,
@@ -214,7 +225,15 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
     val penQuickLog by viewModel.penQuickLogState.collectAsStateWithLifecycle()
     val secondsPerUse by viewModel.effectiveSecondsPerUse.collectAsStateWithLifecycle()
     val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+    val runwayPresentation by viewModel.runwayPresentationState.collectAsStateWithLifecycle()
+    val runwayByProductId =
+        (runwayPresentation.estimates as? RunwayEstimateState.Ready)?.runwayByProductId.orEmpty()
     val context = LocalContext.current
+
+    DisposableEffect(viewModel) {
+        viewModel.onRunwayVisible()
+        onDispose(viewModel::onRunwayHidden)
+    }
 
     LaunchedEffect(syncStatus) {
         syncStatus?.let {
@@ -240,6 +259,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         secondsPerUse = secondsPerUse,
         onQuickLogPen = viewModel::quickLogPen,
         onChooseLoadedPen = viewModel::setLoadedPenProduct,
+        runwayByProductId = runwayByProductId,
     )
 }
 
@@ -262,6 +282,7 @@ fun ConsumptionContent(
     secondsPerUse: Double? = null,
     onQuickLogPen: (Double) -> Unit = {},
     onChooseLoadedPen: (String) -> Unit = {},
+    runwayByProductId: Map<String, ProductRunway> = emptyMap(),
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
     var pickerMode by rememberSaveable { mutableStateOf(ProductPickerMode.LOG_TARGET) }
@@ -540,6 +561,7 @@ fun ConsumptionContent(
                             pickerMode = ProductPickerMode.LOADED_PEN
                             showProductPicker = true
                         },
+                        runwayByProductId = runwayByProductId,
                     )
                 }
             }
@@ -573,6 +595,7 @@ fun ConsumptionContent(
                         pickerMode = ProductPickerMode.LOG_TARGET
                         showProductPicker = true
                     },
+                    runway = selectedProduct?.let { runwayByProductId[it.id] },
                 )
             }
 
@@ -768,8 +791,17 @@ private fun RecentProductCard(
     }
 }
 
+internal object ConsumptionRunwayTestTags {
+    const val SELECTED_PRODUCT_RUNWAY = "consumption-selected-product-runway"
+}
+
 @Composable
-private fun ProductSelectionCard(product: Product?, pendingUses: Double, onClick: () -> Unit) {
+private fun ProductSelectionCard(
+    product: Product?,
+    pendingUses: Double,
+    onClick: () -> Unit,
+    runway: ProductRunway? = null,
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -816,6 +848,15 @@ private fun ProductSelectionCard(product: Product?, pendingUses: Double, onClick
                         if (pendingUses.isFinite() && pendingUses > 0.0) {
                             Text(
                                 "Pending: +${formatUsageAmount(pendingUses)} uses",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        runway?.let { estimate ->
+                            Text(
+                                runwaySummaryText(estimate),
+                                modifier = Modifier.testTag(
+                                    ConsumptionRunwayTestTags.SELECTED_PRODUCT_RUNWAY,
+                                ),
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
