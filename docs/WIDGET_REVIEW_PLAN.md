@@ -122,7 +122,11 @@ serialization order while making the DataStore claim state authoritative for
 undo-versus-commit arbitration, and extracts provider action routing into an
 injected `PenWidgetActionRouter` so the provider's mutation paths can be tested
 without a live broadcast dispatch. The follow-up remains unreleased at this
-stage; sizing is still gated on physical Fold measurements.
+stage; sizing is still gated on physical Fold measurements. PR1 is now merged
+as #59. The second follow-up group applies the cancellation-safe claim release,
+stable route-flow ownership, resource/accessibility cleanup, and direct domain
+imports described by T4/T5; it does not alter the widget's data contracts or
+release metadata.
 
 ## 3. Findings
 

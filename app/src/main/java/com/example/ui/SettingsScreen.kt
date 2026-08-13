@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.ProductTypeKey
+import com.example.domain.formatQuantityInInputUnit
 import java.math.BigDecimal
 import java.net.URI
 import androidx.compose.ui.semantics.contentDescription

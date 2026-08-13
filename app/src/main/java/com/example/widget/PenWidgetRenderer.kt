@@ -112,11 +112,7 @@ object PenWidgetRenderer {
             setTextViewText(R.id.widget_pen_submit, context.getString(R.string.pen_widget_undo_symbol))
             setContentDescription(
                 R.id.widget_pen_submit,
-                context.resources.getQuantityString(
-                    R.plurals.pen_widget_undo_seconds,
-                    seconds,
-                    seconds,
-                ),
+                context.getString(R.string.pen_widget_undo_seconds, seconds),
             )
             setOnClickPendingIntent(
                 R.id.widget_pen_submit,
@@ -127,21 +123,13 @@ object PenWidgetRenderer {
             setTextViewText(R.id.widget_pen_submit, context.getString(R.string.pen_widget_saving_symbol))
             setContentDescription(
                 R.id.widget_pen_submit,
-                context.resources.getQuantityString(
-                    R.plurals.pen_widget_saving_seconds_description,
-                    seconds,
-                    seconds,
-                ),
+                context.getString(R.string.pen_widget_saving_seconds_description, seconds),
             )
         } else {
             setTextViewText(R.id.widget_pen_submit, context.getString(R.string.pen_widget_submit_symbol))
             setContentDescription(
                 R.id.widget_pen_submit,
-                context.resources.getQuantityString(
-                    R.plurals.pen_widget_submit_seconds,
-                    seconds,
-                    seconds,
-                ),
+                context.getString(R.string.pen_widget_submit_seconds, seconds),
             )
             setOnClickPendingIntent(
                 R.id.widget_pen_submit,
@@ -181,11 +169,7 @@ object PenWidgetRenderer {
             isSaving -> {
                 setContentDescription(
                     R.id.widget_pen_counter_panel,
-                    context.resources.getQuantityString(
-                        R.plurals.pen_widget_saving_seconds_description,
-                        seconds,
-                        seconds,
-                    ),
+                    context.getString(R.string.pen_widget_saving_seconds_description, seconds),
                 )
                 setBoolean(R.id.widget_pen_counter_panel, "setEnabled", false)
             }
@@ -210,6 +194,10 @@ object PenWidgetRenderer {
         setOnClickPendingIntent(
             R.id.widget_pen_name,
             pendingIntent(context, appWidgetId, ACTION_OPEN_LOG),
+        )
+        setContentDescription(
+            R.id.widget_pen_name,
+            context.getString(R.string.pen_widget_open_app_description, productName),
         )
 
         setContentDescription(R.id.widget_pen_minus, context.getString(R.string.pen_widget_decrease))

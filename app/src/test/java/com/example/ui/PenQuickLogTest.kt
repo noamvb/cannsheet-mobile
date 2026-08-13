@@ -1,6 +1,8 @@
 package com.example.ui
 
 import com.example.domain.PenQuickLogState
+import com.example.domain.buildPenQuickLogState
+import com.example.domain.resolveLoadedPenProduct
 
 import com.example.data.Product
 import com.example.data.ProductInteraction

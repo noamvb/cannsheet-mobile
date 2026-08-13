@@ -1,5 +1,8 @@
 package com.example.ui
 
+import com.example.domain.formatQuantityInInputUnit
+import com.example.domain.secondsToUses
+import com.example.domain.usesToSeconds
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

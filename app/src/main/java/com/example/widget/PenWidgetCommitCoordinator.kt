@@ -5,6 +5,8 @@ import com.example.data.CannsheetGraph
 import com.example.data.ConsumptionLogger
 import com.example.data.ProductTypeCodes
 import com.example.data.sync.SyncScheduler
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 /**
  * Delivers a widget payload after DataStore has atomically claimed the commit. The claim remains
@@ -44,12 +46,14 @@ class PenWidgetCommitCoordinator(
                 nowMillis = nowMillis,
             )
         } catch (error: Throwable) {
-            runCatching {
-                stateRepository.releaseClaim(
-                    appWidgetId = appWidgetId,
-                    commitId = claim.payload.commitId,
-                    claimId = claim.claimId,
-                )
+            withContext(NonCancellable) {
+                runCatching {
+                    stateRepository.releaseClaim(
+                        appWidgetId = appWidgetId,
+                        commitId = claim.payload.commitId,
+                        claimId = claim.claimId,
+                    )
+                }
             }
             throw error
         } finally {

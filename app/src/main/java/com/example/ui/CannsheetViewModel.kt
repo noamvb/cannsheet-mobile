@@ -26,6 +26,7 @@ import com.example.data.SyncPreferences
 import com.example.data.sync.SyncScheduler
 import com.example.data.productStatus
 import com.example.domain.PenQuickLogState
+import com.example.domain.buildPenQuickLogState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect

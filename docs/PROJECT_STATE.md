@@ -50,6 +50,13 @@ Last updated: 2026-08-13
   contract, endpoint, package ID, or release metadata. The latest published
   release remains v1.2.26 until the complete follow-up is merged and the
   separately requested versioned release is gated.
+- PR1 was squash-merged as [PR #59](https://github.com/noamvb/cannsheet-mobile/pull/59)
+  at `c8329336a7cb766f5c44df030b8aa9707652e701` after its full API 24 PR gate
+  [run 31661910965](https://github.com/noamvb/cannsheet-mobile/actions/runs/31661910965)
+  passed classification, backend, Android static, emulator, and aggregate
+  validation. The second follow-up change is now staged separately for
+  cancellation robustness, stable route-flow ownership, accessibility copy,
+  and removal of the obsolete UI delegation shims.
 - Home-screen pen widget feature [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
   was squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`; its final
   six-job gate passed in [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764).

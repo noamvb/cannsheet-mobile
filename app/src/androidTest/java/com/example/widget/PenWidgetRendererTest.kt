@@ -41,6 +41,10 @@ class PenWidgetRendererTest {
         val root = views.apply(context, FrameLayout(context))
 
         assertEquals("Long loaded pen cart", root.findViewById<TextView>(R.id.widget_pen_name).text)
+        assertEquals(
+            "Long loaded pen cart. Double tap to open Cannsheet Mobile.",
+            root.findViewById<TextView>(R.id.widget_pen_name).contentDescription,
+        )
         assertEquals("30s", root.findViewById<TextView>(R.id.widget_pen_counter).text)
         assertEquals("Active · synced 12 uses", root.findViewById<TextView>(R.id.widget_pen_subtitle).text)
         assertTrue(root.findViewById<Button>(R.id.widget_pen_plus).isEnabled)

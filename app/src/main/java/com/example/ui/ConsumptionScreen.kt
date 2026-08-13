@@ -72,6 +72,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.PenQuickLogState
+import com.example.domain.formatQuantityInInputUnit
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Product
 import com.example.data.ProductStatus
