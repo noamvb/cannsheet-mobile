@@ -4,10 +4,11 @@ Reviewed: 2026-08-12
 Subject: the home-screen pen consumption widget shipped in
 [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52) (`0e9bb65`) and
 released as v1.2.25.
-Status: implemented in [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55),
-with the review adjustments recorded below. Physical-launcher validation remains
-outstanding and is deliberately not inferred from source, local compilation, or
-emulator tests.
+Status: implemented in [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55)
+and the v1.2.26 follow-up PRs #59, #60, and #61, then released as v1.2.27.
+Default Fold launcher sizing was measured in the sandbox package; minimum-resize
+handle and physical production widget action validation remain outstanding and
+are deliberately not inferred from source, local compilation, or emulator tests.
 
 ## 1. Scope and method
 
@@ -121,12 +122,13 @@ record. The first follow-up implementation keeps the existing process-local
 serialization order while making the DataStore claim state authoritative for
 undo-versus-commit arbitration, and extracts provider action routing into an
 injected `PenWidgetActionRouter` so the provider's mutation paths can be tested
-without a live broadcast dispatch. The follow-up remains unreleased at this
-stage; sizing is still gated on physical Fold measurements. PR1 is now merged
-as #59. The second follow-up group applies the cancellation-safe claim release,
-stable route-flow ownership, resource/accessibility cleanup, and direct domain
-imports described by T4/T5; it does not alter the widget's data contracts or
-release metadata. PR2 is now merged as #60. The sandbox-only sizing evidence
+without a live broadcast dispatch. The follow-up is now released as v1.2.27
+after the physical default-size measurement and the gated versioned
+publication. PR1 is now merged as #59. The second follow-up group applies the
+cancellation-safe claim release, stable route-flow ownership,
+resource/accessibility cleanup, and direct domain imports described by T4/T5;
+it does not alter the widget's data contracts. PR2 is now merged as #60, and
+T3 is merged as #61. The sandbox-only sizing evidence
 for T3 is cover portrait `300dp`, main portrait `274dp`, main landscape
 `259dp`, and cover landscape `300dp`; the launcher did not expose a usable
 minimum-resize handle, so that value remains explicitly unmeasured. Since all

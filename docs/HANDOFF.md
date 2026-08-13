@@ -4,27 +4,27 @@ Last updated: 2026-08-13
 
 ## Current outcome
 
-Cannsheet Mobile v1.2.26 is implemented, released, and published to the
-separate GitHub releases repository. The home-screen pen widget feature was
-delivered through [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52),
-squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`, and its
-remediation through [PR #55](https://github.com/noamvb/cannsheet-mobile/pull/55)
-is included in the release. The version-only
-[PR #56](https://github.com/noamvb/cannsheet-mobile/pull/56) merged as
-`ec75c5297691ac870679f8462a0102c89e6f682e`; tag `v1.2.26` points to that
-exact validated `main` tip.
+Cannsheet Mobile v1.2.27 is implemented, released, and published to the
+separate GitHub releases repository. The widget follow-up was delivered through
+[PR #59](https://github.com/noamvb/cannsheet-mobile/pull/59),
+[PR #60](https://github.com/noamvb/cannsheet-mobile/pull/60), and
+[PR #61](https://github.com/noamvb/cannsheet-mobile/pull/61), then the version
+metadata was bumped through [PR #62](https://github.com/noamvb/cannsheet-mobile/pull/62).
+The tag `v1.2.27` points to exact validated `main` commit
+`39abdf3814b1ff1f75ca06ca2d78e72a10d281b5`.
 
-The public signed release is [Cannsheet Mobile 1.2.26](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.26),
-with `Cannsheet-Mobile-1.2.26.apk` and
-`Cannsheet-Mobile-1.2.26.apk.sha256`. The independently downloaded APK
+The public signed release is [Cannsheet Mobile 1.2.27](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.27),
+with `Cannsheet-Mobile-1.2.27.apk` and
+`Cannsheet-Mobile-1.2.27.apk.sha256`. The independently downloaded APK
 matched the published SHA-256:
 
-`c5ddfb6117e4159ffcb764e776838e3d1c5c6db8d7462f2dd53b1f1f5de9e5cf`
+`05ec7a07e3f686e7ae95a613d56e311cd498cbec83d09cda743b424f404af92d`
 
 The downloaded APK reports package `com.noamv.cannsheet.mobile`, version code
-`29`, and version name `1.2.26`; local `apksigner verify` confirms its v2
-signature. Obtainium can discover the public release asset from the releases
-repository. No production phone or ADB action was used for this release.
+`30`, and version name `1.2.27`; local `aapt` and `apksigner verify` confirm
+the metadata and v2 signature. Its certificate digest matches v1.2.26, so the
+release is compatible with the existing production package. Obtainium can
+discover the public release asset from the releases repository.
 
 The implementation does not alter the Room schema, existing queue payloads,
 Apps Script contract, production endpoint, application ID, or signing
@@ -65,15 +65,22 @@ in `docs/WIDGET_REVIEW_PLAN.md`.
 
 ## Validation and provenance
 
-- Version PR #56 gate [run 31656052541](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656052541)
+- PR #59's full gate [run 31661910965](https://github.com/noamvb/cannsheet-mobile/actions/runs/31661910965),
+  PR #60's full gate [run 31662427658](https://github.com/noamvb/cannsheet-mobile/actions/runs/31662427658),
+  and PR #61's replacement full gate [run 31664591647](https://github.com/noamvb/cannsheet-mobile/actions/runs/31664591647)
+  passed. PR #61's first API 24 attempt exposed an invalid plain `View` in
+  `RemoteViews`; the fix replaced those spacers with supported `TextView`
+  instances and the replacement run passed.
+- Version PR #62 gate [run 31665017557](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665017557)
   passed the required checks.
-- Exact post-merge `main` validation [run 31656311214](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656311214)
+- Exact post-merge `main` validation [run 31665252525](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665252525)
   passed all six jobs, including API 24 and API 36 emulator validation,
   backend validation, Android static validation, classification/security, and
   aggregate checks.
-- Signed publication [run 31656746063](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656746063)
-  passed exact-main proof, protected signing, signature and metadata checks,
-  checksum, public publication, and post-publication verification.
+- Signed publication [run 31665589830](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665589830)
+  passed exact-main proof, protected signing, version-code monotonicity,
+  unit tests/lint, signed build, signature and metadata checks, checksum,
+  public publication, and post-publication verification.
 - Feature PR gate [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764)
   passed all six jobs after the API 24 renderer fix.
 - Historical v1.2.25 version PR gate [run 31621733498](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621733498)
@@ -85,7 +92,7 @@ in `docs/WIDGET_REVIEW_PLAN.md`.
 - Historical v1.2.25 signed publication [run 31622788837](https://github.com/noamvb/cannsheet-mobile/actions/runs/31622788837)
   passed exact-main proof, signed build, signature verification, checksum,
   public publication, and post-publication verification.
-- Local v1.2.26 release-branch validation passed with JDK 17.0.20, Android
+- Local v1.2.27 release-branch validation passed with JDK 17.0.20, Android
   platform 36.1, and Build Tools 36.0.0. The exact command was
   `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`;
   it completed with `BUILD SUCCESSFUL`, 186 JVM tests, zero failures/errors/
@@ -110,24 +117,24 @@ in `docs/WIDGET_REVIEW_PLAN.md`.
 
 ## Phone state and safety boundary
 
-- The historical v1.2.25 update was installed in place on the intended Samsung
-  SM-F966W running Android API 36. Before that update, the production package
-  readback reported version code `27`, version name `1.2.24`; after it reported
-  version code `28`, version name `1.2.25`, with the
-  `PenConsumptionWidgetProvider` receiver present.
-- The historical update used `adb install -r`, preserving the existing
-  package/data boundary. No uninstall, data clear, downgrade, app launch,
-  widget add, widget tap, production Log/Purchase/Finish/Sync action, or
-  synthetic production mutation was performed.
-- Wireless ADB was disconnected after that historical package readback. The
-  v1.2.26 release did not access the phone, and no phone commands are pending.
+- The v1.2.27 update was installed in place on the intended Samsung Fold
+  running Android API 36. Before installation, the production package
+  readback reported version code `29`, version name `1.2.26`; after it reported
+  version code `30`, version name `1.2.27`.
+- The update used `adb install -r`, preserving the existing package/data
+  boundary, signing identity, package data directory, and first-install time.
+  No uninstall, data clear, downgrade, app launch, widget add, widget tap,
+  production Log/Purchase/Finish/Sync action, or synthetic production mutation
+  was performed.
+- Wireless ADB was disconnected after the final package readback, and the
+  device list was empty. The phone was explicitly returned to normal use.
 - These are package/readback facts only. CI emulator validation, source
   previews, and production-package installation must not be described as a
   physical widget UI walkthrough.
 
 ## Recommended next action
 
-The v1.2.26 release is complete and its signed APK is available from the public
+The v1.2.27 release is complete and its signed APK is available from the public
 release assets for Obtainium. If physical widget visual/action coverage is desired,
 build or obtain a separate sandbox/debug package with a non-production endpoint
 and test only that package: light/dark rendering, launcher sizing, +/- controls,
