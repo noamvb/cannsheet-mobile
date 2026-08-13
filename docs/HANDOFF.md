@@ -41,9 +41,14 @@ metadata bump in `app/build.gradle.kts`.
 
 ## v1.3 implementation
 
-- Backup and device-transfer behavior is deliberate: durable Room data and
-  preferences remain eligible, while transient cache and in-flight widget
-  arbitration state are excluded as recorded in the backup XML and ADRs.
+- Backup and device-transfer behavior is deliberate: only user settings
+  (`consumption_preferences`, `purchase_defaults`) remain eligible. The Room
+  database `cannsheet_db`, `sync_preferences`, and `pen_widget_state` are
+  excluded from both cloud backup and device transfer, because restoring them
+  would reintroduce queue/request identity, a point-in-time analytics snapshot,
+  queue-alert episode state, or an in-flight deferred widget payload. A phone
+  lost while holding unsynced queue rows loses them; that trade is recorded in
+  ADR-017 and `app/src/main/res/xml/backup_rules.xml`.
 - Queue-integrity alerts are off by default, subordinate to background sync,
   aggregate-only, and advisory. They cover current-episode terminal integrity
   states and a continuously non-empty queue at least 24 hours old. Alert paths

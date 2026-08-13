@@ -62,6 +62,8 @@ documents, not in this file.
   confirmed values, and must degrade to showing nothing when the Insights
   snapshot is cached, stale, changing range, or incomplete because a local
   action is pending.
+- The Log screen may consume the Insights snapshot but must not drive
+  unbounded analytics refreshes; runway-only refreshes are floored.
 - Month and day arithmetic on analytics data uses the response's own `timeZone`
   and `range` fields, never a device-local `Calendar` or `LocalDate.now()`.
 - `EXTRA_START_ROUTE` lives in `com.example.domain` and its string value is part
