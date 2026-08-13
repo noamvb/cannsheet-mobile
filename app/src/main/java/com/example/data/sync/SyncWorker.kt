@@ -15,12 +15,15 @@ import com.example.data.ProductCatalogRefreshResult
 import com.example.data.SyncAcknowledgementPlan
 import com.example.data.SyncOutcome
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 
 /**
  * Injectable bridge around the real graph. A test worker factory can create [SyncWorker] with a fake
  * runtime without replacing WorkManager's production configuration.
  */
 interface BackgroundSyncWorkerRuntime {
+    suspend fun observeQueueDepth()
+
     suspend fun isEnabled(): Boolean
 
     suspend fun run(): BackgroundSyncRunResult
@@ -44,6 +47,7 @@ class SyncWorker(
     )
 
     override suspend fun doWork(): Result {
+        observeQueueDepthBestEffort()
         if (!runtime.isEnabled()) return Result.success()
 
         val result = runtime.run()
@@ -88,6 +92,17 @@ class SyncWorker(
             throw error
         } catch (error: Throwable) {
             // Best effort only. The next periodic run tries again.
+        }
+    }
+
+    /** Queue-health bookkeeping is advisory and cannot alter an existing worker decision. */
+    private suspend fun observeQueueDepthBestEffort() {
+        try {
+            runtime.observeQueueDepth()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // The application-level collector and a later worker can observe the queue again.
         }
     }
 
@@ -156,6 +171,12 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
             }
         },
     )
+
+    override suspend fun observeQueueDepth() {
+        graph.syncPreferences.reconcileCurrentQueueDepth(
+            readPendingActionCount = { graph.repository.pendingActionCount.first() },
+        )
+    }
 
     override suspend fun isEnabled(): Boolean = graph.syncPreferences.isEnabled()
 
