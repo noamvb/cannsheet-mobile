@@ -636,3 +636,132 @@ historical rationale.
   `app/src/main/res/layout/widget_pen_consumption.xml`,
   `app/src/main/res/layout/widget_pen_consumption_compact.xml`,
   `docs/WIDGET_REVIEW_PLAN.md`
+
+## ADR-016: Alert on queue integrity, not on every sync failure
+
+- Status: Accepted; implemented for v1.3.
+- Date: 2026-08-13
+- Context: WorkManager already retries transient background failures, but the
+  app previously had no user-visible signal when local entries remained unable
+  to reach the sheet. Alerting on every failed attempt would turn ordinary
+  offline periods into noise and could encourage unsafe queue manipulation.
+- Decision:
+  1. Queue alerts are separately opt-in and default off. The background-sync
+     kill switch takes precedence over the alert preference.
+  2. An aggregate queue that remains continuously non-empty for 24 hours may
+     alert. Current-episode environment mismatch, partial rejection, and
+     backend-capability-pending results may alert immediately.
+  3. `RETRY_EXHAUSTED` is not independently actionable; an ordinary transient
+     outage becomes actionable only through the same 24-hour queue-age rule.
+  4. Suppress the same active reason for 24 hours after an exact delivery claim.
+     Use a stable notification card and an unconstrained delayed check so the
+     clock can mature while connected sync work is blocked.
+  5. Notification copy may contain only an aggregate pending count and reason.
+     It must not contain product names, quantities, consumption dates, or other
+     entry detail.
+- Rationale: Alerting on durable queue integrity focuses interruption on states
+  that may require the owner, while WorkManager retains responsibility for
+  routine recovery. Aggregate copy supplies enough context without exposing
+  consumption detail on a lock screen.
+- Consequences: A continuously non-empty queue can alert while offline, but a
+  brief failure and five exhausted retries alone remain silent. Presentation is
+  advisory and cannot acknowledge, mutate, or delete queue rows.
+- Related files: `app/src/main/java/com/example/data/sync/QueueHealth.kt`,
+  `app/src/main/java/com/example/data/sync/QueueAlertScheduler.kt`,
+  `app/src/main/java/com/example/data/sync/QueueAlertDeliveryCoordinator.kt`,
+  `app/src/main/java/com/example/notifications/QueueAlertNotifier.kt`,
+  `app/src/main/java/com/example/ui/SettingsScreen.kt`
+
+## ADR-017: Track queue age in DataStore rather than a Room column
+
+- Status: Accepted; implemented for v1.3.
+- Date: 2026-08-13
+- Context: The stuck-queue rule needs the beginning of the current aggregate
+  non-empty episode. Adding an enqueue timestamp to each Room queue would
+  require a forward schema migration across four action types and would still
+  need episode-level logic. Persisting one aggregate watermark avoids changing
+  user-data rows but cannot identify the age of an individual entry.
+- Decision: Store `queue_non_empty_since_epoch_millis` in
+  `sync_preferences`. Serialize Room depth observation, set the watermark only
+  on empty-to-non-empty transition, preserve it while depth stays positive, and
+  clear it on drain. Persist the last alert reason/time and an exact claim token
+  beside it; scope terminal sync results to the current watermark before they
+  can become actionable.
+- Rationale: The current feature needs episode age, not a queue inspector. One
+  DataStore value avoids a Room migration and leaves immutable queue payloads
+  and acknowledgement rules untouched.
+- Consequences: v1.3 cannot answer which individual row is oldest. A future
+  queue-inspector feature that promises per-entry age must pay for explicit
+  enqueue timestamps, migrations for every supported schema, reconciliation of
+  legacy rows, and UI/privacy decisions; it must not reinterpret this aggregate
+  watermark as row evidence.
+- Related files: `app/src/main/java/com/example/data/SyncPreferencesRepository.kt`,
+  `app/src/main/java/com/example/CannsheetApplication.kt`,
+  `app/src/main/java/com/example/data/sync/QueueHealth.kt`,
+  `app/src/main/res/xml/backup_rules.xml`,
+  `app/src/main/res/xml/data_extraction_rules.xml`
+
+## ADR-018: Estimate runway from the user's own finished products
+
+- Status: Accepted; implemented for v1.3.
+- Date: 2026-08-13
+- Context: The Insights contract already contains per-product status, grams,
+  first-use time, recorded quantities, and month spending. A remaining-use
+  estimate can therefore be derived without inventing a universal product
+  capacity or changing the backend, but sparse or stale evidence can make the
+  arithmetic misleading.
+- Decision:
+  1. Model the typical recorded amount at finish with the median, not the mean,
+     over at least three eligible finished products of the normalized type.
+     Describe it as recorded finish evidence, never literal cartridge or
+     package capacity.
+  2. Prefer a per-gram median only when at least three finished products have
+     valid gram evidence. Confidence and displayed sample size use the evidence
+     selected by that basis.
+  3. Require at least seven inclusive calendar days in the product-specific
+     burn window, beginning at the later of the selected range start or the
+     product's first recorded use in the response time zone.
+  4. Derive runway and current-month spend only from `InsightsResponseDto` in
+     presentation state. Suppress them for a missing, cached, stale, changing,
+     or locally incomplete snapshot, including any pending action.
+  5. Admit month projection only for a true current-month-through-today range
+     in the response time zone and suppress ambiguous ownership, cost, date,
+     invalid-row, or bucket-reconstruction cases.
+- Rationale: Medians reduce sensitivity to atypical finished products, basis-
+  specific evidence keeps confidence honest, and suppressing stale/incomplete
+  snapshots is safer than displaying a precise-looking value from data known
+  to omit local actions.
+- Consequences: Many products intentionally show no estimate until evidence is
+  sufficient. The estimates are not persisted or transmitted, do not alter
+  consumption behavior, and require no Apps Script, wire, Room, or spreadsheet
+  change.
+- Related files: `app/src/main/java/com/example/domain/InventoryRunway.kt`,
+  `app/src/main/java/com/example/ui/RunwayPresentation.kt`,
+  `app/src/main/java/com/example/ui/RunwayFormatting.kt`,
+  `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
+
+## ADR-019: Derive width breakpoints locally instead of adding an adaptive dependency
+
+- Status: Accepted; implemented for v1.3.
+- Date: 2026-08-13
+- Context: v1.3 needed only Material width classification, a navigation rail,
+  and expanded analytics detail panes. The project pins Compose BOM
+  `2024.09.00`; adding `material3-window-size-class` or
+  `material3-adaptive` during release work would enlarge the dependency and BOM
+  compatibility surface for behavior that `BoxWithConstraints` can supply.
+- Decision: Derive compact below 600dp, medium below 840dp, and expanded at
+  840dp or wider in one local helper. Compute the class once at the app root,
+  before rail width is removed, and pass it through the existing single
+  `NavHost`. Use a bottom bar at compact width, a rail at medium/expanded width,
+  and shared-detail 40/60 Insights and History panes only at expanded width.
+- Rationale: A tiny pure helper is JVM-testable, avoids release-cycle dependency
+  alignment risk, and prevents a 900dp root from being misclassified after the
+  rail narrows its child content.
+- Consequences: The feature is responsive to width but not hinge-aware; it does
+  not inspect folding features or guarantee crease avoidance. Revisit the
+  official adaptive libraries when the Compose BOM is deliberately upgraded
+  and the app needs posture-aware placement, not as incidental release work.
+- Related files: `app/src/main/java/com/example/ui/WindowWidth.kt`,
+  `app/src/main/java/com/example/ui/AppNavigation.kt`,
+  `app/src/main/java/com/example/ui/InsightsScreen.kt`

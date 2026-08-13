@@ -26,10 +26,13 @@ flowchart LR
   one Room database, repositories, preferences, sync engine, catalog refresher,
   and the shared `syncMutex` that serializes every queue synchronization attempt.
   It also installs the widget implementation behind the data-facing
-  `WidgetRefresher` interface; data and UI callers do not import widget code.
+  `WidgetRefresher` interface and the notification implementation behind the
+  data-facing `QueueAlertPresenter` interface; data and UI callers do not
+  import widget or notification code.
 - `app/src/main/java/com/example/MainActivity.kt` starts the Compose application.
-- `app/src/main/java/com/example/ui/AppNavigation.kt` owns the bottom navigation
-  between Log, Purchase, Insights, and Settings.
+- `app/src/main/java/com/example/ui/AppNavigation.kt` owns one navigation graph
+  between Log, Purchase, Insights, and Settings, using a bottom bar at compact
+  width and a rail at medium or expanded width.
 - The screen files under `app/src/main/java/com/example/ui` render Compose UI
   and delegate operations to `CannsheetViewModel`.
 - `app/src/main/java/com/example/ui/CannsheetViewModel.kt` coordinates product
@@ -61,9 +64,14 @@ flowchart LR
   `AppWidgetProvider`/`RemoteViews` pen quick-log widget. It reuses the loaded
   cart, rate, date, and consumption logging boundaries rather than introducing
   a second Room or network contract.
+- `app/src/main/java/com/example/notifications` contains the Android channel,
+  permission/availability, stable-card, and Settings-route intent details for
+  queue alerts. It implements `QueueAlertPresenter`; queue-health and sync code
+  depend only on that data-facing interface, just as widget refresh callers
+  depend only on `WidgetRefresher`.
 - `app/src/main/java/com/example/domain` contains the pen-state, quantity-unit,
-  and submit-time helpers shared by Compose and the widget, avoiding a
-  `ui -> widget -> ui` dependency cycle.
+  submit-time, out-of-app route, and inventory-runway helpers shared across
+  presentation boundaries without creating UI/widget/notification cycles.
 
 ### Background queue synchronization
 
@@ -76,10 +84,12 @@ send competing snapshots from separate Room or Retrofit instances.
 ```mermaid
 flowchart TD
     App["CannsheetApplication"] --> Graph["CannsheetGraph\nprocess-wide Room, Retrofit, and syncMutex"]
-    Graph --> Prefs["DataStore background-sync preference"]
+    Graph --> Prefs["DataStore sync and queue-alert state"]
     Graph --> Engine["SyncEngine\nacknowledgement and idempotency rules"]
     Graph --> Refresher["Catalog refresher"]
+    Graph --> AlertDelivery["QueueAlertDeliveryCoordinator\nserialized exact-claim delivery"]
     App --> Scheduler["SyncScheduler"]
+    App --> AlertScheduler["QueueAlertScheduler"]
     UI["Compose / CannsheetViewModel"] --> Refresher
     UI --> Engine
     Scheduler --> Immediate["Connected immediate work\nunique serial APPEND_OR_REPLACE"]
@@ -99,6 +109,13 @@ flowchart TD
     Engine -->|only accepted acknowledgement deletes rows| Queue
     Worker -->|periodic input data| Prefetcher["AnalyticsPrefetcher"]
     Prefetcher --> Cache["Room analytics_cache"]
+    Queue -->|aggregate depth only| Prefs
+    Worker -->|after sync; advisory| AlertDelivery
+    AlertScheduler --> AlertCheck["Unconstrained delayed\nQueueAlertCheckWorker"]
+    AlertCheck --> AlertDelivery
+    AlertDelivery --> Health["QueueHealth\n24-hour episode and terminal-result rules"]
+    Health --> Presenter["QueueAlertPresenter"]
+    Presenter --> Notifier["QueueAlertNotifier\nstable aggregate notification"]
 ```
 
 `CannsheetApplication` keeps ordinary default WorkManager initialization; the
@@ -107,6 +124,18 @@ work with `APPEND_OR_REPLACE` so requests remain serial, and updates the one
 six-hour periodic work request with `UPDATE`. A DataStore preference is a kill
 switch: when off, work exits without sending queued actions. It does not delete
 queued rows or alter foreground acknowledgement behavior.
+
+Queue alerts are an advisory side path. A serialized Room-depth observation
+maintains one DataStore watermark for the current non-empty episode. Both sync
+completion and a separate unconstrained delayed worker can evaluate the pure
+queue-health rules, so a queue may cross the 24-hour threshold while network
+work remains blocked. Presentation uses an exact persisted claim, one
+process-wide delivery coordinator, and one stable notification ID. Failed
+known posts release only their own claim. Evaluation reuses the DAO's aggregate
+pending-action count, but no row payload or entry detail reaches the presenter;
+alert delivery never writes, acknowledges, or deletes a queue row. The
+background-sync kill switch and the separate opt-in alert preference both take
+precedence.
 
 ## Important data flows
 
@@ -302,6 +331,30 @@ delivery to Apps Script.
    current DTO and its `correctionHeadId`; if the entry leaves the refreshed
    page, the sheet closes with an explanation.
 
+### Inventory runway
+
+Inventory runway and current-month spend pace are derived on Android from the
+existing `InsightsResponseDto`; they add no request, response field, cache
+schema, backend calculation, or spreadsheet contract. A combined presentation
+flow waits for the real Room pending-count emission and suppresses every
+estimate when the Insights snapshot is missing, cached, stale, changing range,
+or accompanied by any pending local action.
+
+Capacity evidence is a median over the user's own finished products, with at
+least three eligible observations. Per-gram evidence is preferred only when at
+least three finished products have valid gram data; its evidence count and
+confidence are independent of the broader per-product sample. An active
+product needs at least seven effective calendar days from the later of the
+selected range start or its first recorded use. Those civil-date calculations
+use the response time zone.
+
+Month projection is available only for a response that covers the real current
+month through today in the response time zone. It uses personal spend cents and
+is suppressed for ambiguous personal ownership, unknown personal cost/date,
+invalid unreferenced purchase rows, or an inconsistent month bucket. Copy names
+the recorded evidence, labels the value as an estimate, and does not advise or
+judge consumption.
+
 ### Consumption history corrections
 
 The correction protocol keeps the canonical `ConsumptionEvents` rows immutable.
@@ -358,6 +411,20 @@ the stable event ID, timing, and claim metadata. It is removed only after the
 Room write is durable; only uses cross the `ConsumptionLogger` boundary into
 Room, the offline queue, and the wire.
 
+The `sync_preferences` DataStore also holds five queue-alert fields:
+`queue_alerts_enabled`, `queue_non_empty_since_epoch_millis`,
+`last_queue_alert_reason`, `last_queue_alert_at_epoch_millis`, and
+`last_queue_alert_claim_id`. The watermark describes the current aggregate
+non-empty episode rather than any individual row. The claim ID gives one alert
+delivery attempt exact ownership for completion or release.
+
+Backup and device-transfer policy is explicit on both API 24–30 and API 31+.
+User-only `consumption_preferences` and `purchase_defaults` may be restored.
+Room databases, `sync_preferences`, and `pen_widget_state` are excluded: they
+contain queue/request identity, point-in-time server cache state, queue-alert
+episode state, or an in-flight deferred widget payload that must not be replayed
+on another installation. The two XML policies must remain aligned.
+
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
 Stable IDs and acknowledgement semantics must be preserved.
@@ -389,12 +456,23 @@ cannot prove a safe acknowledgement. Analytics can fall back to cached data;
 data-quality warnings remain explicit rather than silently normalizing unknown
 source values.
 
+The app derives Material width classes locally from the root constraints:
+compact below 600dp, medium below 840dp, and expanded at 840dp or wider. That
+root classification is passed through the single `NavHost`, so adding a rail
+does not reclassify its narrower child content. Compact uses the bottom bar;
+medium and expanded use the rail; expanded Insights and History use 40/60
+list-detail panes backed by the same detail composables as their modal sheets.
+Selected identities and correction draft primitives use saveable state and
+rebind to refreshed DTOs. This is responsive width handling, not display-hinge
+awareness.
+
 ## Testing approach
 
 - `app/src/test`: JVM unit tests for UI helpers/coordinators, environment
   contracts, queue acknowledgement logic, preferences, filtering, product
   mapping, usage formatting, purchase-default persistence, purchase-before-
-  default failure handling, and status handling.
+  default failure handling, queue-health truth tables and scheduling, runway
+  evidence/date arithmetic, width classification, and status handling.
 - `app/src/androidTest`: Room migration/queue tests and Compose UI tests that
   require a device or emulator, including pending-usage aggregation, the 9-to-10
   migration, selected/recent usage-total rendering, and Purchase type-filtered
@@ -402,7 +480,9 @@ source values.
   `RemoteViews` actions, and widget state tests cover seconds-to-uses
   conversion, payload migration, claim/complete retry behavior, timer/grace
   boundaries, deferred commit/undo arbitration, fixed-size layout inflation,
-  and lazy overdue flushing.
+  and lazy overdue flushing. Queue-notification tests cover API-level channel
+  and intent behavior, while Compose tests cover alert permission state,
+  compact/expanded analytics details, and saved correction-draft restoration.
 - `tests`: Node scripts execute the checked-in Apps Script source against fake
   Apps Script/Sheets implementations; a Python unittest covers deterministic
   backend benchmark tooling.
