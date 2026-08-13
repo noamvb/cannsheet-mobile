@@ -1,14 +1,34 @@
 # Project state
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit and tag `v1.2.25`:
-  `7c652fb48b4de5ba20b003abc828df9111124d73`
-- Current release metadata in `app/build.gradle.kts`: version name `1.2.25`,
-  version code `28`
+- Latest application release source commit and tag `v1.2.26`:
+  `ec75c5297691ac870679f8462a0102c89e6f682e`
+- Current release metadata in `app/build.gradle.kts`: version name `1.2.26`,
+  version code `29`
+- Version-only release [PR #56](https://github.com/noamvb/cannsheet-mobile/pull/56)
+  was squash-merged as `ec75c5297691ac870679f8462a0102c89e6f682e`. Its PR gate
+  passed in [run 31656052541](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656052541),
+  and the exact post-merge `main` six-job validation passed in
+  [run 31656311214](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656311214),
+  including API 24, API 36, backend, static, classification, and aggregate jobs.
+- The `v1.2.26` tag points to that exact validated `main` commit. Signed
+  publication [run 31656746063](https://github.com/noamvb/cannsheet-mobile/actions/runs/31656746063)
+  passed exact-main proof, protected signing, signature and metadata checks,
+  artifact upload, public release creation, and post-publication verification.
+- The public signed release is
+  [Cannsheet Mobile 1.2.26](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.26).
+  Its exact APK asset is `Cannsheet-Mobile-1.2.26.apk`, accompanied by
+  `Cannsheet-Mobile-1.2.26.apk.sha256`.
+- Independently downloaded public APK SHA-256:
+  `c5ddfb6117e4159ffcb764e776838e3d1c5c6db8d7462f2dd53b1f1f5de9e5cf`
+- The independent download reports package `com.noamv.cannsheet.mobile`,
+  version code `29`, and version name `1.2.26`; local `apksigner verify`
+  confirms the v2 signature. Obtainium can discover the public release asset
+  from the releases repository; no production phone or ADB action was used.
 - Home-screen pen widget feature [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
   was squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`; its final
   six-job gate passed in [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764).
@@ -21,32 +41,32 @@ Last updated: 2026-08-12
   Kotlin compilation and lint completed, and the debug APK assembled. All eight
   checked-in Node.js backend suites passed with the bundled runtime, and
   `python3 -m unittest tests/test_backend_sync_benchmark.py` passed all 13 tests.
-- Version-only release [PR #53](https://github.com/noamvb/cannsheet-mobile/pull/53)
+- Historical v1.2.25 version-only release [PR #53](https://github.com/noamvb/cannsheet-mobile/pull/53)
   was squash-merged as `7c652fb48b4de5ba20b003abc828df9111124d73`; its five-job
   PR gate passed in [run 31621733498](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621733498).
 - The exact post-merge `main` six-job validation passed in
   [run 31622170237](https://github.com/noamvb/cannsheet-mobile/actions/runs/31622170237),
   including API 24, API 36, backend, static, classification, and aggregate jobs.
-- The signed publication workflow
+- The historical v1.2.25 signed publication workflow
   [run 31622788837](https://github.com/noamvb/cannsheet-mobile/actions/runs/31622788837)
   passed exact-main proof, signed build, signature verification, artifact
   upload, public publication, and post-publication checks.
-- The public signed release is
+- The historical v1.2.25 public signed release was
   [Cannsheet Mobile 1.2.25](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.25).
   Its exact APK asset is `Cannsheet-Mobile-1.2.25.apk`, accompanied by
   `Cannsheet-Mobile-1.2.25.apk.sha256`.
-- Independently downloaded public APK SHA-256:
+- Historical v1.2.25 independently downloaded public APK SHA-256:
   `e6283536c4e00f60db473660370390bcf433e43d0d18dc7d49a3e8acbb7aa45a`
-- The release workflow verified the signed APK's package and version metadata;
-  the independent local download matched the public checksum. A separate local
-  `apksigner` verification was not performed for this release session.
-- The production readback before installation was version code `27`, version
-  name `1.2.24`; the readback after installation was version code `28`, version
-  name `1.2.25`, with the `PenConsumptionWidgetProvider` receiver present. The
-  in-place update used `adb install -r`; no uninstall, data clear, downgrade,
-  app launch, widget interaction, or production data action was used.
-- ADB was disconnected after the final package readback; the phone is
-  available for normal personal use again.
+- The historical v1.2.25 release workflow verified the signed APK's package and
+  version metadata; its independent local download matched the public checksum.
+- The historical v1.2.25 production readback before installation was version
+  code `27`, version name `1.2.24`; the readback after installation was version
+  code `28`, version name `1.2.25`, with the `PenConsumptionWidgetProvider`
+  receiver present. The in-place update used `adb install -r`; no uninstall,
+  data clear, downgrade, app launch, widget interaction, or production data
+  action was used.
+- ADB was disconnected after the historical v1.2.25 package readback. The
+  v1.2.26 publication did not access the phone.
 - History refresh feedback [PR #40](https://github.com/noamvb/cannsheet-mobile/pull/40)
   was squash-merged as `62d7cc6d960b0e13bdfd089152d14f8c20a308a1` after its
   feature validation passed.
