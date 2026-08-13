@@ -1,13 +1,21 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cannsheet Mobile backup policy (API 31+). See res/xml/backup_rules.xml
+    for the rationale; the two files must stay in agreement.
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <exclude domain="database" path="cannsheet_db" />
+        <exclude domain="database" path="cannsheet_db-wal" />
+        <exclude domain="database" path="cannsheet_db-shm" />
+        <exclude domain="file" path="datastore/sync_preferences.preferences_pb" />
         <exclude domain="file" path="datastore/pen_widget_state.preferences_pb" />
     </cloud-backup>
     <device-transfer>
+        <exclude domain="database" path="cannsheet_db" />
+        <exclude domain="database" path="cannsheet_db-wal" />
+        <exclude domain="database" path="cannsheet_db-shm" />
+        <exclude domain="file" path="datastore/sync_preferences.preferences_pb" />
         <exclude domain="file" path="datastore/pen_widget_state.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>
