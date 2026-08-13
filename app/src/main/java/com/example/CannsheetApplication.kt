@@ -2,7 +2,9 @@ package com.example
 
 import android.app.Application
 import com.example.data.CannsheetGraph
+import com.example.data.sync.QueueAlertScheduler
 import com.example.data.sync.SyncScheduler
+import com.example.notifications.QueueAlertNotifier
 import com.example.widget.PenWidgetCommitCoordinator
 import com.example.widget.PenWidgetRefresher
 import com.example.widget.PenWidgetRuntime
@@ -24,6 +26,7 @@ class CannsheetApplication : Application() {
         super.onCreate()
         val graph = CannsheetGraph.get(this)
         graph.installWidgetRefresher(PenWidgetRefresher(this))
+        graph.installQueueAlertPresenter(QueueAlertNotifier(this))
         PenWidgetRuntime.launchSerialized {
             PenWidgetCommitCoordinator.flushOverdue(this@CannsheetApplication, System.currentTimeMillis())
         }
@@ -43,6 +46,53 @@ class CannsheetApplication : Application() {
                 }
         }
         applicationScope.launch {
+            graph.syncPreferences.preferences
+                .map { preferences ->
+                    QueueAlertClearTrigger(
+                        backgroundSyncEnabled = preferences.enabled,
+                        queueAlertsEnabled = preferences.queueAlertsEnabled,
+                        queueNonEmptySinceEpochMillis =
+                            preferences.queueNonEmptySinceEpochMillis,
+                        lastMeaningfulSyncAtEpochMillis =
+                            preferences.lastMeaningfulSyncAtEpochMillis,
+                        lastResult = preferences.lastResult?.name,
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { state ->
+                    try {
+                        graph.queueAlertDelivery.clearIfCurrentAlertInactive()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        // Notification clearing is advisory; later state changes retry it.
+                    }
+                }
+        }
+        applicationScope.launch {
+            graph.syncPreferences.preferences
+                .map { preferences ->
+                    QueueAlertScheduleTrigger(
+                        backgroundSyncEnabled = preferences.enabled,
+                        queueAlertsEnabled = preferences.queueAlertsEnabled,
+                        queueNonEmptySinceEpochMillis =
+                            preferences.queueNonEmptySinceEpochMillis,
+                    )
+                }
+                .distinctUntilChanged()
+                .collect { state ->
+                    runCatching {
+                        QueueAlertScheduler.reconcile(
+                            context = this@CannsheetApplication,
+                            backgroundSyncEnabled = state.backgroundSyncEnabled,
+                            queueAlertsEnabled = state.queueAlertsEnabled,
+                            queueNonEmptySinceEpochMillis =
+                                state.queueNonEmptySinceEpochMillis,
+                        )
+                    }
+                }
+        }
+        applicationScope.launch {
             collectQueueDepthChanges(
                 countChanges = graph.repository.pendingActionCount,
                 reconcileObservedDepth = { pendingActionCount ->
@@ -50,12 +100,27 @@ class CannsheetApplication : Application() {
                         pendingActionCount = pendingActionCount,
                     )
                 },
+                onQueueStateChanged = graph.queueAlertDelivery::clearIfCurrentAlertInactive,
             )
         }
     }
 }
 
 internal const val QUEUE_DEPTH_OBSERVATION_RETRY_MILLIS = 30_000L
+
+private data class QueueAlertClearTrigger(
+    val backgroundSyncEnabled: Boolean,
+    val queueAlertsEnabled: Boolean,
+    val queueNonEmptySinceEpochMillis: Long?,
+    val lastMeaningfulSyncAtEpochMillis: Long?,
+    val lastResult: String?,
+)
+
+private data class QueueAlertScheduleTrigger(
+    val backgroundSyncEnabled: Boolean,
+    val queueAlertsEnabled: Boolean,
+    val queueNonEmptySinceEpochMillis: Long?,
+)
 
 /**
  * Treats Room emissions as reconciliation triggers and retries a failed transition without
@@ -65,6 +130,7 @@ internal const val QUEUE_DEPTH_OBSERVATION_RETRY_MILLIS = 30_000L
 internal suspend fun collectQueueDepthChanges(
     countChanges: Flow<Int>,
     reconcileObservedDepth: suspend (Int) -> Unit,
+    onQueueStateChanged: suspend () -> Unit = {},
     retryDelay: suspend () -> Unit = { delay(QUEUE_DEPTH_OBSERVATION_RETRY_MILLIS) },
 ) {
     countChanges
@@ -73,6 +139,13 @@ internal suspend fun collectQueueDepthChanges(
             while (true) {
                 try {
                     reconcileObservedDepth(pendingActionCount)
+                    try {
+                        onQueueStateChanged()
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Throwable) {
+                        // The next queue/worker reconciliation can clear the advisory card.
+                    }
                     break
                 } catch (error: CancellationException) {
                     throw error

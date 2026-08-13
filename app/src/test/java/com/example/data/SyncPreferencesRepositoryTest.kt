@@ -491,6 +491,49 @@ class SyncPreferencesRepositoryTest {
         assertFalse(repository.completeQueueAlertClaim(requireNotNull(first.claimId)))
     }
 
+    @Test
+    fun currentAlertInspectionDoesNotConsumePresentationEligibility() = runBlocking {
+        val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
+        repository.setQueueAlertsEnabled(true)
+        repository.observeQueueDepthForTest(1, NOW - QUEUE_STUCK_THRESHOLD_MILLIS)
+
+        val inspected = repository.inspectCurrentQueueAlert(
+            readPendingActionCount = { 1 },
+            clock = { NOW },
+        )
+
+        assertEquals(QueueAlertReason.STUCK_QUEUE, inspected?.reason)
+        val afterInspection = repository.preferences.first()
+        assertNull(afterInspection.lastQueueAlertReason)
+        assertNull(afterInspection.lastQueueAlertAtEpochMillis)
+        assertNull(afterInspection.lastQueueAlertClaimId)
+
+        val claim = repository.evaluateAndClaimQueueAlertForTest(1, NOW)
+        assertTrue(claim.shouldPresent)
+        assertEquals(QueueAlertReason.STUCK_QUEUE, claim.activeAlert?.reason)
+    }
+
+    @Test
+    fun currentAlertInspectionClearsStaleBookkeepingAfterDrain() = runBlocking {
+        val repository = SyncPreferencesRepository(RecordingPreferencesDataStore())
+        repository.setQueueAlertsEnabled(true)
+        repository.observeQueueDepthForTest(1, NOW - QUEUE_STUCK_THRESHOLD_MILLIS)
+        val claim = repository.evaluateAndClaimQueueAlertForTest(1, NOW)
+
+        val inspected = repository.inspectCurrentQueueAlert(
+            readPendingActionCount = { 0 },
+            clock = { NOW + 1 },
+        )
+
+        assertNull(inspected)
+        val preferences = repository.preferences.first()
+        assertNull(preferences.queueNonEmptySinceEpochMillis)
+        assertNull(preferences.lastQueueAlertReason)
+        assertNull(preferences.lastQueueAlertAtEpochMillis)
+        assertNull(preferences.lastQueueAlertClaimId)
+        assertFalse(repository.completeQueueAlertClaim(requireNotNull(claim.claimId)))
+    }
+
     private suspend fun SyncPreferencesRepository.observeQueueDepthForTest(
         pendingActionCount: Int,
         nowEpochMillis: Long,

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.data.sync.QueueAlert
 import com.example.data.sync.QueueAlertClaim
 import com.example.data.sync.QueueAlertReason
 import com.example.data.sync.QueueHealthEvaluation
@@ -145,6 +146,30 @@ class SyncPreferencesRepository internal constructor(
     suspend fun evaluateAndClaimCurrentQueueAlert(
         readPendingActionCount: suspend () -> Int,
         clock: () -> Long = System::currentTimeMillis,
+    ): QueueAlertClaim = evaluateCurrentQueueAlert(
+        readPendingActionCount = readPendingActionCount,
+        clock = clock,
+        allowClaim = true,
+    )
+
+    /**
+     * Re-reads and evaluates the current queue without consuming presentation eligibility.
+     * Notification clearing uses this after acquiring its own serialization mutex so a stale
+     * collector decision cannot cancel a newer card.
+     */
+    internal suspend fun inspectCurrentQueueAlert(
+        readPendingActionCount: suspend () -> Int,
+        clock: () -> Long = System::currentTimeMillis,
+    ): QueueAlert? = evaluateCurrentQueueAlert(
+        readPendingActionCount = readPendingActionCount,
+        clock = clock,
+        allowClaim = false,
+    ).activeAlert
+
+    private suspend fun evaluateCurrentQueueAlert(
+        readPendingActionCount: suspend () -> Int,
+        clock: () -> Long,
+        allowClaim: Boolean,
     ): QueueAlertClaim {
         return queueObservationMutex.withLock {
             val pendingActionCount = readPendingActionCount()
@@ -170,7 +195,7 @@ class SyncPreferencesRepository internal constructor(
                 )
                 val alert = evaluation.activeAlert
                 when {
-                    evaluation.shouldPresent && alert != null -> {
+                    allowClaim && evaluation.shouldPresent && alert != null -> {
                         claimId = proposedClaimId
                         stored[LAST_QUEUE_ALERT_REASON] = alert.reason.name
                         stored[LAST_QUEUE_ALERT_AT] = nowEpochMillis

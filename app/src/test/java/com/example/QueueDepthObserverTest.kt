@@ -72,4 +72,37 @@ class QueueDepthObserverTest {
 
         assertFalse(retryAttempted)
     }
+
+    @Test
+    fun notificationTriggerRunsOnlyAfterTheDepthWriteSucceeds() = runBlocking {
+        var depthAttempts = 0
+        var notificationTriggers = 0
+
+        collectQueueDepthChanges(
+            countChanges = flowOf(0),
+            reconcileObservedDepth = {
+                depthAttempts += 1
+                if (depthAttempts == 1) throw IOException("temporary failure")
+            },
+            onQueueStateChanged = { notificationTriggers += 1 },
+            retryDelay = {},
+        )
+
+        assertEquals(2, depthAttempts)
+        assertEquals(1, notificationTriggers)
+    }
+
+    @Test
+    fun notificationFailureDoesNotReplayAPersistedDepthTransition() = runBlocking {
+        var depthAttempts = 0
+
+        collectQueueDepthChanges(
+            countChanges = flowOf(0),
+            reconcileObservedDepth = { depthAttempts += 1 },
+            onQueueStateChanged = { throw IOException("notification manager failed") },
+            retryDelay = { fail("advisory failure must not retry the DataStore write") },
+        )
+
+        assertEquals(1, depthAttempts)
+    }
 }
