@@ -1,10 +1,12 @@
 # Cannsheet Mobile v1.3 feature and implementation plan
 
-Status: accepted implementation record. Source steps 5.1–5.7 are implemented
-and merged; step 5.8 records the resulting state. The separate version, signed
-publication, artifact-verification, and installation steps 5.9–5.10 remain
-pending. Exact commits and CI evidence are maintained in
-`docs/PROJECT_STATE.md`; no physical v1.3 walkthrough is claimed.
+Status: accepted implementation and release record. Steps 5.1–5.10 are
+complete: the source and documentation changes are merged, v1.3.0 is tagged at
+exact validated `main` commit `a733a9d2741c4c6eaaa074461a354ffa6fb9751e`,
+the signed APK is published and independently verified, and the production
+package was updated in place through a bounded readback/install session. Exact
+commits, CI runs, checksum, and evidence boundaries are maintained in
+`docs/PROJECT_STATE.md`; no physical v1.3 UI walkthrough is claimed.
 
 Base commit: `82e3c75` (`main`, released state v1.2.27, version code `30`).
 
@@ -1893,9 +1895,12 @@ therefore used the following resolutions:
   evidence. Implementation evidence is recorded separately and exactly in
   `docs/PROJECT_STATE.md`; it must not be back-projected onto the proposal's
   initial assumptions.
-- No physical v1.3 device session, Fold screenshot, hinge-aware check, live
-  notification permission walkthrough, 24-hour queue episode, or real-cart
-  runway comparison supports the implementation record yet.
+- A bounded physical v1.3 package session installed the independently verified
+  signed APK with `adb install -r` and read back package, signing, data-boundary,
+  launcher-resolution, and stopped-state metadata. It did not launch the app
+  and is not evidence for a Fold UI layout, screenshot, hinge-aware behavior,
+  notification permission flow, 24-hour queue episode, or real-cart runway
+  comparison.
 - Line numbers cited from the repository were read at commit `82e3c75` and
   will drift as the files change.
 - The runway model is an estimate built on the user's own history. It has not
