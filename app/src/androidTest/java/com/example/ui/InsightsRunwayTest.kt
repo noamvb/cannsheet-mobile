@@ -8,6 +8,7 @@ import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -216,6 +217,33 @@ class InsightsRunwayTest {
                     hasText("from recorded totals for 5 finished Pen products", substring = true),
                 ),
             )
+    }
+
+    @Test
+    fun openProductDetailSurvivesSavedStateRestoration() {
+        val product = analyticsProduct("restored-product", "Restored cart")
+        val restorationTester = StateRestorationTester(composeRule)
+        restorationTester.setContent {
+            MaterialTheme {
+                InsightsContent(
+                    state = InsightsUiState(data = insights(listOf(product))),
+                    pendingCount = 0,
+                    isSyncing = false,
+                    onSync = {},
+                    onRefresh = {},
+                )
+            }
+        }
+
+        val productRow = hasText(product.name) and hasClickAction()
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.CONTENT)
+            .performScrollToNode(productRow)
+        composeRule.onNode(productRow).performClick()
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.sheet(product.productId)).assertIsDisplayed()
+
+        restorationTester.emulateSavedInstanceStateRestore()
+
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.sheet(product.productId)).assertIsDisplayed()
     }
 
     @Test
