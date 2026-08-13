@@ -639,7 +639,7 @@ historical rationale.
 
 ## ADR-016: Alert on queue integrity, not on every sync failure
 
-- Status: Accepted; implemented for v1.3.
+- Status: Accepted; implemented and released in v1.3.0.
 - Date: 2026-08-13
 - Context: WorkManager already retries transient background failures, but the
   app previously had no user-visible signal when local entries remained unable
@@ -674,7 +674,7 @@ historical rationale.
 
 ## ADR-017: Track queue age in DataStore rather than a Room column
 
-- Status: Accepted; implemented for v1.3.
+- Status: Accepted; implemented and released in v1.3.0.
 - Date: 2026-08-13
 - Context: The stuck-queue rule needs the beginning of the current aggregate
   non-empty episode. Adding an enqueue timestamp to each Room queue would
@@ -703,7 +703,7 @@ historical rationale.
 
 ## ADR-018: Estimate runway from the user's own finished products
 
-- Status: Accepted; implemented for v1.3.
+- Status: Accepted; implemented and released in v1.3.0.
 - Date: 2026-08-13
 - Context: The Insights contract already contains per-product status, grams,
   first-use time, recorded quantities, and month spending. A remaining-use
@@ -743,7 +743,7 @@ historical rationale.
 
 ## ADR-019: Derive width breakpoints locally instead of adding an adaptive dependency
 
-- Status: Accepted; implemented for v1.3.
+- Status: Accepted; implemented and released in v1.3.0.
 - Date: 2026-08-13
 - Context: v1.3 needed only Material width classification, a navigation rail,
   and expanded analytics detail panes. The project pins Compose BOM

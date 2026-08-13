@@ -4,166 +4,164 @@ Last updated: 2026-08-13
 
 ## Current outcome
 
-Cannsheet Mobile v1.2.27 is implemented, released, and published to the
-separate GitHub releases repository. The widget follow-up was delivered through
-[PR #59](https://github.com/noamvb/cannsheet-mobile/pull/59),
-[PR #60](https://github.com/noamvb/cannsheet-mobile/pull/60), and
-[PR #61](https://github.com/noamvb/cannsheet-mobile/pull/61), then the version
-metadata was bumped through [PR #62](https://github.com/noamvb/cannsheet-mobile/pull/62).
-The tag `v1.2.27` points to exact validated `main` commit
-`39abdf3814b1ff1f75ca06ca2d78e72a10d281b5`.
+Cannsheet Mobile v1.3.0 is implemented, documented, released, published, and
+installed on the intended production Samsung Fold. The accepted sequence was
+delivered through source PRs
+[#64](https://github.com/noamvb/cannsheet-mobile/pull/64) through
+[#71](https://github.com/noamvb/cannsheet-mobile/pull/71), documentation
+[#72](https://github.com/noamvb/cannsheet-mobile/pull/72), and the deliberately
+separate version-only
+[#73](https://github.com/noamvb/cannsheet-mobile/pull/73).
 
-The public signed release is [Cannsheet Mobile 1.2.27](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.2.27),
-with `Cannsheet-Mobile-1.2.27.apk` and
-`Cannsheet-Mobile-1.2.27.apk.sha256`. The independently downloaded APK
-matched the published SHA-256:
+Annotated tag `v1.3.0` points to exact validated `main` commit
+`a733a9d2741c4c6eaaa074461a354ffa6fb9751e`. The tag remains on that release
+commit; this later handoff update must not move it.
 
-`05ec7a07e3f686e7ae95a613d56e311cd498cbec83d09cda743b424f404af92d`
+The public signed release is
+[Cannsheet Mobile 1.3.0](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.3.0),
+with authored assets `Cannsheet-Mobile-1.3.0.apk` and
+`Cannsheet-Mobile-1.3.0.apk.sha256`. An independent download matched SHA-256:
 
-The downloaded APK reports package `com.noamv.cannsheet.mobile`, version code
-`30`, and version name `1.2.27`; local `aapt` and `apksigner verify` confirm
-the metadata and v2 signature. Its certificate digest matches v1.2.26, so the
-release is compatible with the existing production package. Obtainium can
-discover the public release asset from the releases repository.
+`d3d2076341afb489ddd59e479ff3cb60d8b0e7af484b9e7b829ae054ed5bf2c7`
 
-The implementation does not alter the Room schema, existing queue payloads,
-Apps Script contract, production endpoint, application ID, or signing
-configuration. The only release-only source change was the requested
-`versionCode`/`versionName` bump in `app/build.gradle.kts`.
+Local `aapt` inspection reported package `com.noamv.cannsheet.mobile`, version
+code `31`, version name `1.3.0`, minimum SDK 24, target SDK 36, and launcher
+`com.example.MainActivity`. Local `apksigner verify` confirmed one APK
+Signature Scheme v2 signer. The subject text is unexpectedly debug-like, so
+continuity was established from the actual certificate and public-key digests:
+both matched the public v1.2.27 APK and the pre-update APK pulled from the
+production phone. The installed v1.2.27 APK was byte-identical to the public
+v1.2.27 asset, and the installed v1.3.0 APK was byte-identical to the new public
+asset.
 
-The original widget proposal and accepted remediation adjustments are recorded
-in `docs/WIDGET_REVIEW_PLAN.md`.
+The implementation does not change the production Apps Script, spreadsheet,
+endpoint, application ID, namespace, Room schema, existing queue payloads, or
+wire contracts. The release-only source change was the requested version
+metadata bump in `app/build.gradle.kts`.
 
-## Implementation
+## v1.3 implementation
 
-- The widget uses the platform `AppWidgetProvider` and `RemoteViews` APIs, with
-  no Glance dependency, and remains compatible with API 24.
-- It reuses the loaded-pen resolution, rate, date/time, and
-  `ConsumptionLogger` boundaries. Seconds are display/input units only;
-  `secondsToUses` converts before Room, the offline queue, or the wire.
-- Submit atomically captures the product, stable consumption event ID, submit
-  timing, date, time, rate, displayed seconds, and converted uses in payload
-  version 2 of `pen_widget_state`; valid version-1 payloads migrate on decode.
-- A process-local five-second timer is the primary Undo/delivery path, followed
-  by 1.5 seconds of grace. Unique WorkManager work is the process-death
-  backstop, while broadcasts and startup lazily flush overdue work. Maximum-age
-  and backwards-clock rules prevent a pending payload from wedging the widget.
-- Delivery claims without removing the payload, writes the stable event through
-  the shared logger, and completes/removes only the exact claim after Room is
-  durable. Failure releases it for retry; widget deletion force-commits first.
-  No widget retry deletes a queued Room row or changes the current loaded cart.
-- The state model is `Unavailable`, `NoCart`, `RateOff`, `Composing`, or
-  `AwaitingCommit`. The draft starts at zero, moves in ten-second steps, clamps
-  to 0..600 seconds, and enables submit only for a positive value.
-- Provider actions and workers share serialized mutation/render execution.
-  Application startup, reactive pen-state changes, and acknowledged sync work
-  refresh through a data-facing interface, removing package dependency cycles.
-- Widget app opens use activity `PendingIntent`s and one-shot `singleTop`
-  navigation events without rebuilding Compose. Copy is resource-backed;
-  accessibility descriptions include the value and action; initial, picker,
-  full, and compact layouts have explicit usable sizing and confirmation.
+- Backup and device-transfer behavior is deliberate: durable Room data and
+  preferences remain eligible, while transient cache and in-flight widget
+  arbitration state are excluded as recorded in the backup XML and ADRs.
+- Queue-integrity alerts are off by default, subordinate to background sync,
+  aggregate-only, and advisory. They cover current-episode terminal integrity
+  states and a continuously non-empty queue at least 24 hours old. Alert paths
+  cannot acknowledge, write, or delete queue rows, and an unconstrained delayed
+  check allows the 24-hour clock to mature while network-constrained sync work
+  is blocked.
+- Inventory runway and current-month spend pace are presentation-only estimates
+  derived from the existing versioned Insights response. They use the response
+  time zone, basis-specific finished-product evidence, product-specific burn
+  windows, strict month eligibility, exact Product IDs, and suppression for
+  cached, stale, changing, ambiguous, or locally incomplete snapshots.
+- Navigation classifies root width once: compact below 600dp, medium from 600dp
+  through 839dp, and expanded from 840dp. Compact uses the bottom bar;
+  medium/expanded use a rail; expanded Insights and History use shared-detail
+  40/60 panes. This is responsive large-screen behavior, not hinge-aware
+  placement.
+- History refresh and correction safety remain parent-owned across sheet and
+  pane rendering. Correction drafts/dialog state are saveable, and stale
+  responses cannot clear a newer analytics or History invalidation.
 
 ## Validation and provenance
 
-- PR #59's full gate [run 31661910965](https://github.com/noamvb/cannsheet-mobile/actions/runs/31661910965),
-  PR #60's full gate [run 31662427658](https://github.com/noamvb/cannsheet-mobile/actions/runs/31662427658),
-  and PR #61's replacement full gate [run 31664591647](https://github.com/noamvb/cannsheet-mobile/actions/runs/31664591647)
-  passed. PR #61's first API 24 attempt exposed an invalid plain `View` in
-  `RemoteViews`; the fix replaced those spacers with supported `TextView`
-  instances and the replacement run passed.
-- Version PR #62 gate [run 31665017557](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665017557)
-  passed the required checks.
-- Exact post-merge `main` validation [run 31665252525](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665252525)
-  passed all six jobs, including API 24 and API 36 emulator validation,
-  backend validation, Android static validation, classification/security, and
-  aggregate checks.
-- Signed publication [run 31665589830](https://github.com/noamvb/cannsheet-mobile/actions/runs/31665589830)
-  passed exact-main proof, protected signing, version-code monotonicity,
-  unit tests/lint, signed build, signature and metadata checks, checksum,
-  public publication, and post-publication verification.
-- Feature PR gate [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764)
-  passed all six jobs after the API 24 renderer fix.
-- Historical v1.2.25 version PR gate [run 31621733498](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621733498)
-  passed all required jobs.
-- Historical v1.2.25 exact post-merge `main` validation [run 31622170237](https://github.com/noamvb/cannsheet-mobile/actions/runs/31622170237)
-  passed all six jobs, including API 24 and API 36 emulator validation,
-  backend validation, Android static validation, classification/security, and
-  aggregate checks.
-- Historical v1.2.25 signed publication [run 31622788837](https://github.com/noamvb/cannsheet-mobile/actions/runs/31622788837)
-  passed exact-main proof, signed build, signature verification, checksum,
-  public publication, and post-publication verification.
-- Local v1.2.27 release-branch validation passed with JDK 17.0.20, Android
-  platform 36.1, and Build Tools 36.0.0. The exact command was
-  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`;
-  it completed with `BUILD SUCCESSFUL`, 186 JVM tests, zero failures/errors/
-  skips, Android-test Kotlin compilation, lint, and debug APK assembly. Local
-  `git diff --check` also passed. The GitHub Actions matrix above is the
-  authoritative CI and emulator evidence.
-- PR #55 local validation passed with JDK 17.0.20, Android platform 36.1, and
-  Build Tools 36.0.0. The exact command was
-  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`;
-  it completed with `BUILD SUCCESSFUL`, 186 passing JVM tests, Android-test
-  Kotlin compilation, lint, and debug APK assembly. All eight checked-in Node.js
-  backend suites passed using the bundled Node runtime, and the Python backend
-  benchmark passed all 13 tests. The first JavaScript attempt found no `node` on
-  the shell PATH and executed no suites; the explicit bundled-runtime rerun is
-  the passing evidence.
-- Source previews and CI widget renderer/state tests are available. No
-  production-device widget screenshot or action walkthrough was performed.
-- PR #55 adds a generated representative picker preview, but no physical
-  launcher sizing/action walkthrough, emulator instrumentation execution, or
-  production widget submission was run. Android instrumentation source compiled
-  in the local gate and is not being described as executed device coverage.
+- Each source merge listed in `docs/PROJECT_STATE.md` passed its exact-main
+  classification/security, backend, Android static, API 24, API 36, and
+  aggregate workflow. Documentation PR #72 exact-main
+  [run 31731518220](https://github.com/noamvb/cannsheet-mobile/actions/runs/31731518220)
+  passed the same six jobs.
+- The version-only local gate used JDK 17, Android platform 36.1, and Build
+  Tools 36.0.0:
+  `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+  It completed with `BUILD SUCCESSFUL` in 6m30s; 333 JVM tests passed with zero
+  failures, errors, or skips, Android-test Kotlin compiled, lint completed, and
+  the debug APK assembled. `git diff --check` passed. The complete branch diff
+  was one file with exactly two additions and two deletions.
+- Version PR #73 gate
+  [run 31733035509](https://github.com/noamvb/cannsheet-mobile/actions/runs/31733035509)
+  passed. Exact versioned-main
+  [run 31733624463](https://github.com/noamvb/cannsheet-mobile/actions/runs/31733624463)
+  passed all six jobs in 6m59s, including API 24 and API 36.
+- Signed publication
+  [run 31734329091](https://github.com/noamvb/cannsheet-mobile/actions/runs/31734329091)
+  passed exact-SHA proof, version and monotonicity checks, unit tests/lint,
+  protected signing, release assembly, signature and metadata verification,
+  checksum creation, public publication, and post-publication verification in
+  5m53s.
+- Independent public verification checked the authored asset names, checksum,
+  package/version/SDK/launcher metadata, v2 signature, signer continuity, and
+  previous-release continuity. These checks are separate from the release
+  workflow's own post-publication verification.
 
 ## Phone state and safety boundary
 
-- The v1.2.27 update was installed in place on the intended Samsung Fold
-  running Android API 36. Before installation, the production package
-  readback reported version code `29`, version name `1.2.26`; after it reported
-  version code `30`, version name `1.2.27`.
-- The update used `adb install -r`, preserving the existing package/data
-  boundary, signing identity, package data directory, and first-install time.
-  No uninstall, data clear, downgrade, app launch, widget add, widget tap,
-  production Log/Purchase/Finish/Sync action, or synthetic production mutation
-  was performed.
-- Wireless ADB was disconnected after the final package readback, and the
-  device list was empty. The phone was explicitly returned to normal use.
-- These are package/readback facts only. CI emulator validation, source
-  previews, and production-package installation must not be described as a
-  physical widget UI walkthrough.
+- Before installation, production package readback reported version code `30`,
+  version name `1.2.27`, APK signing version 2, and the existing launcher.
+  The installed base APK matched the public v1.2.27 APK byte for byte.
+- The independently verified public v1.3.0 APK was installed in place with
+  `adb install -r`; the command returned `Success`. No uninstall, data clear,
+  downgrade, or debug-signed replacement was used.
+- After installation, readback reported version code `31`, version name
+  `1.3.0`, APK signing version 2, the same signing keyset, the same data
+  directory and data inode, and the same first-install time. Only the expected
+  package update time and APK path changed.
+- The launcher still resolved to `com.example.MainActivity` without launching
+  it. The APK pulled back after installation matched the public v1.3.0 APK byte
+  for byte and matched its published checksum.
+- The app was force-stopped after verification. Wireless ADB was disconnected,
+  the final device list was empty, and the phone was explicitly returned to
+  normal use.
+- No app screen was launched; no notification permission or channel was
+  touched; no widget was added or tapped; and no Log, Purchase, Finish,
+  correction, queue, sync, or spreadsheet action was performed. This is
+  production-package installation/readback evidence, not a physical UI or
+  feature walkthrough. No screenshot or recording is claimed.
 
-## Recommended next action
+## Recommended next actions
 
-The v1.2.27 release is complete and its signed APK is available from the public
-release assets for Obtainium. If physical widget visual/action coverage is desired,
-build or obtain a separate sandbox/debug package with a non-production endpoint
-and test only that package: light/dark rendering, launcher sizing, +/- controls,
-reset, countdown/Undo, and all local message states. Do not use the signed
-production package for synthetic widget submissions or install a debug-signed
-APK over it.
+1. If physical v1.3 UI evidence is desired, use an isolated sandbox/debug
+   package with a non-production endpoint. Check notification grant/denial and
+   channel states, Settings routing, stale/pending runway suppression, compact
+   and rail navigation, and expanded Insights/History panes without creating a
+   production queue episode or spreadsheet write.
+2. Validate runway wording and estimates only against genuine finished-product
+   knowledge; do not manufacture production consumption history. A real
+   24-hour offline queue alert remains deliberately untested.
+3. Keep production widget visual/action checks separate. If needed, use the
+   suffixed sandbox package for light/dark rendering, launcher sizing, controls,
+   countdown/Undo, and local message states.
+4. The first genuine production correction lifecycle, real Purchase-default
+   restart behavior, and real-device analytics prefetch/wake behavior remain
+   evidence gaps. Do not fill them with synthetic production writes.
 
 ## Data-safety notes
 
-- Seconds never enter the Room schema, offline queue, Apps Script request, or
-  spreadsheet contract; only converted uses do.
-- The short-lived widget payload is excluded from backup. Claim/write/complete
-  keeps it recoverable until Room is durable, and stable-event arbitration makes
-  retries idempotent without deleting existing queued actions.
-- Existing Room migrations, immutable IDs, acknowledgement rules, retries,
-  and synchronization locking remain unchanged.
+- Queue alerts read aggregate state only and never receive queue rows or entry
+  details. Their copy contains no product names, quantities, or dates.
+- Queue persistence, immutable IDs, acknowledgement-only deletion, retries,
+  environment checks, and `CannsheetGraph.syncMutex` synchronization remain
+  unchanged.
+- Runway and spend estimates are neither persisted nor transmitted and
+  disappear when their evidence is not fresh and complete.
+- The production backend and spreadsheet were not changed or probed during
+  v1.3 implementation, release, artifact verification, or installation.
 - Public documentation intentionally omits wireless ADB serials, private local
-  paths, credentials, and signing material.
+  paths, credentials, signing material, and exact certificate digests.
 
 ## Relevant files
 
-- `app/src/main/java/com/example/widget`
-- `app/src/main/java/com/example/data/ConsumptionLogger.kt`
-- `app/src/main/java/com/example/data/sync/SyncScheduler.kt`
-- `app/src/main/java/com/example/data/sync/SyncWorker.kt`
-- `app/src/main/java/com/example/CannsheetApplication.kt`
-- `app/src/main/java/com/example/ui/CannsheetViewModel.kt`
-- `app/src/test/java/com/example/widget`
-- `app/src/androidTest/java/com/example/widget`
-- `docs/ARCHITECTURE.md`
-- `docs/DECISIONS.md`
+- `app/src/main/java/com/example/data/sync`
+- `app/src/main/java/com/example/notifications`
+- `app/src/main/java/com/example/domain/InventoryRunway.kt`
+- `app/src/main/java/com/example/ui`
+- `app/src/main/res/xml/backup_rules.xml`
+- `app/src/main/res/xml/data_extraction_rules.xml`
+- `app/src/test`
+- `app/src/androidTest`
+- `app/build.gradle.kts`
+- `.github/workflows/android-pr-checks.yml`
+- `.github/workflows/release-apk.yml`
+- `docs/V1_3_FEATURE_PLAN.md`
 - `docs/PROJECT_STATE.md`
+- `docs/DECISIONS.md`
