@@ -23,6 +23,7 @@ import com.example.data.SyncOutcome
 import com.example.data.SyncPayload
 import com.squareup.moshi.Moshi
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import okhttp3.MediaType.Companion.toMediaType
@@ -31,6 +32,7 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -60,8 +62,41 @@ class SyncWorkerTest {
         val result = worker(runtime).doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(1, runtime.observeQueueDepthCalls)
         assertEquals(0, runtime.runCalls)
         assertTrue(runtime.recordedResults.isEmpty())
+    }
+
+    @Test
+    fun queueDepthObservationFailureDoesNotBlockQueueWork() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.NothingToSync,
+            observeQueueDepthError = IllegalStateException("watermark failed"),
+        )
+
+        val result = worker(runtime).doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertEquals(1, runtime.observeQueueDepthCalls)
+        assertEquals(1, runtime.runCalls)
+    }
+
+    @Test
+    fun queueDepthObservationCancellationCancelsTheWorker() = runBlocking {
+        val runtime = FakeRuntime(
+            result = BackgroundSyncRunResult.NothingToSync,
+            observeQueueDepthError = CancellationException("cancelled"),
+        )
+
+        try {
+            worker(runtime).doWork()
+            fail("CancellationException should escape")
+        } catch (_: CancellationException) {
+            // Expected.
+        }
+
+        assertEquals(1, runtime.observeQueueDepthCalls)
+        assertEquals(0, runtime.runCalls)
     }
 
     @Test
@@ -328,13 +363,20 @@ class SyncWorkerTest {
     private class FakeRuntime(
         private val enabled: Boolean = true,
         private val result: BackgroundSyncRunResult,
+        private val observeQueueDepthError: Throwable? = null,
         private val prefetchError: Throwable? = null,
         private val refreshWidgetError: Throwable? = null,
     ) : BackgroundSyncWorkerRuntime {
+        var observeQueueDepthCalls = 0
         var runCalls = 0
         var prefetchCalls = 0
         var refreshWidgetCalls = 0
         val recordedResults = mutableListOf<BackgroundSyncResult>()
+
+        override suspend fun observeQueueDepth() {
+            observeQueueDepthCalls += 1
+            observeQueueDepthError?.let { throw it }
+        }
 
         override suspend fun isEnabled(): Boolean = enabled
 
@@ -391,8 +433,13 @@ class SyncWorkerTest {
         private val runner: BackgroundSyncRunner,
     ) : BackgroundSyncWorkerRuntime {
         val recordedResults = mutableListOf<BackgroundSyncResult>()
+        var observeQueueDepthCalls = 0
         var prefetchCalls = 0
         var refreshWidgetCalls = 0
+
+        override suspend fun observeQueueDepth() {
+            observeQueueDepthCalls += 1
+        }
 
         override suspend fun isEnabled(): Boolean = true
 
