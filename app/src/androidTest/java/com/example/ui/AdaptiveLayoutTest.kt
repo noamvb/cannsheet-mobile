@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -40,8 +41,12 @@ class AdaptiveLayoutTest {
                         selectedRoute = selectedRoute,
                         onNavigate = { selectedRoute = it },
                         modifier = Modifier.requiredSize(width, 1_000.dp),
-                    ) {
-                        Box(Modifier.requiredSize(1.dp))
+                    ) { windowWidth ->
+                        Box(
+                            Modifier
+                                .requiredSize(1.dp)
+                                .testTag("adaptive-content-${windowWidth.name}"),
+                        )
                     }
                 }
             }
@@ -68,6 +73,7 @@ class AdaptiveLayoutTest {
 
         composeRule.runOnIdle { width = 900.dp }
         assertWideNavigation()
+        composeRule.onNodeWithTag("adaptive-content-EXPANDED").assertExists()
         items.forEach { screen ->
             composeRule.onNodeWithTag(AdaptiveNavigationTestTags.destination(screen.route)).assertExists()
         }
