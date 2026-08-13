@@ -320,17 +320,22 @@ class InsightsRunwayTest {
     }
 
     @Test
-    fun suppressedEstimatesRenderNeitherSurface() {
+    fun suppressedEstimatesExplainThemselvesWithoutRenderingRows() {
         composeRule.setContent {
             MaterialTheme {
                 RunwaySection(
-                    estimates = RunwayEstimateState.Suppressed,
+                    estimates = RunwayEstimateState.Suppressed(RunwaySuppressionReason.STALE_SNAPSHOT),
                     products = listOf(analyticsProduct("p1", "Blue cart")),
                 )
             }
         }
 
-        composeRule.onAllNodesWithTag(InsightsRunwayTestTags.SECTION).assertCountEquals(0)
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.SECTION).assertIsDisplayed()
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.SUPPRESSION_NOTICE).assertIsDisplayed()
+        composeRule.onNode(
+            hasText("Runway estimates pause until Insights refreshes from the sheet.", substring = true),
+        ).assertIsDisplayed()
+        composeRule.onAllNodesWithTag(InsightsRunwayTestTags.row("p1")).assertCountEquals(0)
         composeRule.onAllNodesWithTag(InsightsRunwayTestTags.SPEND_PROJECTION).assertCountEquals(0)
     }
 
