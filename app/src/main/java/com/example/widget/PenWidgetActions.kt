@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.example.MainActivity
+import com.example.domain.EXTRA_START_ROUTE
 
 const val ACTION_DECREMENT = "com.noamv.cannsheet.mobile.widget.DECREMENT"
 const val ACTION_INCREMENT = "com.noamv.cannsheet.mobile.widget.INCREMENT"
@@ -15,7 +16,6 @@ const val ACTION_OPEN_LOG = "com.noamv.cannsheet.mobile.widget.OPEN_LOG"
 const val ACTION_OPEN_SETTINGS = "com.noamv.cannsheet.mobile.widget.OPEN_SETTINGS"
 const val EXTRA_APP_WIDGET_ID = "com.noamv.cannsheet.mobile.widget.APP_WIDGET_ID"
 const val EXTRA_COMMIT_ID = "com.noamv.cannsheet.mobile.widget.COMMIT_ID"
-const val EXTRA_START_ROUTE = "com.noamv.cannsheet.mobile.widget.START_ROUTE"
 const val INPUT_APP_WIDGET_ID = "app_widget_id"
 const val INPUT_COMMIT_ID = "commit_id"
 

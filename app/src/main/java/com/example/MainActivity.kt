@@ -5,8 +5,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import com.example.domain.EXTRA_START_ROUTE
 import com.example.ui.CannsheetApp
-import com.example.widget.EXTRA_START_ROUTE
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow

@@ -2,7 +2,7 @@ package com.example
 
 import android.content.Intent
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.example.widget.EXTRA_START_ROUTE
+import com.example.domain.EXTRA_START_ROUTE
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
