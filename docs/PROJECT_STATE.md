@@ -54,9 +54,24 @@ Last updated: 2026-08-13
   at `c8329336a7cb766f5c44df030b8aa9707652e701` after its full API 24 PR gate
   [run 31661910965](https://github.com/noamvb/cannsheet-mobile/actions/runs/31661910965)
   passed classification, backend, Android static, emulator, and aggregate
-  validation. The second follow-up change is now staged separately for
-  cancellation robustness, stable route-flow ownership, accessibility copy,
-  and removal of the obsolete UI delegation shims.
+  validation. PR2 was squash-merged as [PR #60](https://github.com/noamvb/cannsheet-mobile/pull/60)
+  at `435ac39bd6dd3d91b8d051ed7e9c085ace6d7b07` after its full API 24 PR gate
+  [run 31662427658](https://github.com/noamvb/cannsheet-mobile/actions/runs/31662427658)
+  passed the same classification, backend, Android static, emulator, and
+  aggregate jobs. The remaining T3 sizing change is now isolated in its own
+  branch.
+- The sandbox-only Fold sizing session measured the launcher callback options
+  for the pinned sandbox widget in all four requested default placements:
+  cover portrait `300dp`, main portrait `274dp`, main landscape `259dp`, and
+  cover landscape `300dp` (`OPTION_APPWIDGET_MIN_HEIGHT` and `MAX_HEIGHT` were
+  equal in each callback). The Samsung free-grid selection surface did not
+  expose a usable minimum-resize handle for this temporary widget, so no
+  minimum-resize value is claimed. Because every observed default is above
+  `160dp`, the follow-up uses the guide's evidence-backed compact decision:
+  `minResizeHeight=110dp`, a `150dp` compact breakpoint, and an explicit
+  weighted spacer in both full and compact layouts. The probe used the
+  suffixed sandbox package with an invalid non-production endpoint, was
+  removed afterward, and did not submit a production widget action.
 - Home-screen pen widget feature [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
   was squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`; its final
   six-job gate passed in [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764).

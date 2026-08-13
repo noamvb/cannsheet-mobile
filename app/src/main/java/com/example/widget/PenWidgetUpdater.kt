@@ -35,12 +35,12 @@ object PenWidgetUpdater {
         )
         val manager = AppWidgetManager.getInstance(appContext)
         val options = manager.getAppWidgetOptions(appWidgetId)
-        val subtitleMinHeightDp = (
-            appContext.resources.getDimension(R.dimen.widget_subtitle_min_height) /
+        val compactBreakpointHeightDp = (
+            appContext.resources.getDimension(R.dimen.widget_compact_breakpoint_height) /
                 appContext.resources.displayMetrics.density
         ).toInt()
         val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
-        val compact = minHeightDp in 1 until subtitleMinHeightDp
+        val compact = minHeightDp in 1 until compactBreakpointHeightDp
         manager.updateAppWidget(
             appWidgetId,
             PenWidgetRenderer.buildRemoteViews(
