@@ -11,11 +11,36 @@ class PenWidgetTransitionsTest {
 
         assertEquals(
             PenWidgetUndoResolution.Restored(30),
-            resolveUndo(payload, "commit-1"),
+            resolveUndo(payload, "commit-1", nowMillis = 1_500L),
         )
         assertEquals(
             PenWidgetUndoResolution.NoOp,
-            resolveUndo(payload, "stale"),
+            resolveUndo(payload, "stale", nowMillis = 1_500L),
+        )
+    }
+
+    @Test
+    fun undoLosesToALiveClaimAndWinsAgainstAStaleOne() {
+        val claimed = payload().copy(
+            claimId = "owner:claim-1",
+            claimedAtEpochMillis = 1_000L,
+        )
+
+        assertEquals(
+            PenWidgetUndoResolution.NoOp,
+            resolveUndo(claimed, claimed.commitId, nowMillis = 1_500L),
+        )
+        assertEquals(
+            PenWidgetUndoResolution.Restored(claimed.seconds),
+            resolveUndo(
+                claimed,
+                claimed.commitId,
+                nowMillis = 1_000L + CLAIM_STALE_MILLIS,
+            ),
+        )
+        assertEquals(
+            PenWidgetUndoResolution.Restored(payload().seconds),
+            resolveUndo(payload(), payload().commitId, nowMillis = 1_500L),
         )
     }
 
@@ -111,7 +136,7 @@ class PenWidgetTransitionsTest {
     @Test
     fun undoThenCommitHasNoPayload() {
         val payload = payload()
-        val undone = resolveUndo(payload, payload.commitId)
+        val undone = resolveUndo(payload, payload.commitId, nowMillis = 10_000L)
         val afterUndo = if (undone is PenWidgetUndoResolution.Restored) null else payload
 
         assertEquals(

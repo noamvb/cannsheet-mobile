@@ -67,6 +67,18 @@ class PenWidgetStateRepositoryTest {
     }
 
     @Test
+    fun undoCannotStealAClaimedPayload() = runBlocking {
+        val payload = payload()
+        repository.submitCommit(21, payload)
+        val claim = repository.claimCommit(21, payload.commitId, nowMillis = 10_000L)
+        assertTrue(claim != null)
+
+        assertFalse(repository.undo(21, payload.commitId, nowMillis = 10_100L))
+        assertEquals(payload.commitId, repository.read(21).pendingCommit?.commitId)
+        assertEquals(0, repository.read(21).draftSeconds)
+    }
+
+    @Test
     fun submitBuilderCapturesTheDraftInsideTheAtomicEdit() = runBlocking {
         repository.adjustDraftSeconds(8, STEP_SECONDS)
         repository.adjustDraftSeconds(8, STEP_SECONDS)

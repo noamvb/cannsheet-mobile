@@ -29,6 +29,27 @@ Last updated: 2026-08-13
   version code `29`, and version name `1.2.26`; local `apksigner verify`
   confirms the v2 signature. Obtainium can discover the public release asset
   from the releases repository; no production phone or ADB action was used.
+
+## Pen widget follow-up implementation (unreleased)
+
+- The follow-up guide is based on `00f7860`, the current v1.2.26 `main` tip.
+  The guide names `docs/WIDGET_FOLLOWUP_PLAN.md`, but that file is not present
+  on the base checkout or its review branch; `docs/WIDGET_REVIEW_PLAN.md` is
+  the canonical in-repository review and resolution record.
+- The first follow-up change moves undo-versus-claim arbitration into
+  `resolveUndo`: a live claim cannot be restored, while a stale claim remains
+  undoable for process-death recovery. The repository threads an injectable
+  clock through `undo`, and the action-routing seam tests this rule without a
+  live broadcast dispatch.
+- The provider now preserves the existing `flushOverdue` → route → render
+  ordering while delegating mutation routing to `PenWidgetActionRouter`. The
+  seam covers final-draft capture, live-claim undo, pre-claim undo, invalid
+  loaded-pen/rate states, and reset behavior. Open-app actions remain outside
+  `HANDLED_ACTIONS`.
+- This follow-up has not changed the Room schema, queue payloads, Apps Script
+  contract, endpoint, package ID, or release metadata. The latest published
+  release remains v1.2.26 until the complete follow-up is merged and the
+  separately requested versioned release is gated.
 - Home-screen pen widget feature [PR #52](https://github.com/noamvb/cannsheet-mobile/pull/52)
   was squash-merged as `0e9bb650de7c9a3d7d629f20bedda5857528770b`; its final
   six-job gate passed in [run 31621145764](https://github.com/noamvb/cannsheet-mobile/actions/runs/31621145764).

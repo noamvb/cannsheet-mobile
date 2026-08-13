@@ -1,6 +1,7 @@
 package com.example.widget
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -78,7 +79,11 @@ class PenWidgetStateRepository internal constructor(
         return result
     }
 
-    /** Captures a payload and clears the draft in the same transaction. */
+    /**
+     * Test-only. Production must use the [submitCommit] overload that builds the payload inside
+     * the edit, so a concurrent increment cannot be applied and then discarded.
+     */
+    @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     suspend fun submitCommit(appWidgetId: Int, payload: PenWidgetCommitPayload): Boolean {
         requireValidWidgetId(appWidgetId)
         var accepted = false
@@ -128,13 +133,18 @@ class PenWidgetStateRepository internal constructor(
      * DataStore edit, rather than WorkManager cancellation, arbitrates undo vs commit. Exactly one
      * caller can observe the matching pending payload; the other caller becomes a no-op.
      */
-    suspend fun undo(appWidgetId: Int, commitId: String): Boolean {
+    suspend fun undo(
+        appWidgetId: Int,
+        commitId: String,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): Boolean {
         requireValidWidgetId(appWidgetId)
         var restored = false
         dataStore.edit { preferences ->
             when (val resolution = resolveUndo(
                 PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]),
                 commitId,
+                nowMillis,
             )) {
                 is PenWidgetUndoResolution.Restored -> {
                     preferences.remove(pendingKey(appWidgetId))

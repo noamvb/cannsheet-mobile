@@ -497,7 +497,10 @@ historical rationale.
      commit path, one unique WorkManager request as the durable backstop, and
      lazy overdue flushing on broadcasts and application startup as recovery.
      Every delivery tier must use the same DataStore arbitration boundary;
-     cancelling work is an optimization.
+     cancelling work is an optimization. Undo loses to a live DataStore claim
+     and may restore only an unclaimed or stale-claimed payload. The process-local
+     `WidgetWorkSerializer` orders the known provider and worker entry points but
+     is not the correctness boundary.
   4. Reuse the shared loaded-cart and logging boundaries, refresh the widget
      after relevant view-model, provider, startup, and acknowledged-sync events,
      and add no Room migration, queue field, network endpoint, or Apps Script
@@ -513,7 +516,10 @@ historical rationale.
   short-lived local pending payload. The payload is excluded from backup. A
   future physical visual/action walkthrough must use a
   separate sandbox/debug package; the v1.2.25 production install was verified
-  by package/readback only and no production widget action was submitted.
+  by package/readback only and no production widget action was submitted. The
+  follow-up arbitration rule is claim-based: the mutex preserves ordering for
+  current-process callers, but a live claim itself prevents undo from restoring
+  a payload while its Room write is in flight.
 - Related files: `app/src/main/java/com/example/widget/PenConsumptionWidgetProvider.kt`,
   `app/src/main/java/com/example/widget/PenWidgetCommitCoordinator.kt`,
   `app/src/main/java/com/example/widget/PenWidgetCommitWorker.kt`,
