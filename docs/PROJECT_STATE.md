@@ -677,9 +677,6 @@ Local and device evidence:
 
 ## Known limitations
 
-- `app/src/main/res/xml/backup_rules.xml` and
-  `app/src/main/res/xml/data_extraction_rules.xml` remain sample/template rules;
-  the latter contains a backup-selection TODO.
 - The Kotlin namespace remains `com.example` while the application ID is
   `com.noamv.cannsheet.mobile`; `README.md` records this as an intentional
   source-layout compatibility choice.
