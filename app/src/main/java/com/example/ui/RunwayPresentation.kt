@@ -48,7 +48,6 @@ sealed interface RunwayEstimateState {
         val evidenceByType: Map<String, TypeCapacityEvidence>,
         val spendRunRate: SpendRunRate?,
         val diagnostics: List<RunwayDiagnostic>,
-        val selectedRangeDayCount: Int = Int.MAX_VALUE,
     ) : RunwayEstimateState
 }
 
@@ -171,7 +170,6 @@ internal fun deriveRunwayPresentationState(
             evidenceByType = evidenceByType,
             spendRunRate = projectCurrentMonthSpend(data, nowEpochMillis),
             diagnostics = diagnostics,
-            selectedRangeDayCount = data.range.dayCount,
         ),
     )
 }
