@@ -155,3 +155,8 @@ Before declaring work complete or transferring it to another account/session:
 
 Use `.agents/skills/project-handoff/SKILL.md` when preparing a formal
 cross-account or cross-session handoff.
+
+Use `.agents/skills/ship-release/SKILL.md` when the task explicitly requests
+release work — that skill carries the branch, validation, exact-SHA main proof,
+version bump, tag, publication, and phone-update steps, including the
+requirements that make a tag publishable.
