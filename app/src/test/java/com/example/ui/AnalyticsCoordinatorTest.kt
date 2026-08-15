@@ -764,6 +764,49 @@ class AnalyticsCoordinatorTest {
     }
 
     @Test
+    fun markStaleDuringColdCacheLoadResultsInExactlyOneAnalyticsFetch() = runBlocking {
+        // Regression test for v1.3.3 Fix 5: before the fix, loadInsightsCacheThenRefresh
+        // left isInitialLoading and isRefreshing both false until its coroutine actually
+        // ran. A markStale() landing in that window passed refreshInsightsIfNeeded's
+        // guard and started its own refreshInsights() call, which the cache-load
+        // coroutine's own refreshInsights() call then cancelled and replaced --
+        // wasting one Apps Script read. The fix claims isRefreshing synchronously
+        // before the coroutine is scheduled, so markStale() sees the guard held.
+        val cacheGate = CompletableDeferred<Unit>()
+        val repository = ControlledAnalyticsDataSource(insightsCacheGate = cacheGate)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+            coordinator.markStale()
+
+            // Let the cache-load coroutine reach (and suspend on) the gated cache
+            // read, and let any refresh markStale() incorrectly started run up to
+            // its own network await -- both are ready coroutines at this point.
+            repeat(5) { yield() }
+
+            // Unblock the cache read. Before the fix, this is where the cache-load
+            // coroutine's own refreshInsights() call cancels-and-replaces the
+            // refresh markStale() already started.
+            cacheGate.complete(Unit)
+            repeat(5) { yield() }
+
+            assertEquals(
+                "markStale() arriving during the cache load must not cause a second fetch",
+                1,
+                repository.insightsFetchCount,
+            )
+
+            val request = repository.nextInsightsRequest()
+            request.response.complete(insightsResponse(generatedAtEpochMillis = 1_700_000_000_000L))
+            awaitState { coordinator.insights.value.data != null }
+            assertFalse(repository.hasQueuedInsightsRequest())
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
     fun warmStartOnInsightsScreenEmitsCacheImmediatelyWithoutBlockingLoader() = runBlocking {
         val cached = insightsResponse(
             scope = "DEFAULT",
@@ -1270,6 +1313,10 @@ class AnalyticsCoordinatorTest {
     private class ControlledAnalyticsDataSource(
         private val cachedInsights: InsightsResponseDto? = null,
         private val cachedHistory: HistoryResponseDto? = null,
+        // When set, readCachedInsights() suspends here before returning, so a
+        // test can control exactly when the cache-load coroutine reaches (and
+        // completes) its cache read relative to other coordinator calls.
+        private val insightsCacheGate: CompletableDeferred<Unit>? = null,
     ) : AnalyticsDataSource {
         private val historyRequests = Channel<HistoryRequest>(Channel.UNLIMITED)
         private val insightsRequests = Channel<InsightsRequest>(Channel.UNLIMITED)
@@ -1277,8 +1324,11 @@ class AnalyticsCoordinatorTest {
             private set
         var cachedHistoryReadCount = 0
             private set
+        var insightsFetchCount = 0
+            private set
 
         override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto {
+            insightsFetchCount += 1
             val response = CompletableDeferred<InsightsResponseDto>()
             insightsRequests.send(InsightsRequest(range, response))
             return response.await()
@@ -1299,6 +1349,7 @@ class AnalyticsCoordinatorTest {
         ) = Unit
 
         override suspend fun readCachedInsights(): InsightsResponseDto? {
+            insightsCacheGate?.await()
             cachedInsightsReadCount += 1
             return cachedInsights
         }

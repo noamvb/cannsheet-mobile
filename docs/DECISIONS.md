@@ -818,3 +818,112 @@ historical rationale.
   `app/src/test/java/com/example/data/AnalyticsDataTest.kt`,
   `docs/ARCHITECTURE.md`
 
+## ADR-022: Correctness fixes for the v1.3.2 analytics caching fast path
+
+- Status: Accepted; implemented in v1.3.3.
+- Date: 2026-08-15
+- Context: A review of ADR-021's v1.3.2 implementation, verified by running
+  probes against the project's own fake Apps Script runtime, found three real
+  defects and one inaccurate claim:
+  1. **The watermark was never durably persisted.** `getMutationWatermark_()`
+     read `CacheService` and fell back to `PropertiesService`, but
+     `bumpMutationWatermark_()` wrote only to `CacheService`. The
+     `PropertiesService` fallback was dead code. Reproduced: read, mutate the
+     sheet and bump the watermark, read again (correct), remove the
+     watermark's cache entry, read again -- the response reverted to the
+     pre-mutation payload cached under key `w:0`. Because `CacheService`
+     entries expire after at most six hours and can be evicted earlier, this
+     was a real and not merely theoretical failure mode.
+  2. **The batch read path changed cell types relative to the sequential
+     path.** `fetchAnalyticsDataSheetsBatch_` requested
+     `dateTimeRenderOption: 'FORMATTED_STRING'`, so the Advanced Sheets
+     Values API returns date/time cells as display strings, while the
+     sequential fallback's `Range.getValues()` returns JS `Date` objects.
+     `analyticsHashValue_` types a `Date` as `{type:'date'}` and a string as
+     `{type:'string'}`, so `sourceRevision.dataVersion` differed between the
+     two paths for identical underlying data. On the client,
+     `AnalyticsState.kt`'s mid-pagination `dataVersion` guard treats that
+     mismatch as a change mid-read and calls `restartStaleCursor()`; because
+     the batch-to-sequential fallback is silent, a page 1 read on the batch
+     path followed by a page 2 fallback to the sequential path produced a
+     spurious "History changed again. Refresh to continue." error. A second,
+     related divergence existed for ordinary blank trailing cells: the
+     Advanced Sheets Values API omits trailing empty cells per row, while
+     `Range.getValues()` always pads to a full rectangular matrix with `''`;
+     unpadded, a short batch row read as `undefined` past its length where
+     the sequential row read as `''`, and `analyticsHashValue_` types `null`
+     and `string` differently. Both had to be closed for the batch and
+     sequential paths to actually agree on `dataVersion`, which was the
+     stated purpose of Decision 3 in ADR-021.
+  3. **ADR-021's consequence "Wire contracts, schema versioning, and Room
+     offline queue invariants remain completely intact" was inaccurate.** A
+     cache hit returns before `readAnalyticsSnapshot_`, so it skips the
+     environment, schema-version, timezone, and `PENDING_APPLY` guards that a
+     cache miss enforces. Reproduced: with a pending recoverable sync apply
+     armed, an identical request returns `success` on a cache hit and
+     `BACKEND_BUSY` on a cache miss. This is a real behavioral difference
+     between the cached and live paths, not an intact invariant.
+  4. **`loadInsightsCacheThenRefresh`/`loadHistoryCacheThenRefresh` dropped
+     their synchronous state guard.** Decision 5 in ADR-021 removed the
+     synchronous `isInitialLoading = true` update (correctly, to stop the
+     blocking spinner) but did not replace it with anything, so
+     `refreshInsightsIfNeeded`/`refreshHistoryIfNeeded`'s
+     `isInitialLoading || isRefreshing` early-return guard was unheld between
+     `onInsightsVisible()`/`onHistoryVisible()` scheduling the cache-load
+     coroutine and that coroutine actually running. A `markStale()` landing
+     in that window passed the guard and started its own network refresh,
+     which the cache-load coroutine's own refresh call then cancelled and
+     replaced -- a wasted Apps Script read on every such race.
+- Decision:
+  1. `bumpMutationWatermark_()` now writes `PropertiesService` first, then
+     `CacheService`, with each write independently guarded so one failure
+     does not lose the other.
+  2. `fetchAnalyticsDataSheetsBatch_` requests `dateTimeRenderOption:
+     'SERIAL_NUMBER'` instead of `'FORMATTED_STRING'` and converts the known
+     date-typed columns (tracked per sheet in `ANALYTICS_DATE_COLUMNS_`) back
+     to `Date` objects via `dateFromSpreadsheetSerial_`, the exact inverse of
+     the existing `spreadsheetLocalDateSerial_`. Every batch-fetched row is
+     also padded to the header row's width (`padBatchRowWidth_`) before
+     normalization, so a row with trailing blank cells hashes identically on
+     both paths. `tests/fake_apps_script_runtime.js`'s
+     `getSheetValuesObject` now honors `valueRenderOption`/
+     `dateTimeRenderOption` instead of ignoring them, so this divergence is
+     now something the test suite can actually detect.
+  3. The cache-hit guard-bypass described above is kept exactly as-is. Making
+     a cache hit re-check environment/schema-version/timezone/pending-apply
+     would require a Sheets read on every request, which defeats the
+     optimization ADR-021 exists for. This is now an explicit, accepted
+     trade-off rather than an unstated gap: a cache hit can return `success`
+     in a narrow window where a cache miss would return `BACKEND_BUSY` (or
+     another guard failure), until the relevant cache entries expire (at most
+     six hours) or the watermark is bumped by a mutation.
+  4. `loadInsightsCacheThenRefresh`/`loadHistoryCacheThenRefresh` now set
+     `isRefreshing = true` (and, for insights, `isStale = true`) synchronously
+     before launching the cache-load coroutine, restoring the guard without
+     restoring the blocking spinner (the full-screen loader is gated on
+     `data == null && isInitialLoading` / `events.isEmpty() &&
+     isInitialLoading`, neither of which this touches).
+- Rationale: These are correctness fixes to behavior ADR-021 already
+  committed to, not a new design. Deferring the guard-bypass fix keeps the
+  fast path fast at the cost of the pending-apply window described above,
+  which is judged acceptable because the window is bounded by the watermark
+  and cache TTL, and the endpoint is analytics reads, not the mutation path
+  itself.
+- Consequences: The watermark survives cache eviction. The batch and
+  sequential read paths now produce byte-identical responses, including
+  `sourceRevision.dataVersion`, verified by `T1.F2.3` in
+  `tests/backend_analytics_test.js`, which runs the same request through both
+  paths and asserts full-response equality. A cache hit still bypasses the
+  environment/schema-version/timezone/`PENDING_APPLY` guards that a cache
+  miss enforces; this is accepted, not fixed, and any future work that
+  depends on those guards holding unconditionally must account for it. No
+  performance numbers are restated here: ADR-021's "<200ms" and "3-5x faster"
+  figures were never measured against the real Apps Script/Sheets backend,
+  only asserted, and this pass did not add a production measurement either.
+- Related files: `backend_additions.gs`,
+  `tests/fake_apps_script_runtime.js`,
+  `tests/backend_analytics_test.js`,
+  `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
+  `tests/run_e2e_verification.sh`
+

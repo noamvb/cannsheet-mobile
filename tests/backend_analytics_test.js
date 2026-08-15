@@ -7,9 +7,6 @@ const {
   createAppsScriptRuntime,
   deterministicUuid,
   makeSheetRows,
-  FakeCache,
-  FakeCacheService,
-  sheetsValuesBatchGet,
 } = require('./fake_apps_script_runtime');
 
 const source = fs.readFileSync('backend_additions.gs', 'utf8');
@@ -789,12 +786,17 @@ function assertNoMutation(runtime) {
 // T1.F1.1: Insights Cache Service Operations
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
   const res1 = insights(runtime);
   assert.equal(res1.success, true);
-  cache.put('insights:SANDBOX:v1:2026-03-01:2026-07-18', JSON.stringify(res1), 600);
-  const cachedStr = cache.get('insights:SANDBOX:v1:2026-03-01:2026-07-18');
-  assert.ok(cachedStr);
+  const key = runtime.context.buildAnalyticsCacheKey_(
+    'insights',
+    'SANDBOX',
+    runtime.context.getMutationWatermark_(),
+    { scope: 'CUSTOM', from: '2026-03-01', to: '2026-07-18' },
+    1,
+  );
+  const cachedStr = runtime.context.getChunkedScriptCache_(key);
+  assert.ok(cachedStr, 'insights() must populate the cache under its real key');
   const cachedObj = JSON.parse(cachedStr);
   assert.deepEqual(cachedObj.overview, res1.overview);
   assert.equal(cachedObj.sourceRevision.dataVersion, res1.sourceRevision.dataVersion);
@@ -803,11 +805,18 @@ function assertNoMutation(runtime) {
 // T1.F1.2: History Cache Service Operations
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
   const h1 = history(runtime, { limit: 10 });
   assert.equal(h1.success, true);
-  cache.put('history:SANDBOX:v1:limit10', JSON.stringify(h1), 600);
-  const cachedH = JSON.parse(cache.get('history:SANDBOX:v1:limit10'));
+  const key = runtime.context.buildAnalyticsCacheKey_(
+    'history',
+    'SANDBOX',
+    runtime.context.getMutationWatermark_(),
+    { limit: 10, cursor: '' },
+    1,
+  );
+  const cachedStr = runtime.context.getChunkedScriptCache_(key);
+  assert.ok(cachedStr, 'history() must populate the cache under its real key');
+  const cachedH = JSON.parse(cachedStr);
   assert.equal(cachedH.events.length, h1.events.length);
   assert.equal(cachedH.page.hasMore, h1.page.hasMore);
 }
@@ -815,128 +824,162 @@ function assertNoMutation(runtime) {
 // T1.F1.3: Large Response Chunking & Reassembly (>100KB)
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
   const largePayload = JSON.stringify({
     success: true,
     data: 'A'.repeat(250 * 1024),
   });
-  const CHUNK_SIZE = 90 * 1024;
-  const chunkCount = Math.ceil(largePayload.length / CHUNK_SIZE);
-  const chunks = {};
-  for (let i = 0; i < chunkCount; i++) {
-    chunks[`large_chunk_${i}`] = largePayload.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-  }
-  chunks['large_meta'] = JSON.stringify({ chunks: chunkCount, totalLength: largePayload.length });
-  cache.putAll(chunks, 600);
+  assert.ok(Buffer.byteLength(largePayload) > 250 * 1024);
 
-  const meta = JSON.parse(cache.get('large_meta'));
-  assert.equal(meta.chunks, chunkCount);
-  const retrievedKeys = Array.from({ length: meta.chunks }, (_, i) => `large_chunk_${i}`);
-  const retrieved = cache.getAll(retrievedKeys);
-  let reassembled = '';
-  for (let i = 0; i < meta.chunks; i++) {
-    reassembled += retrieved[`large_chunk_${i}`];
-  }
+  const key = 'chunk-roundtrip-key';
+  const putOk = runtime.context.putChunkedScriptCache_(key, largePayload, 600);
+  assert.equal(putOk, true);
+  const reassembled = runtime.context.getChunkedScriptCache_(key);
   assert.equal(reassembled, largePayload);
   const parsed = JSON.parse(reassembled);
   assert.equal(parsed.success, true);
   assert.equal(parsed.data.length, 250 * 1024);
+
+  // A missing chunk must fail closed rather than return a truncated payload.
+  const cache = runtime.context.CacheService.getScriptCache();
+  const manifest = JSON.parse(cache.get(key + ':m'));
+  assert.ok(
+    manifest.chunks > 1,
+    'a >250KB payload at a 90000-byte chunk size must span multiple chunks',
+  );
+  cache.remove(key + ':c:0');
+  assert.equal(runtime.context.getChunkedScriptCache_(key), null);
+
+  // A manifest whose declared length disagrees with the reassembled length
+  // must also fail closed instead of returning corrupted data.
+  const key2 = 'chunk-length-mismatch-key';
+  runtime.context.putChunkedScriptCache_(key2, largePayload, 600);
+  const manifest2 = JSON.parse(cache.get(key2 + ':m'));
+  manifest2.len = manifest2.len + 1;
+  cache.put(key2 + ':m', JSON.stringify(manifest2), 600);
+  assert.equal(runtime.context.getChunkedScriptCache_(key2), null);
 }
 
 // T1.F1.4: Query Parameter Key Differentiation
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
+  const wm = runtime.context.getMutationWatermark_();
+  const key30 = runtime.context.buildAnalyticsCacheKey_(
+    'insights', 'SANDBOX', wm, { scope: 'CUSTOM', from: '2026-06-18', to: '2026-07-18' }, 1,
+  );
+  const key90 = runtime.context.buildAnalyticsCacheKey_(
+    'insights', 'SANDBOX', wm, { scope: 'CUSTOM', from: '2026-04-18', to: '2026-07-18' }, 1,
+  );
+  const keyAll = runtime.context.buildAnalyticsCacheKey_(
+    'insights', 'SANDBOX', wm, { scope: 'ALL', from: null, to: '2026-07-18' }, 1,
+  );
+  const keySame = runtime.context.buildAnalyticsCacheKey_(
+    'insights', 'SANDBOX', wm, { scope: 'CUSTOM', from: '2026-06-18', to: '2026-07-18' }, 1,
+  );
+  assert.notEqual(key30, key90, 'different ranges must produce different cache keys');
+  assert.notEqual(key30, keyAll, 'different scopes must produce different cache keys');
+  assert.notEqual(key90, keyAll);
+  assert.equal(key30, keySame, 'identical inputs must produce the identical cache key');
+
   const r30 = insights(runtime, { from: '2026-06-18', to: '2026-07-18' });
   const r90 = insights(runtime, { from: '2026-04-18', to: '2026-07-18' });
-  const rAll = insights(runtime, { scope: 'all' });
-  cache.put('insights:30d', JSON.stringify(r30));
-  cache.put('insights:90d', JSON.stringify(r90));
-  cache.put('insights:all', JSON.stringify(rAll));
-  assert.notEqual(cache.get('insights:30d'), cache.get('insights:90d'));
-  assert.notEqual(cache.get('insights:30d'), cache.get('insights:all'));
+  const rAll = get(runtime, {
+    resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX', scope: 'all',
+  });
+  assert.equal(r30.success, true);
+  assert.equal(r90.success, true);
+  assert.equal(rAll.success, true);
+  assert.ok(runtime.context.getChunkedScriptCache_(key30), 'the 30-day range must be cached under its real key');
+  assert.ok(runtime.context.getChunkedScriptCache_(key90), 'the 90-day range must be cached under its real key');
+  assert.ok(runtime.context.getChunkedScriptCache_(keyAll), 'the all-time scope must be cached under its real key');
 }
 
 // T1.F1.5: Version Isolation in Cache Keys
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const v1 = get(runtime, { resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX' });
-  const v2 = get(runtime, { resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX' });
-  cache.put('insights:v1:default', JSON.stringify(v1));
-  cache.put('insights:v2:default', JSON.stringify(v2));
-  const cachedV1 = JSON.parse(cache.get('insights:v1:default'));
-  const cachedV2 = JSON.parse(cache.get('insights:v2:default'));
+  const query = { scope: 'CUSTOM', from: '2026-03-01', to: '2026-07-18' };
+  const wmBefore = runtime.context.getMutationWatermark_();
+  const keyV1Before = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmBefore, query, 1);
+  const keyV2Before = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmBefore, query, 2);
+  assert.notEqual(keyV1Before, keyV2Before, 'analyticsVersion must be part of the cache key');
+
+  const wmAfter = runtime.context.bumpMutationWatermark_();
+  assert.notEqual(wmBefore, wmAfter);
+  const keyV1After = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmAfter, query, 1);
+  assert.notEqual(keyV1Before, keyV1After, 'the watermark must be part of the cache key');
+
+  const v1 = get(runtime, {
+    resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX', from: '2026-03-01', to: '2026-07-18',
+  });
+  const v2 = get(runtime, {
+    resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX', from: '2026-03-01', to: '2026-07-18',
+  });
+  assert.equal(v1.analyticsVersion, 1);
+  assert.equal(v2.analyticsVersion, 2);
+  const keyV2After = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmAfter, query, 2);
+  const cachedV1 = JSON.parse(runtime.context.getChunkedScriptCache_(keyV1After));
+  const cachedV2 = JSON.parse(runtime.context.getChunkedScriptCache_(keyV2After));
   assert.equal(cachedV1.analyticsVersion, 1);
   assert.equal(cachedV2.analyticsVersion, 2);
 }
 
 // T1.F2.1: Single-RPC Batch Read for Insights Snapshot
 {
-  const runtime = buildRuntime();
+  const runtime = buildRuntime({ enableBatchGet: true });
   runtime.resetAudit();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: [
-      'Config!A1:C',
-      'Purchases!A1:R',
-      'ConsumptionEvents!A1:M',
-      'SyncLedger!A1:H',
-    ],
-  });
-  assert.equal(batchRes.spreadsheetId, 'analytics-sheet');
-  assert.equal(batchRes.valueRanges.length, 4);
-  assert.equal(batchRes.valueRanges[0].range, 'Config!A1:C');
-  assert.ok(batchRes.valueRanges[0].values.length >= 2);
-  const batchServices = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
-  assert.equal(batchServices.length, 1);
+  const res = insights(runtime);
+  assert.equal(res.success, true);
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(batchCalls.length, 1, 'insights() must issue exactly one batchGet call');
+  const getCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.get');
+  assert.equal(getCalls.length, 0, 'insights() must not fall back to per-sheet reads when batchGet succeeds');
 }
 
 // T1.F2.2: Single-RPC Batch Read for History Snapshot
 {
-  const runtime = buildRuntime();
+  const runtime = buildRuntime({ enableBatchGet: true });
   runtime.resetAudit();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: [
-      'Config!A1:C',
-      'Purchases!A1:R',
-      'ConsumptionEvents!A1:M',
-    ],
-  });
-  assert.equal(batchRes.valueRanges.length, 3);
-  assert.equal(batchRes.valueRanges[1].range, 'Purchases!A1:R');
-  assert.equal(batchRes.valueRanges[2].range, 'ConsumptionEvents!A1:M');
+  const res = history(runtime);
+  assert.equal(res.success, true);
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(batchCalls.length, 1, 'history() must issue exactly one batchGet call');
+  const getCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.get');
+  assert.equal(getCalls.length, 0, 'history() must not fall back to per-sheet reads when batchGet succeeds');
 }
 
 // T1.F2.3: Data Structure Parity with Sequential Reads
 {
-  const runtime = buildRuntime();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: ['Purchases!A1:R', 'ConsumptionEvents!A1:M'],
-  });
-  const purchasesSheet = runtime.getSheet('Purchases');
-  const eventsSheet = runtime.getSheet('ConsumptionEvents');
-  const directPurchases = purchasesSheet.getRange('A1:R').getValues().filter(row => row.some(cell => cell !== ''));
-  const directEvents = eventsSheet.getRange('A1:M').getValues().filter(row => row.some(cell => cell !== ''));
-  assert.equal(batchRes.valueRanges[0].values.length, directPurchases.length);
-  assert.equal(batchRes.valueRanges[1].values.length, directEvents.length);
+  const batchRuntime = buildRuntime({ enableBatchGet: true });
+  const sequentialRuntime = buildRuntime();
+
+  const batchInsights = insights(batchRuntime);
+  const sequentialInsights = insights(sequentialRuntime);
+  assert.equal(batchInsights.success, true);
+  assert.equal(sequentialInsights.success, true);
+  assert.deepEqual(
+    batchInsights,
+    sequentialInsights,
+    'the batch and sequential read paths must produce byte-identical insights responses, including sourceRevision.dataVersion',
+  );
+
+  const batchHistory = history(batchRuntime, { limit: 10 });
+  const sequentialHistory = history(sequentialRuntime, { limit: 10 });
+  assert.equal(batchHistory.success, true);
+  assert.equal(sequentialHistory.success, true);
+  assert.deepEqual(
+    batchHistory,
+    sequentialHistory,
+    'the batch and sequential read paths must produce byte-identical history responses, including sourceRevision.dataVersion',
+  );
 }
 
 // T1.F2.4: Empty Sheets and Single-Row Headers in Batch
 {
-  const runtime = createAppsScriptRuntime({
-    environment: 'SANDBOX',
-    spreadsheetId: 'empty-test',
-    sheets: {
-      Config: { rows: buildConfigRows({ environment: 'SANDBOX' }) },
-      EmptySheet: { rows: [['Header1', 'Header2']] },
-    },
-  });
-  const batchRes = sheetsValuesBatchGet(runtime, 'empty-test', {
-    ranges: ['EmptySheet!A1:B'],
-  });
-  assert.equal(batchRes.valueRanges.length, 1);
-  assert.equal(batchRes.valueRanges[0].values.length, 1);
-  assert.deepEqual(batchRes.valueRanges[0].values[0], ['Header1', 'Header2']);
+  const runtime = buildRuntime({ enableBatchGet: true, ledgers: [] });
+  const res = insights(runtime);
+  assert.equal(res.success, true, res.message);
+  assert.equal(res.syncHealth.acknowledgedRequestCount30d, 0);
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(batchCalls.length, 1);
 }
 
 // T1.F2.5: Advanced Service Unavailable Fallback
@@ -951,38 +994,46 @@ function assertNoMutation(runtime) {
 // T1.F3.1: Zero Lock Acquisition on Cache Hit
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  cache.put('insights_cached', JSON.stringify({ success: true, fromCache: true }));
+  const first = insights(runtime);
+  assert.equal(first.success, true);
   runtime.resetAudit();
-  const cached = JSON.parse(cache.get('insights_cached'));
-  assert.equal(cached.fromCache, true);
+  const second = insights(runtime);
+  assert.equal(second.success, true);
+  assert.deepEqual(second, first);
   const lockCalls = runtime.audit.locks.filter(l => l.operation === 'tryLock');
-  assert.equal(lockCalls.length, 0);
+  assert.equal(lockCalls.length, 0, 'a cache hit must not acquire the analytics read lock');
 }
 
 // T1.F3.2: Lock Released Before Computation & Normalization
 {
   const runtime = buildRuntime();
-  const lock = runtime.context.LockService.getScriptLock();
-  assert.equal(lock.tryLock(5000), true);
-  assert.equal(lock.hasLock(), true);
-  lock.releaseLock();
-  assert.equal(lock.hasLock(), false);
+  const res = history(runtime);
+  assert.equal(res.success, true);
+  assert.equal(
+    runtime.lock.hasLock(),
+    false,
+    'the analytics read lock must be released once the request completes',
+  );
+  const lockCalls = runtime.audit.locks.filter(l => l.operation === 'tryLock');
+  assert.equal(lockCalls.length, 1);
+  assert.equal(lockCalls[0].acquired, true);
 }
 
 // T1.F3.3: Lock Release on Read Error in finally Block
 {
   const runtime = buildRuntime();
-  const lock = runtime.context.LockService.getScriptLock();
-  try {
-    lock.tryLock(5000);
+  const original = runtime.context.fetchAnalyticsRawData_;
+  runtime.context.fetchAnalyticsRawData_ = () => {
     throw new Error('Simulated read failure');
-  } catch (err) {
-    assert.equal(err.message, 'Simulated read failure');
+  };
+  try {
+    const res = insights(runtime);
+    assert.equal(res.success, false);
+    assert.ok(res.errorCode);
   } finally {
-    lock.releaseLock();
+    runtime.context.fetchAnalyticsRawData_ = original;
   }
-  assert.equal(lock.hasLock(), false);
+  assert.equal(runtime.lock.hasLock(), false, 'the lock must be released even when the read throws');
 }
 
 // T1.F3.4: Concurrent Read Non-Interference
@@ -1157,48 +1208,169 @@ function assertNoMutation(runtime) {
 // T1.F10.1: Cache Invalidation on doPost Purchase/Consumption Sync
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  const wmBefore = props.getProperty('MUTATION_WATERMARK') || '';
-  props.setProperty('MUTATION_WATERMARK', 'wm-new-sync-1');
-  const wmAfter = props.getProperty('MUTATION_WATERMARK');
-  assert.notEqual(wmBefore, wmAfter);
-  assert.equal(wmAfter, 'wm-new-sync-1');
+  const wmBefore = runtime.context.getMutationWatermark_();
+  const postRes = post(runtime, {
+    apiVersion: 2,
+    requestId: deterministicUuid(920001),
+    environment: 'SANDBOX',
+    purchases: [],
+    consumptions: [{
+      eventId: deterministicUuid(920002),
+      date: '2026-07-18',
+      time: '09:00:00',
+      productId: '*P1',
+      productUuid: deterministicUuid(101),
+      uses: 0.5,
+      isFinished: false,
+      weightCode: 'STANDARD',
+    }],
+    finishActions: [],
+    consumptionCorrections: [],
+  });
+  assert.equal(postRes.success, true, postRes.message);
+  const wmAfter = runtime.context.getMutationWatermark_();
+  assert.notEqual(wmBefore, wmAfter, 'a real sync mutation must change the watermark');
 }
 
 // T1.F10.2: Cache Invalidation on Consumption Correction
 {
+  // Every mutation kind (including consumption corrections) invalidates the
+  // analytics cache through the same bumpMutationWatermark_ primitive; this
+  // proves a bump forces the next read to bypass a warm cache.
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  props.setProperty('MUTATION_WATERMARK', 'wm-correction-1');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'wm-correction-1');
+  const first = history(runtime, { limit: 5 });
+  assert.equal(first.success, true);
+  runtime.resetAudit();
+  history(runtime, { limit: 5 });
+  assert.equal(runtime.audit.reads.length, 0, 'an identical request should be a cache hit');
+
+  runtime.context.bumpMutationWatermark_();
+  runtime.resetAudit();
+  const afterBump = history(runtime, { limit: 5 });
+  assert.equal(afterBump.success, true);
+  assert.ok(runtime.audit.reads.length > 0, 'a bumped watermark must force a live read');
 }
 
 // T1.F10.3: Cache Invalidation on Finish Action
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  props.setProperty('MUTATION_WATERMARK', 'wm-finish-1');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'wm-finish-1');
+  const before = insights(runtime);
+  assert.equal(before.success, true);
+  runtime.resetAudit();
+  assert.equal(insights(runtime).success, true);
+  assert.equal(runtime.audit.reads.length, 0, 'an identical request should be a cache hit');
+
+  const postRes = post(runtime, {
+    apiVersion: 2,
+    requestId: deterministicUuid(910001),
+    environment: 'SANDBOX',
+    purchases: [],
+    consumptions: [{
+      eventId: deterministicUuid(910002),
+      date: '2026-07-18',
+      time: '11:00:00',
+      productId: '*P1',
+      productUuid: deterministicUuid(101),
+      uses: 0.25,
+      isFinished: true,
+      weightCode: 'STANDARD',
+    }],
+    finishActions: [],
+    consumptionCorrections: [],
+  });
+  assert.equal(postRes.success, true, postRes.message);
+
+  runtime.resetAudit();
+  const after = insights(runtime);
+  assert.equal(after.success, true);
+  assert.ok(runtime.audit.reads.length > 0, 'a finish-triggering mutation must force a live read');
+  assert.notEqual(after.sourceRevision.dataVersion, before.sourceRevision.dataVersion);
 }
 
 // T1.F10.4: Global Multi-Query Invalidation
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  cache.put('wm:current', 'wm-1', 600);
-  cache.put('insights:30d', JSON.stringify({ range: '30d' }), 600);
-  cache.put('insights:90d', JSON.stringify({ range: '90d' }), 600);
-  props.setProperty('MUTATION_WATERMARK', 'wm-2');
-  assert.notEqual(cache.get('wm:current'), props.getProperty('MUTATION_WATERMARK'));
+  assert.equal(insights(runtime).success, true);
+  assert.equal(history(runtime, { limit: 5 }).success, true);
+  runtime.resetAudit();
+  assert.equal(insights(runtime).success, true);
+  assert.equal(history(runtime, { limit: 5 }).success, true);
+  assert.equal(runtime.audit.reads.length, 0, 'both resources should be served from cache');
+
+  runtime.context.bumpMutationWatermark_();
+  runtime.resetAudit();
+  assert.equal(insights(runtime).success, true);
+  assert.equal(history(runtime, { limit: 5 }).success, true);
+  assert.ok(
+    runtime.audit.reads.length > 0,
+    'a single watermark bump must invalidate both the insights and history caches',
+  );
 }
 
 // T1.F10.5: Watermark Persistence in ScriptProperties
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  props.setProperty('MUTATION_WATERMARK', 'uuid-watermark-100');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'uuid-watermark-100');
+  const returned = runtime.context.bumpMutationWatermark_();
+  assert.ok(returned);
+  const persisted = runtime.context.PropertiesService.getScriptProperties()
+    .getProperty('MUTATION_WATERMARK');
+  assert.ok(persisted, 'bumpMutationWatermark_ must persist to ScriptProperties, not only CacheService');
+  assert.equal(persisted, returned);
+}
+
+// REGRESSION: MUTATION_WATERMARK survives a CacheService eviction (v1.3.3 Fix 1).
+// Before Fix 1, bumpMutationWatermark_ wrote only to CacheService; once that
+// cache entry expired (at most 6h TTL) or was evicted early, getMutationWatermark_
+// silently reverted to '0' and a stale pre-mutation response cached under key
+// w:0 was served again even though the underlying sheet had since changed.
+{
+  const runtime = buildRuntime();
+  const before = insights(runtime);
+  assert.equal(before.success, true);
+  const alphaBefore = before.products.find(product => product.productId === '*P1');
+  assert.equal(alphaBefore.name, 'Alpha');
+
+  runtime.getSheet('Purchases').getRange(2, 3).setValue('Alpha-RENAMED');
+  runtime.context.bumpMutationWatermark_();
+  const afterRename = insights(runtime);
+  assert.equal(afterRename.success, true);
+  assert.ok(afterRename.products.some(product => product.name === 'Alpha-RENAMED'));
+
+  // Simulate the watermark's CacheService entry expiring or being evicted.
+  runtime.context.CacheService.getScriptCache().remove('MUTATION_WATERMARK');
+  const afterEviction = insights(runtime);
+  assert.equal(afterEviction.success, true);
+  assert.ok(
+    afterEviction.products.some(product => product.name === 'Alpha-RENAMED'),
+    'the watermark must survive a CacheService eviction via the ScriptProperties fallback',
+  );
+}
+
+// REGRESSION: dateFromSpreadsheetSerial_ is the exact inverse of
+// spreadsheetLocalDateSerial_ (v1.3.3 Fix 2), including across a DST
+// transition in America/New_York. The batch read path relies on this to
+// convert Sheets SERIAL_NUMBER values back into Date objects so batch and
+// sequential reads type date cells identically for analyticsHashValue_.
+{
+  const runtime = buildRuntime();
+  const dates = [
+    new Date('2026-01-15T18:30:00Z'),
+    new Date('2026-03-08T05:00:00Z'), // just before the spring-forward transition (still EST)
+    new Date('2026-03-08T10:00:00Z'), // just after the spring-forward transition (now EDT)
+    new Date('2026-07-04T16:00:00Z'),
+    new Date('2026-11-01T04:00:00Z'), // just before the fall-back transition (still EDT)
+    new Date('2026-11-01T09:00:00Z'), // just after the fall-back transition (now EST)
+    new Date('2026-12-31T23:59:59Z'),
+  ];
+  dates.forEach(date => {
+    const serial = runtime.context.spreadsheetLocalDateSerial_(date);
+    const roundTripped = runtime.context.dateFromSpreadsheetSerial_(serial);
+    assert.equal(
+      Math.round(roundTripped.getTime() / 1000),
+      Math.round(date.getTime() / 1000),
+      `dateFromSpreadsheetSerial_(spreadsheetLocalDateSerial_(${date.toISOString()})) must round-trip to the second`,
+    );
+  });
 }
 
 // === TIER 2: BOUNDARY & CORNER CASES (30 TESTS) ===
@@ -1206,22 +1378,26 @@ function assertNoMutation(runtime) {
 // T2.F1.1: Exact Chunk Size Boundary Splitting
 {
   const runtime = buildRuntime();
+  const { CANN } = runtime.loadSource('', { filename: 'probe.gs', exports: ['CANN'] });
+  const exactlyTwoChunks = 'B'.repeat(CANN.CACHE_CHUNK_SIZE * 2);
+  const key = 'exact-boundary-key';
+  assert.equal(runtime.context.putChunkedScriptCache_(key, exactlyTwoChunks, 600), true);
   const cache = runtime.context.CacheService.getScriptCache();
-  const chunk100k = 'B'.repeat(100 * 1024);
-  cache.put('chunk_100k', chunk100k, 600);
-  assert.equal(cache.get('chunk_100k'), chunk100k);
+  const manifest = JSON.parse(cache.get(key + ':m'));
+  assert.equal(
+    manifest.chunks,
+    2,
+    'a payload exactly 2x the chunk size must split into exactly 2 whole chunks',
+  );
+  assert.equal(runtime.context.getChunkedScriptCache_(key), exactlyTwoChunks);
 }
 
 // T2.F1.2: Corrupted / Partial Chunk Eviction Recovery
-{
-  const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  cache.put('part_1', 'chunk1', 600);
-  // part_2 is omitted/evicted
-  const parts = cache.getAll(['part_1', 'part_2']);
-  assert.equal(parts.part_1, 'chunk1');
-  assert.equal(parts.part_2, undefined);
-}
+//
+// Deleted: this asserted only against a hand-rolled FakeCache key
+// ('part_1'/'part_2'), never calling getChunkedScriptCache_. The real
+// missing-chunk behavior (getChunkedScriptCache_ returning null when a chunk
+// is evicted) is now covered for real in the T1.F1.3 rewrite above.
 
 // T2.F1.3: Zero-Data Caching
 {
@@ -1235,59 +1411,77 @@ function assertNoMutation(runtime) {
 // T2.F1.4: Key Length & Special Character Sanitization
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const longParam = 'q'.repeat(80);
-  const key = `history:SANDBOX:v1:${longParam}`;
-  assert.ok(key.length <= 250);
-  cache.put(key, '{"events":[]}', 600);
-  assert.equal(cache.get(key), '{"events":[]}');
+  const longQuery = 'q'.repeat(80); // CANN.HISTORY_MAX_QUERY_LENGTH
+  const key = runtime.context.buildAnalyticsCacheKey_(
+    'history',
+    'SANDBOX',
+    runtime.context.getMutationWatermark_(),
+    { limit: 50, cursor: '', q: longQuery },
+    1,
+  );
+  assert.ok(
+    key.length <= 250,
+    `cache key length ${key.length} must stay within the 250-char CacheService key limit`,
+  );
+
+  const res = history(runtime, { q: longQuery });
+  assert.equal(res.success, true);
+  assert.ok(runtime.context.getChunkedScriptCache_(key));
 }
 
 // T2.F1.5: CacheService Quota / Exception Graceful Fallback
 {
   const runtime = buildRuntime();
+  const { CANN } = runtime.loadSource('', { filename: 'probe.gs', exports: ['CANN'] });
+  // CACHE_CHUNK_SIZE must stay safely under the ~100KB per-item quota that
+  // FakeCache.put enforces (mirroring the real CacheService), or
+  // putChunkedScriptCache_ would throw instead of gracefully splitting.
+  assert.ok(CANN.CACHE_CHUNK_SIZE < 100 * 1024);
+
   const cache = runtime.context.CacheService.getScriptCache();
-  // Attempting to put value > 100KB directly throws
   assert.throws(() => {
     cache.put('too_large', 'X'.repeat(101 * 1024));
   }, /Cache value exceeds 100KB/);
+
+  // A payload right at the maximum chunk-count boundary must still round-trip.
+  const maxPayload = 'Y'.repeat(CANN.CACHE_CHUNK_SIZE * CANN.CACHE_MAX_CHUNKS);
+  assert.equal(runtime.context.putChunkedScriptCache_('max-chunks-key', maxPayload, 600), true);
+  assert.equal(runtime.context.getChunkedScriptCache_('max-chunks-key'), maxPayload);
+
+  // One byte more must exceed CACHE_MAX_CHUNKS and fail closed rather than throw.
+  const tooManyChunks = maxPayload + 'Z';
+  assert.equal(runtime.context.putChunkedScriptCache_('too-many-chunks-key', tooManyChunks, 600), false);
 }
 
 // T2.F2.1: Ragged Value Arrays & Trailing Blank Normalization
-{
-  const runtime = buildRuntime();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: ['Config!A1:C'],
-  });
-  batchRes.valueRanges[0].values.forEach(row => {
-    assert.ok(Array.isArray(row));
-  });
-}
+//
+// Deleted: called the imported sheetsValuesBatchGet directly on a runtime
+// that never loaded backend_additions.gs, so it only checked the fake's own
+// per-row trailing-blank trimming (getSheetValuesObject), never reaching real
+// backend code. Every enableBatchGet:true test already exercises this
+// trimming as a side effect of reading real sheet fixtures, and the T1.F2.3
+// parity rewrite would catch any divergence it caused.
 
 // T2.F2.2: Sheet Name Quoting with Spaces and Single Quotes
-{
-  const runtime = createAppsScriptRuntime({
-    environment: 'SANDBOX',
-    spreadsheetId: 'quotes-test',
-    sheets: {
-      'Special Sheet': { rows: [['ColA', 'ColB'], ['val1', 'val2']] },
-    },
-  });
-  const batchRes = sheetsValuesBatchGet(runtime, 'quotes-test', {
-    ranges: ["'Special Sheet'!A1:B"],
-  });
-  assert.equal(batchRes.valueRanges.length, 1);
-  assert.deepEqual(batchRes.valueRanges[0].values[1], ['val1', 'val2']);
-}
+//
+// Deleted: built a runtime that never loaded backend_additions.gs and called
+// the imported sheetsValuesBatchGet directly, so it only tested the fake's
+// A1-range sheet-name-quote parsing, not backend_additions.gs. The sheets
+// fetchAnalyticsDataSheetsBatch_ actually requests (Purchases,
+// ConsumptionEvents, ConsumptionEventCorrections, SyncLedger,
+// SyncApplyJournal) are fixed constants, none of which contain a space or a
+// quote, so there is no real code path this exercised.
 
 // T2.F2.3: Missing Optional Sheet in Batch Range List
-{
-  const runtime = buildRuntime();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: ['Purchases!A1:R'],
-  });
-  assert.equal(batchRes.valueRanges.length, 1);
-}
+//
+// Deleted: called the imported sheetsValuesBatchGet directly, never reaching
+// backend_additions.gs. The scenario it intended to cover is not
+// hypothetical, though -- consumptionCorrectionCapability_ is disabled by
+// default in every buildRuntime() fixture (no CONSUMPTION_CORRECTION_SCHEMA_
+// VERSION config row), so fetchAnalyticsDataSheetsBatch_ already omits the
+// Corrections range from every enableBatchGet:true test in this file,
+// including the T1.F2.3 parity rewrite, which proves the shorter range list
+// still produces output identical to the sequential path.
 
 // T2.F2.4: Scale Dataset Batch Read Memory & Shape
 {
@@ -1311,21 +1505,29 @@ function assertNoMutation(runtime) {
     'Finished At': '',
     'Last quantity': '',
   }));
-  const runtime = buildRuntime({ purchases });
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: ['Purchases!A1:R'],
-  });
-  assert.equal(batchRes.valueRanges[0].values.length, 401);
+  const runtime = buildRuntime({ enableBatchGet: true, purchases, events: [], ledgers: [] });
+  runtime.resetAudit();
+  const res = insights(runtime);
+  assert.equal(res.success, true, res.message);
+  assert.equal(res.products.length, 400);
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(batchCalls.length, 1, 'a 400-row Purchases sheet must still be served by a single batchGet call');
 }
 
 // T2.F2.5: Batch Header Column Misalignment Detection
 {
-  const runtime = buildRuntime();
+  const runtime = buildRuntime({ enableBatchGet: true });
   const badHeaders = ['Wrong', 'Header', 'Order'];
   const badRows = [badHeaders, ['val1', 'val2', 'val3']];
   runtime.seedSheet('Purchases', badRows);
   const res = insights(runtime);
   assert.equal(res.errorCode, 'SCHEMA_MISMATCH');
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(
+    batchCalls.length,
+    1,
+    'the misaligned headers must be caught by the batch path itself, not a sequential fallback',
+  );
 }
 
 // T2.F3.1: Sustained Write Lock Timeout
@@ -1401,9 +1603,31 @@ function assertNoMutation(runtime) {
 
 // T2.F4.3: Date Type Equivalence in Hash
 {
-  const dateObj = new Date('2026-07-10T14:15:00Z');
-  const epoch = dateObj.getTime();
-  assert.equal(epoch, Date.parse('2026-07-10T14:15:00Z'));
+  const runtime = buildRuntime();
+  const instant = new Date('2026-07-10T14:15:00Z');
+  // analyticsHashValue_ runs inside the sandboxed vm context, so the plain
+  // object it returns belongs to that context's own realm; compare fields
+  // individually rather than via deepEqual against a host-realm literal,
+  // which would spuriously fail on Object.prototype identity alone.
+  const dateHash = runtime.context.analyticsHashValue_(instant);
+  assert.equal(dateHash.type, 'date');
+  assert.equal(dateHash.value, instant.getTime());
+
+  // The exact bug Fix 2 addresses: the same instant, typed as a display
+  // string instead of a Date (as the pre-fix batch path returned it), hashes
+  // differently -- which is why the batch and sequential paths previously
+  // disagreed on sourceRevision.dataVersion for identical underlying data.
+  const stringHash = runtime.context.analyticsHashValue_(instant.toISOString());
+  assert.equal(stringHash.type, 'string');
+  assert.notEqual(stringHash.type, dateHash.type);
+
+  // A second, distinctly-constructed Date for the same instant must hash
+  // identically to the first.
+  const sameInstantDifferentConstruction = new Date(Date.UTC(2026, 6, 10, 14, 15, 0));
+  assert.deepEqual(
+    runtime.context.analyticsHashValue_(sameInstantDifferentConstruction),
+    dateHash,
+  );
 }
 
 // T2.F4.4: UTF-8 Multibyte & Emoji Hashing
@@ -1492,64 +1716,124 @@ function assertNoMutation(runtime) {
 // T2.F10.2: Idempotent Duplicate doPost Preserves Cache
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  props.setProperty('MUTATION_WATERMARK', 'idem-watermark');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'idem-watermark');
+  const before = insights(runtime);
+  assert.equal(before.success, true);
+
+  const payload = {
+    apiVersion: 2,
+    requestId: deterministicUuid(930001),
+    environment: 'SANDBOX',
+    purchases: [],
+    consumptions: [{
+      eventId: deterministicUuid(930002),
+      date: '2026-07-18',
+      time: '08:00:00',
+      productId: '*P1',
+      productUuid: deterministicUuid(101),
+      uses: 0.5,
+      isFinished: false,
+      weightCode: 'STANDARD',
+    }],
+    finishActions: [],
+    consumptionCorrections: [],
+  };
+  const first = post(runtime, payload);
+  assert.equal(first.success, true, first.message);
+  const afterFirst = insights(runtime);
+  assert.equal(afterFirst.overview.logCount, before.overview.logCount + 1);
+
+  // Re-delivering the identical request (same requestId/eventId) must be a
+  // no-op, not a second logged event -- that is what "idempotent" means for
+  // the sync endpoint, and it is what keeps a retried request safe.
+  const duplicate = post(runtime, payload);
+  assert.equal(duplicate.success, true, duplicate.message);
+  const afterDuplicate = insights(runtime);
+  assert.equal(
+    afterDuplicate.overview.logCount,
+    afterFirst.overview.logCount,
+    'a duplicate delivery must not double-count the consumption event',
+  );
 }
 
 // T2.F10.3: Burst Mutation Watermark Updates
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
+  const watermarks = [];
   for (let i = 0; i < 5; i++) {
-    props.setProperty('MUTATION_WATERMARK', `wm-burst-${i}`);
+    watermarks.push(runtime.context.bumpMutationWatermark_());
   }
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'wm-burst-4');
+  assert.equal(new Set(watermarks).size, 5, 'every bump must produce a distinct watermark');
+  assert.equal(runtime.context.getMutationWatermark_(), watermarks[watermarks.length - 1]);
 }
 
 // T2.F10.4: Initial Blank Watermark Handling
 {
   const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), null);
-  props.setProperty('MUTATION_WATERMARK', 'wm-initial');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'wm-initial');
+  assert.equal(
+    runtime.context.PropertiesService.getScriptProperties().getProperty('MUTATION_WATERMARK'),
+    null,
+  );
+  assert.equal(runtime.context.getMutationWatermark_(), '0', 'an unset watermark must default to 0');
+
+  const bumped = runtime.context.bumpMutationWatermark_();
+  assert.ok(bumped);
+  assert.equal(runtime.context.getMutationWatermark_(), bumped);
 }
 
 // T2.F10.5: Form Submission Trigger Invalidation
-{
-  const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  props.setProperty('MUTATION_WATERMARK', 'wm-form-submit-1');
-  assert.equal(props.getProperty('MUTATION_WATERMARK'), 'wm-form-submit-1');
-}
+//
+// Deleted: asserted only against a hand-set FakeScriptProperties value and
+// never invoked onFormSubmit or any other backend function, so it never
+// reached backend_additions.gs. A faithful replacement would need a full
+// Form Responses 1 row plus a matching Range/event fixture and
+// RECOVERABLE_SYNC_APPLY_VERSION handling for onFormSubmit's compatibility
+// path; the underlying invalidation primitive it gestured at
+// (bumpMutationWatermark_) already has direct regression coverage from the
+// T1.F10.5 rewrite and the T2.F10.3 rewrite above.
 
 // === TIER 3: PAIRWISE COMBINATIONS (8 HARNESS TESTS) ===
 
 // TF3-01: Backend Cache Hit & Mutation Invalidation (F1 + F10)
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  const res1 = insights(runtime);
-  props.setProperty('MUTATION_WATERMARK', 'wm-1');
-  cache.put('insights:SANDBOX:v1:wm-1', JSON.stringify(res1), 600);
-  assert.ok(cache.get('insights:SANDBOX:v1:wm-1'));
+  const query = { scope: 'CUSTOM', from: '2026-03-01', to: '2026-07-18' };
+  const wmBefore = runtime.context.getMutationWatermark_();
+  const keyBefore = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmBefore, query, 1);
 
-  // Mutate watermark
-  props.setProperty('MUTATION_WATERMARK', 'wm-2');
-  assert.equal(cache.get('insights:SANDBOX:v1:wm-2'), null);
+  const res1 = insights(runtime);
+  assert.equal(res1.success, true);
+  assert.ok(
+    runtime.context.getChunkedScriptCache_(keyBefore),
+    'insights() must populate the cache under the real key',
+  );
+
+  const wmAfter = runtime.context.bumpMutationWatermark_();
+  assert.notEqual(wmBefore, wmAfter);
+  const keyAfter = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wmAfter, query, 1);
+  assert.notEqual(keyBefore, keyAfter);
+  assert.equal(
+    runtime.context.getChunkedScriptCache_(keyAfter),
+    null,
+    'nothing is cached yet under the post-mutation key',
+  );
+
+  runtime.resetAudit();
+  const res2 = insights(runtime);
+  assert.equal(res2.success, true);
+  assert.ok(
+    runtime.audit.reads.length > 0,
+    'the bumped watermark must force a live read instead of the stale cache entry',
+  );
 }
 
 // TF3-02: Batch Range Fetching + Streamlined SHA-256 Hashing (F2 + F4)
 {
-  const runtime = buildRuntime();
-  const batchRes = sheetsValuesBatchGet(runtime, 'analytics-sheet', {
-    ranges: ['Config!A1:C', 'Purchases!A1:R', 'ConsumptionEvents!A1:M', 'SyncLedger!A1:H'],
-  });
-  assert.equal(batchRes.valueRanges.length, 4);
+  const runtime = buildRuntime({ enableBatchGet: true });
   const res = insights(runtime);
+  assert.equal(res.success, true);
   assert.match(res.sourceRevision.dataVersion, /^[0-9a-f]{64}$/);
+  const batchCalls = runtime.audit.services.filter(s => s.method === 'Spreadsheets.Values.batchGet');
+  assert.equal(batchCalls.length, 1);
 }
 
 // TF3-03: Lock Scope Contention + History Cursor Pagination (F3 + F8)
@@ -1578,13 +1862,28 @@ function assertNoMutation(runtime) {
 // TF3-10: Fast-Path Caching + Multi-Version Wire Negotiation (v1 vs v2) (F1 + F8)
 {
   const runtime = buildRuntime();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const v1 = get(runtime, { resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX' });
-  const v2 = get(runtime, { resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX' });
-  cache.put('insights:v1', JSON.stringify(v1), 600);
-  cache.put('insights:v2', JSON.stringify(v2), 600);
-  assert.equal(JSON.parse(cache.get('insights:v1')).analyticsVersion, 1);
-  assert.equal(JSON.parse(cache.get('insights:v2')).analyticsVersion, 2);
+  const query = { scope: 'CUSTOM', from: '2026-03-01', to: '2026-07-18' };
+  const wm = runtime.context.getMutationWatermark_();
+  const v1 = get(runtime, {
+    resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX', from: '2026-03-01', to: '2026-07-18',
+  });
+  const v2 = get(runtime, {
+    resource: 'insights', analyticsVersion: 2, environment: 'SANDBOX', from: '2026-03-01', to: '2026-07-18',
+  });
+  assert.equal(v1.analyticsVersion, 1);
+  assert.equal(v2.analyticsVersion, 2);
+
+  const keyV1 = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wm, query, 1);
+  const keyV2 = runtime.context.buildAnalyticsCacheKey_('insights', 'SANDBOX', wm, query, 2);
+  assert.notEqual(keyV1, keyV2);
+
+  runtime.resetAudit();
+  const v1Again = get(runtime, {
+    resource: 'insights', analyticsVersion: 1, environment: 'SANDBOX', from: '2026-03-01', to: '2026-07-18',
+  });
+  assert.equal(v1Again.analyticsVersion, 1);
+  assert.equal(runtime.audit.reads.length, 0, 'the v1 request must be served from its own cached entry');
+  assert.equal(JSON.parse(runtime.context.getChunkedScriptCache_(keyV2)).analyticsVersion, 2);
 }
 
 // TF3-12: Partial Rejection Sync + Client SyncHealth Degradation (F6 + F8)
@@ -1616,24 +1915,16 @@ function assertNoMutation(runtime) {
     'Finished At': '',
     'Last quantity': '',
   }));
-  const runtime = buildRuntime({ purchases });
+  const runtime = buildRuntime({ purchases, events: [], ledgers: [] });
   const res = insights(runtime);
-  const cache = runtime.context.CacheService.getScriptCache();
+  assert.equal(res.success, true, res.message);
   const jsonStr = JSON.stringify(res);
-  const CHUNK_SIZE = 90 * 1024;
-  const chunkCount = Math.ceil(jsonStr.length / CHUNK_SIZE);
-  const chunks = {};
-  for (let i = 0; i < chunkCount; i++) {
-    chunks[`scale_chunk_${i}`] = jsonStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-  }
-  cache.putAll(chunks, 600);
-  const keys = Array.from({ length: chunkCount }, (_, i) => `scale_chunk_${i}`);
-  const retrieved = cache.getAll(keys);
-  let reassembled = '';
-  for (let i = 0; i < chunkCount; i++) {
-    reassembled += retrieved[`scale_chunk_${i}`];
-  }
+
+  const key = 'tf3-14-scale-key';
+  assert.equal(runtime.context.putChunkedScriptCache_(key, jsonStr, 600), true);
+  const reassembled = runtime.context.getChunkedScriptCache_(key);
   assert.equal(reassembled, jsonStr);
+  assert.deepEqual(JSON.parse(reassembled), res);
 }
 
 // TF3-15: History Correction Replacement + Immediate Consistency (F8 + F9 + F10)
@@ -1647,21 +1938,14 @@ function assertNoMutation(runtime) {
 // === TIER 4: WORKLOAD SCENARIOS (2 HARNESS TESTS) ===
 
 // Scenario 2: Purchase Logging -> Cache Watermark Invalidation -> Instant Consistency
-{
-  const runtime = buildRuntime();
-  const props = runtime.context.PropertiesService.getScriptProperties();
-  const cache = runtime.context.CacheService.getScriptCache();
-  const initialInsights = insights(runtime);
-  props.setProperty('MUTATION_WATERMARK', 'wm-initial');
-  cache.put('insights:wm-initial', JSON.stringify(initialInsights), 600);
-
-  // New purchase committed
-  props.setProperty('MUTATION_WATERMARK', 'wm-after-purchase');
-  const cachedForNewWm = cache.get('insights:wm-after-purchase');
-  assert.equal(cachedForNewWm, null); // Forced fresh recalculation
-  const freshInsights = insights(runtime);
-  assert.equal(freshInsights.success, true);
-}
+//
+// Deleted: simulated "a new purchase committed" by hand-setting
+// MUTATION_WATERMARK via PropertiesService and checking an invented cache
+// key, never calling post() or bumpMutationWatermark_, so it never reached
+// backend_additions.gs. M1.3 ("Watermark Invalidation on doPost sync", below)
+// already covers this exact scenario for real: it warms the cache, performs
+// a genuine post() sync mutation, and asserts the next insights() call does a
+// live read with a changed sourceRevision.dataVersion.
 
 // Scenario 4: High-Volume Dataset (3,600 Events) Recalculation Benchmark
 {

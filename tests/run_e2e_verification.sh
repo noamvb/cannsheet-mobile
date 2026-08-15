@@ -9,7 +9,16 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 # Environment configuration
-export PATH="/Users/sophiaparis/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.14.0/bin:$PATH"
+#
+# Prefer a node already on PATH. Only fall back to this machine's Raycast
+# runtime, and only when that directory actually exists, so the script still
+# runs on a machine without it instead of silently prepending a dead path.
+if ! command -v node >/dev/null 2>&1; then
+  RAYCAST_NODE_BIN="/Users/sophiaparis/Library/Application Support/com.raycast.macos/NodeJS/runtime/22.14.0/bin"
+  if [ -d "${RAYCAST_NODE_BIN}" ]; then
+    export PATH="${RAYCAST_NODE_BIN}:$PATH"
+  fi
+fi
 export ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 

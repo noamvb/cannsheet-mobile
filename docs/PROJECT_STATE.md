@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 ## Repository state
 
@@ -23,6 +23,62 @@ The v1.3.2 release addressed multi-minute analytics and history refresh latencie
 |---|---|---|---|
 | Optimize Insights and History refresh performance across backend and client | [#83](https://github.com/noamvb/cannsheet-mobile/pull/83) | `0462e3895e54d588523c932dcbbfaebca014ef04` | [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672) |
 | Version metadata bump to 1.3.2 (versionCode 33) | [#84](https://github.com/noamvb/cannsheet-mobile/pull/84) | `9118da294c65e8d89a4214f4946399ba0928929b` | [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262) |
+
+## v1.3.3 correctness fixes (backend caching and client refresh race)
+
+A review of the v1.3.2 caching work (ADR-021), verified against the
+project's fake Apps Script runtime, found defects that
+[ADR-022](DECISIONS.md#adr-022-correctness-fixes-for-the-v132-analytics-caching-fast-path)
+records in full:
+
+- `bumpMutationWatermark_()` wrote only to `CacheService`; the
+  `PropertiesService` fallback `getMutationWatermark_()` already had was dead
+  code, so a lost or expired cache entry silently reverted the watermark and
+  resurrected stale pre-mutation cached responses. Fixed by writing
+  `PropertiesService` first, then `CacheService`, each independently guarded.
+- The batch read path (`fetchAnalyticsDataSheetsBatch_`) returned date cells
+  as display strings and dropped ordinary trailing blank cells, both of which
+  made `sourceRevision.dataVersion` diverge from the sequential path for
+  identical underlying data -- surfacing to the client as a spurious "History
+  changed again. Refresh to continue." error when a paginated History read
+  fell back mid-read. Fixed by switching to `dateTimeRenderOption:
+  'SERIAL_NUMBER'`, converting the known date columns back to `Date` objects
+  (`dateFromSpreadsheetSerial_`, the exact inverse of
+  `spreadsheetLocalDateSerial_`), and padding every batch-fetched row to the
+  header row's width before hashing (`padBatchRowWidth_`).
+- `tests/fake_apps_script_runtime.js`'s `getSheetValuesObject` ignored
+  `valueRenderOption`/`dateTimeRenderOption` entirely, so no test could have
+  caught the divergence above; it now honors both, defaulting to
+  `SERIAL_NUMBER` math that mirrors `spreadsheetLocalDateSerial_`.
+- `AnalyticsCoordinator.loadInsightsCacheThenRefresh()` /
+  `loadHistoryCacheThenRefresh()` had lost the synchronous state guard that
+  used to stop `refreshInsightsIfNeeded()`/`refreshHistoryIfNeeded()` from
+  racing the cache-load coroutine; a `markStale()` landing in the window
+  between screen-visible and cache-load completion started a network refresh
+  that the cache-load coroutine's own refresh call then cancelled and
+  restarted, wasting an Apps Script read. Fixed by claiming `isRefreshing`
+  (not `isInitialLoading`, which would reintroduce the blocking spinner)
+  synchronously before the coroutine launches.
+- Many of the ~1,100 lines of backend tests added in v1.3.2 asserted against
+  the fake runtime or against logic re-implemented in the test body, never
+  reaching `backend_additions.gs`. The tautological ones this pass found were
+  either rewritten to call real backend code (through `doGet`/`doPost`, the
+  `insights`/`history`/`get`/`post` test helpers, or `runtime.context.<fn>`
+  directly) or deleted as redundant with a real replacement.
+- `tests/run_e2e_verification.sh` hardcoded one machine's Node.js path; it now
+  prefers `node` already on `PATH` and only falls back to that path when it
+  exists.
+- The cache-hit guard-bypass this review also found (a cache hit skips the
+  environment/schema-version/timezone/`PENDING_APPLY` guards a cache miss
+  enforces) is a deliberately accepted trade-off, not a bug fixed here --
+  see "Known limitations" below and ADR-022.
+
+Local validation:
+`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`,
+all eight `node tests/*.js` backend suites, and
+`python3 -m unittest tests/test_backend_sync_benchmark.py`. Exact results and
+release provenance (pull request numbers, merged commit SHAs, and the
+validated `main` run) are recorded in `docs/HANDOFF.md`.
 
 ## v1.3.1 remediation work (released in v1.3.1)
 
@@ -787,6 +843,15 @@ Local and device evidence:
 
 ## Known limitations
 
+- A cache hit in the analytics read path (`handleReadResource_` in
+  `backend_additions.gs`) returns before `readAnalyticsSnapshot_`, so it
+  skips the environment, schema-version, timezone, and `PENDING_APPLY` guards
+  that a cache miss enforces. With a pending recoverable sync apply armed, an
+  identical request can return `success` on a cache hit and `BACKEND_BUSY` on
+  a cache miss. This is deliberate and unchanged in v1.3.3 -- re-checking on
+  every hit would require a Sheets read and defeat the caching optimization
+  ADR-021 introduced it for -- and is bounded by the watermark and the cache
+  TTL (at most six hours). See ADR-022.
 - The Kotlin namespace remains `com.example` while the application ID is
   `com.noamv.cannsheet.mobile`; `README.md` records this as an intentional
   source-layout compatibility choice.

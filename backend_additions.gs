@@ -106,6 +106,24 @@ const CANN = Object.freeze({
   STATUS: Object.freeze({ ACTIVE: 0, FINISHED: 1, UNOPENED: 2 })
 });
 
+// Columns the sequential Range.getValues() path returns as Date objects. The
+// Advanced Sheets Values API returns them as serial numbers, so the batch path
+// converts them back to preserve cell-type parity — analyticsHashValue_ types
+// a Date and a string differently, which would change sourceRevision.dataVersion.
+const ANALYTICS_DATE_COLUMNS_ = Object.freeze({
+  [CANN.SHEETS.PURCHASES]: Object.freeze([
+    'Date', 'Most recent use', 'Created At', 'Finished At'
+  ]),
+  [CANN.SHEETS.EVENTS]: Object.freeze(['Timestamp']),
+  [CANN.SHEETS.CORRECTIONS]: Object.freeze([
+    'Replacement Timestamp', 'Created At'
+  ]),
+  [CANN.SHEETS.LEDGER]: Object.freeze(['Received At']),
+  [CANN.SHEETS.APPLY_JOURNAL]: Object.freeze([
+    'Core Committed At', 'Completed At'
+  ])
+});
+
 // -----------------------------------------------------------------------------
 // HTTP API
 // -----------------------------------------------------------------------------
@@ -626,25 +644,42 @@ function getMutationWatermark_() {
 }
 
 function bumpMutationWatermark_() {
+  const newWatermark = typeof Utilities !== 'undefined' && Utilities.getUuid
+    ? Utilities.getUuid()
+    : String(Date.now());
+  let persisted = false;
+  // The durable write comes first. CacheService entries expire after at most
+  // six hours and may be evicted sooner, and getMutationWatermark_ falls back
+  // to this property; without it a lost cache entry silently reverts the
+  // watermark to '0' and resurrects pre-mutation cached responses.
   try {
-    const newWatermark = typeof Utilities !== 'undefined' && Utilities.getUuid
-      ? Utilities.getUuid()
-      : String(Date.now());
+    if (
+      typeof PropertiesService !== 'undefined' &&
+      PropertiesService.getScriptProperties
+    ) {
+      const props = PropertiesService.getScriptProperties();
+      if (props) {
+        props.setProperty(CANN.MUTATION_WATERMARK_PROPERTY, newWatermark);
+        persisted = true;
+      }
+    }
+  } catch (error) {
+    console.warn(
+      'Failed to persist MUTATION_WATERMARK: ' + conciseError_(error)
+    );
+  }
+  try {
     if (typeof CacheService !== 'undefined' && CacheService.getScriptCache) {
       const cache = CacheService.getScriptCache();
       if (cache) {
-        cache.put(
-          CANN.MUTATION_WATERMARK_PROPERTY,
-          newWatermark,
-          21600
-        );
+        cache.put(CANN.MUTATION_WATERMARK_PROPERTY, newWatermark, 21600);
+        persisted = true;
       }
     }
-    return newWatermark;
   } catch (error) {
-    console.warn('Failed to bump MUTATION_WATERMARK: ' + conciseError_(error));
-    return null;
+    console.warn('Failed to cache MUTATION_WATERMARK: ' + conciseError_(error));
   }
+  return persisted ? newWatermark : null;
 }
 
 function buildAnalyticsCacheKey_(resource, env, watermark, query, version) {
@@ -967,14 +1002,17 @@ function fetchAnalyticsDataSheetsBatch_(
   const batchResponse = Sheets.Spreadsheets.Values.batchGet(ss.getId(), {
     ranges: requestedRanges,
     valueRenderOption: 'UNFORMATTED_VALUE',
-    dateTimeRenderOption: 'FORMATTED_STRING'
+    dateTimeRenderOption: 'SERIAL_NUMBER'
   });
   const valueRanges = (batchResponse && batchResponse.valueRanges) || [];
   const rangeMap = {};
   valueRanges.forEach(vr => {
     if (!vr || !vr.range) return;
     const sheetName = vr.range.split('!')[0].replace(/^'|'$/g, '');
-    rangeMap[sheetName] = vr.values || [];
+    rangeMap[sheetName] = normalizeBatchDateColumns_(
+      sheetName,
+      padBatchRowWidth_(vr.values || [])
+    );
   });
 
   const purchasesValues = rangeMap[CANN.SHEETS.PURCHASES] || [];
@@ -8178,6 +8216,64 @@ function spreadsheetLocalDateSerial_(value) {
     parts[5],
     parts[6]
   ) / 86400000 + 25569;
+}
+
+function padBatchRowWidth_(values) {
+  // The Advanced Sheets Values API omits trailing empty cells from each row,
+  // while the sequential Range.getValues() path always returns a full
+  // rectangular matrix padded with ''. Left unpadded, a short batch row reads
+  // as undefined past its length where the sequential row reads as '', and
+  // analyticsHashValue_ types those two differently (null vs string) --
+  // the same dataVersion-parity problem Fix 2 exists to close, just for
+  // ordinary blank trailing cells instead of dates.
+  if (!values || values.length < 2) return values;
+  const headerLength = (values[0] || []).length;
+  for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+    const row = values[rowIndex];
+    if (!row) continue;
+    while (row.length < headerLength) row.push('');
+  }
+  return values;
+}
+
+function dateFromSpreadsheetSerial_(serial) {
+  const number = Number(serial);
+  if (!Number.isFinite(number)) return null;
+  const wallClockMillis = Math.round((number - 25569) * 86400000);
+  const wallClockText = Utilities.formatDate(
+    new Date(wallClockMillis),
+    'UTC',
+    'yyyy-MM-dd HH:mm:ss'
+  );
+  return Utilities.parseDate(
+    wallClockText,
+    CANN.TIME_ZONE,
+    'yyyy-MM-dd HH:mm:ss'
+  );
+}
+
+function normalizeBatchDateColumns_(sheetName, values) {
+  const dateColumns = ANALYTICS_DATE_COLUMNS_[sheetName];
+  if (!dateColumns || !values || values.length < 2) return values;
+  const headers = headerMapFromRow_(values[0]);
+  const indexes = [];
+  dateColumns.forEach(name => {
+    const index = headers[name];
+    if (index !== undefined) indexes.push(index);
+  });
+  if (!indexes.length) return values;
+  for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+    const row = values[rowIndex];
+    if (!row) continue;
+    indexes.forEach(index => {
+      const cell = row[index];
+      if (typeof cell === 'number' && Number.isFinite(cell) && cell > 0) {
+        const converted = dateFromSpreadsheetSerial_(cell);
+        if (converted) row[index] = converted;
+      }
+    });
+  }
+  return values;
 }
 
 function sheetsBatchUpdate_(ss, requests) {

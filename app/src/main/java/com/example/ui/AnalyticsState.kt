@@ -507,6 +507,14 @@ class AnalyticsCoordinator(
 
     private fun loadInsightsCacheThenRefresh() {
         insightsLoaded = true
+        // Synchronously claim isRefreshing (not isInitialLoading, which would
+        // reintroduce the blocking spinner) before the coroutine below is even
+        // scheduled. Without this, a markStale() arriving in the window between
+        // this call and the coroutine actually running sees isInitialLoading and
+        // isRefreshing both false and starts its own refreshInsights() call --
+        // one this coroutine's own refreshInsights() call then cancels and
+        // restarts, wasting an Apps Script read.
+        _insights.update { it.copy(isRefreshing = true, isStale = true) }
         scope.launch {
             repository.readCachedInsights()?.let { cached ->
                 val range = cached.cachedInsightsRange()
@@ -525,6 +533,11 @@ class AnalyticsCoordinator(
 
     private fun loadHistoryCacheThenRefresh() {
         historyLoaded = true
+        // See loadInsightsCacheThenRefresh above: claims isRefreshing before the
+        // coroutine is scheduled so a markStale() landing in that window cannot
+        // start a second refreshHistory() call that this coroutine's own call
+        // then cancels and restarts.
+        _history.update { it.copy(isRefreshing = true) }
         scope.launch {
             repository.readCachedHistory()?.let { cached ->
                 _history.value = stateFromResponse(cached, cached.filters).copy(
