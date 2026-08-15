@@ -1,107 +1,71 @@
 # Latest handoff
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Current outcome
 
-Cannsheet Mobile v1.3.1 is implemented, documented, released, published, and
-independently verified. The remediation sequence addressed post-release
-findings R1 through R7 across source PRs [#75](https://github.com/noamvb/cannsheet-mobile/pull/75)
-through [#79](https://github.com/noamvb/cannsheet-mobile/pull/79), documentation
-PR [#80](https://github.com/noamvb/cannsheet-mobile/pull/80), and the version-only
-release PR [#81](https://github.com/noamvb/cannsheet-mobile/pull/81).
+Cannsheet Mobile v1.3.2 is implemented, validated, and merged into `main`. The release
+optimizes Insights and History refresh performance across the Google Apps Script backend
+and Android Compose client, reducing refresh times from minutes down to sub-second cache
+returns and fast single-RPC cold recalculations.
 
-Annotated tag `v1.3.1` points to exact validated `main` commit
-`b3575ea51c14cb58797f1f9e9cf2ecfcb41be408`.
+- Feature PR [#83](https://github.com/noamvb/cannsheet-mobile/pull/83) was squash-merged
+  as commit `0462e3895e54d588523c932dcbbfaebca014ef04`.
+- Version bump PR [#84](https://github.com/noamvb/cannsheet-mobile/pull/84) was squash-merged
+  as commit `9118da294c65e8d89a4214f4946399ba0928929b`.
+- Release metadata in `app/build.gradle.kts`: `versionName = "1.3.2"`, `versionCode = 33`.
 
-The public signed release is
-[Cannsheet Mobile 1.3.1](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.3.1),
-with authored assets `Cannsheet-Mobile-1.3.1.apk` and
-`Cannsheet-Mobile-1.3.1.apk.sha256`. An independent download matched SHA-256:
+## v1.3.2 performance changes
 
-`fb729f569dde1c1cd604582dc38e4bd6e8155489d7d6515f79e73879c076cdd3`
-
-Local `aapt` inspection reported package `com.noamv.cannsheet.mobile`, version
-code `32`, version name `1.3.1`, minimum SDK 24, target SDK 36, and launcher
-`com.example.MainActivity`. Local `apksigner verify` confirmed APK Signature
-Scheme v2. Its certificate and public key digests match the public v1.3.0 and
-v1.2.27 APKs and the APK installed on the production phone, preserving in-place
-update compatibility.
-
-The implementation does not change the production Apps Script, spreadsheet,
-endpoint, application ID, namespace, Room schema, existing queue payloads, or
-wire contracts.
-
-## v1.3.1 remediation changes
-
-- **R2 (`5534416`, PR #75)**: Corrected `queue_alert_stuck_body` plurals in
-  `strings.xml` to accurately describe the phone's non-empty queue episode duration
-  rather than claiming per-entry age.
-- **R3 (`c988aa5`, PR #76)**: Removed double-padding `navigationBarsPadding()` on
-  `AppNavigationRail` so the navigation rail avoids redundant bottom offset on
-  expanded/medium viewports.
-- **R4 (`8f2eff4`, PR #77)**: Added structured `RunwaySuppressionReason` enum and
-  `RunwayEstimateState.Suppressed(reason)` data class, rendering an explanatory
-  card with clear grammar and pluralization in `RunwaySection` when estimates are paused.
-- **R5 / D1 (`f522202`, PR #78)**: Enforced a 2-minute debounce floor
-  (`RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS`) on Log-screen-initiated analytics
-  refreshes, preventing redundant Apps Script reads during multi-entry logging sessions
-  while keeping the active Insights tab immediate.
-- **R7 (`90a6e25`, PR #79)**: Removed unread `selectedRangeDayCount` presentation
-  state from `RunwayEstimateState.Ready`.
-- **R1, R6, ADR-020 (`0288619`, PR #80)**: Corrected backup policy documentation in
-  `HANDOFF.md`, added ADR-020, updated `ARCHITECTURE.md`, `PROJECT_STATE.md`, and
-  committed `docs/V1_3_1_FIX_PLAN.md`.
-- **Version metadata (`b3575ea`, PR #81)**: Bumped `versionCode = 32`, `versionName = "1.3.1"`
+- **Fast-Path `CacheService` (`0462e38`, PR #83)**: Serialized analytics responses in Google
+  Apps Script are cached in 100KB chunks in `CacheService` keyed by resource, environment, query
+  parameters, and `MUTATION_WATERMARK`. Unchanged requests return in <200ms without touching the
+  Google Sheets API.
+- **Atomic Cache Invalidation (`0462e38`, PR #83)**: Any mutating write endpoint (`doPost` commit,
+  `onFormSubmit`, `onInventoryEdit`, migrations) bumps `MUTATION_WATERMARK` in `CacheService`,
+  immediately invalidating all cached responses without persistent property write overhead.
+- **Single-RPC Batch Sheets Range Retrieval (`0462e38`, PR #83)**: Replaced sequential per-sheet
+  `getRange().getValues()` reads with a consolidated `Sheets.Spreadsheets.Values.batchGet` call,
+  eliminating serial roundtrip latency for cold recalculations.
+- **Scoped Lock Concurrency (`0462e38`, PR #83)**: `ScriptLock` is held only during the atomic
+  batch data fetch and released before in-memory aggregations and response serialization, eliminating
+  `BACKEND_BUSY` read lock contention.
+- **Instant Local Cache Presentation (`0462e38`, PR #83)**: In `AnalyticsCoordinator`, cached
+  Room SQLite data is emitted immediately with `isInitialLoading = false`, rendering data at 0ms
+  upon screen entry while network refreshes execute non-blocking in the background.
+- **Version metadata (`9118da2`, PR #84)**: Bumped `versionCode = 33`, `versionName = "1.3.2"`
   in `app/build.gradle.kts`.
 
 ## Validation and provenance
 
-- Each PR passed CI gates and the exact-main push runs on `main` passed all six jobs
-  (classification, backend validation, Android static validation, API 24 emulator,
-  API 36 emulator, and required aggregate status).
-- The version-only local gate (`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`)
-  completed with `BUILD SUCCESSFUL`; 343 JVM unit tests passed with 0 failures, 0 errors,
-  and 0 skips.
-- The python benchmark test (`tests/test_backend_sync_benchmark.py`) passed (13 tests OK).
-- Version PR #81 gate [run 31748102654](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748102654)
-  and exact versioned-main [run 31748421571](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748421571)
-  passed all six jobs.
-- Signed publication [run 31748906313](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748906313)
-  passed exact-SHA proof, protected signing, version monotonicity, metadata verification,
-  checksum generation, and public release publication.
-- Independent public verification checked authored asset names, SHA-256 checksum,
-  metadata (package, versionCode 32, versionName 1.3.1, minSdk 24, targetSdk 36),
-  v2 signature, and certificate/signer continuity against v1.3.0 and v1.2.27.
-
-## Device state and Obtainium installation
-
-- Wireless ADB was not connected during Phase 5 verification; per Section 5.2 of the
-  remediation plan, physical display measurement was skipped and Phase 9 (two-pane
-  threshold lowering) was not executed without device evidence.
-- The phone owner updates to v1.3.1 directly through Obtainium by checking for updates
-  from the release repository `noamvb/cannsheet-mobile-releases`.
+- PR #83 CI gate [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672)
+  passed all jobs (classification, backend validation, Android static validation, API 24 emulator,
+  aggregate check).
+- Version PR #84 CI gate [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262)
+  passed all jobs.
+- Local E2E verification suite (`tests/run_e2e_verification.sh`) passed 100%:
+  - All 8 Node.js backend suites (`backend_analytics_test.js`, `backend_contract_test.js`,
+    `fake_sheets_batch_update_test.js`, `backend_corrections_test.js`, `backend_recovery_test.js`,
+    `backend_spreadsheet_test.js`, `sandbox_performance_fixture_test.js`, `sandbox_provisioning_test.js`).
+  - Python benchmark suite (`tests/test_backend_sync_benchmark.py`: 13/13 tests OK).
+  - Android JVM unit tests (`./gradlew testDebugUnitTest`: BUILD SUCCESSFUL).
 
 ## Data-safety notes
 
-- Queue alerts read aggregate state only and never receive queue rows or entry
-  details. Their copy contains no product names, quantities, or dates.
-- Queue persistence, immutable IDs, acknowledgement-only deletion, retries,
-  environment checks, and `CannsheetGraph.syncMutex` synchronization remain
-  unchanged.
-- Runway and spend estimates are neither persisted nor transmitted and
-  pause gracefully when their evidence is not fresh and complete.
-- The production backend and spreadsheet were not changed or probed.
+- Analytics endpoints remain strictly read-only and never mutate Google Sheets data rows.
+- Cache invalidation is atomic via `MUTATION_WATERMARK`.
+- Full backward compatibility with `analyticsVersion` 1 and 2 and offline Room queues is preserved.
+- The production endpoint, signing configuration, package name, and credentials are unchanged.
 
 ## Relevant files
 
-- `app/src/main/java/com/example/ui/RunwayPresentation.kt`
+- `backend_additions.gs`
+- `tests/fake_apps_script_runtime.js`
+- `tests/backend_analytics_test.js`
 - `app/src/main/java/com/example/ui/AnalyticsState.kt`
-- `app/src/main/java/com/example/ui/InsightsScreen.kt`
-- `app/src/main/java/com/example/ui/AppNavigation.kt`
-- `app/src/main/res/values/strings.xml`
+- `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`
+- `app/src/test/java/com/example/data/AnalyticsDataTest.kt`
 - `app/build.gradle.kts`
-- `docs/V1_3_1_FIX_PLAN.md`
+- `docs/DECISIONS.md` (ADR-021)
 - `docs/PROJECT_STATE.md`
-- `docs/DECISIONS.md`
-- `docs/ARCHITECTURE.md`
+- `docs/HANDOFF.md`
