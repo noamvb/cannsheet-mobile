@@ -1,37 +1,28 @@
 # Project state
 
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit and tag `v1.3.1`:
-  `b3575ea51c14cb58797f1f9e9cf2ecfcb41be408`
-- Current release metadata in `app/build.gradle.kts`: version name `1.3.1`,
-  version code `32`
-- Version-only release [PR #81](https://github.com/noamvb/cannsheet-mobile/pull/81)
-  was squash-merged as `b3575ea51c14cb58797f1f9e9cf2ecfcb41be408`. Its PR gate
-  passed in [run 31748102654](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748102654),
-  and the exact post-merge `main` six-job validation passed in
-  [run 31748421571](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748421571),
-  including API 24, API 36, backend, static, classification, and aggregate jobs.
-- The `v1.3.1` tag points to that exact validated `main` commit. Signed
-  publication [run 31748906313](https://github.com/noamvb/cannsheet-mobile/actions/runs/31748906313)
-  passed exact-main proof, protected signing, version monotonicity, signature
-  and metadata checks, artifact upload, public release creation, and
-  post-publication verification.
-- The public signed release is
-  [Cannsheet Mobile 1.3.1](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.3.1).
-  Its two authored assets are `Cannsheet-Mobile-1.3.1.apk` and
-  `Cannsheet-Mobile-1.3.1.apk.sha256`.
-- Independently downloaded public APK SHA-256:
-  `fb729f569dde1c1cd604582dc38e4bd6e8155489d7d6515f79e73879c076cdd3`
-- The independent download reports package `com.noamv.cannsheet.mobile`,
-  version code `32`, version name `1.3.1`, minimum SDK 24, target SDK 36, and
-  launcher `com.example.MainActivity`. Local `aapt` and `apksigner verify`
-  confirm the metadata and APK Signature Scheme v2. Its certificate and public
-  key digests match the public v1.3.0 and v1.2.27 APKs and the APK installed
-  on the production phone, preserving in-place update compatibility.
+- Latest application release source commit `9118da294c65e8d89a4214f4946399ba0928929b`
+- Current release metadata in `app/build.gradle.kts`: version name `1.3.2`,
+  version code `33`
+- Version-only release [PR #84](https://github.com/noamvb/cannsheet-mobile/pull/84)
+  was squash-merged as `9118da294c65e8d89a4214f4946399ba0928929b`. Its PR gate
+  passed in [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262).
+- Performance optimization feature [PR #83](https://github.com/noamvb/cannsheet-mobile/pull/83)
+  was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
+  passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
+
+## v1.3.2 performance work (released in v1.3.2)
+
+The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:
+
+| Change | Pull request | Exact merged `main` commit | Exact-main validation |
+|---|---|---|---|
+| Optimize Insights and History refresh performance across backend and client | [#83](https://github.com/noamvb/cannsheet-mobile/pull/83) | `0462e3895e54d588523c932dcbbfaebca014ef04` | [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672) |
+| Version metadata bump to 1.3.2 (versionCode 33) | [#84](https://github.com/noamvb/cannsheet-mobile/pull/84) | `9118da294c65e8d89a4214f4946399ba0928929b` | [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262) |
 
 ## v1.3.1 remediation work (released in v1.3.1)
 

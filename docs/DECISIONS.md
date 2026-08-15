@@ -796,3 +796,25 @@ historical rationale.
 - Related files: `app/src/main/java/com/example/ui/AnalyticsState.kt`,
   `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
   `docs/ARCHITECTURE.md`
+
+## ADR-021: Fast-path backend analytics response caching and non-blocking client presentation
+
+- Status: Accepted; implemented in v1.3.2 through [PR #83](https://github.com/noamvb/cannsheet-mobile/pull/83) and version bump [PR #84](https://github.com/noamvb/cannsheet-mobile/pull/84).
+- Date: 2026-08-14
+- Context: Refreshing the Insights and History pages previously took multiple seconds or minutes due to sequential Google Sheets API reads across four sheets (`Purchases`, `ConsumptionEvents`, `ConsumptionEventCorrections`, `SyncLedger`) and recalculating all historical metrics from scratch on every request. On the Android client, screen entry set `isInitialLoading = true` before reading Room SQLite cache, showing full-screen blocking spinners.
+- Decision:
+  1. **Backend CacheService Response Chunking**: Cache serialized analytics JSON responses in Google Apps Script `CacheService` in 100KB chunks keyed by resource, environment, query parameters, and a script-wide `MUTATION_WATERMARK`.
+  2. **Atomic Invalidation via Watermark**: Any mutating write (`doPost`, `onFormSubmit`, `onInventoryEdit`, migrations) bumps `MUTATION_WATERMARK` in `CacheService`, immediately invalidating all cached responses without persistent property overhead.
+  3. **Single-RPC Batch Sheet Reads**: Replace serial `getRange().getValues()` calls across multiple sheets with a consolidated `Sheets.Spreadsheets.Values.batchGet` call.
+  4. **Scoped ScriptLock**: Hold `ScriptLock` only during the atomic batch data retrieval, releasing it prior to in-memory aggregation and response formatting to eliminate `BACKEND_BUSY` contention on read requests.
+  5. **Instant Local Cache Presentation**: In `AnalyticsCoordinator`, emit cached SQLite state immediately with `isInitialLoading = false` so UI renders at 0ms, running network refreshes strictly in the background.
+- Rationale: Caching unchanged analytics payloads in Google Apps Script provides sub-200ms response times without spreadsheet API overhead. Single-RPC batch retrieval accelerates cold recalculations. Immediate cache presentation removes UI blocking while preserving full data consistency and background refresh semantics.
+- Consequences: Unchanged analytics queries return in <200ms. Cold recalculations are 3-5x faster. The Android UI renders instantly on screen entry. Wire contracts, schema versioning, and Room offline queue invariants remain completely intact.
+- Related files: `backend_additions.gs`,
+  `tests/fake_apps_script_runtime.js`,
+  `tests/backend_analytics_test.js`,
+  `app/src/main/java/com/example/ui/AnalyticsState.kt`,
+  `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
+  `app/src/test/java/com/example/data/AnalyticsDataTest.kt`,
+  `docs/ARCHITECTURE.md`
+
