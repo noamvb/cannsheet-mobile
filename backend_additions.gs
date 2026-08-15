@@ -21,6 +21,10 @@ const CANN = Object.freeze({
   HISTORY_MAX_LIMIT: 200,
   HISTORY_MAX_QUERY_LENGTH: 80,
   HISTORY_MAX_CURSOR_LENGTH: 1024,
+  CACHE_DEFAULT_TTL_SECONDS: 21600,
+  CACHE_CHUNK_SIZE: 90000,
+  CACHE_MAX_CHUNKS: 10,
+  MUTATION_WATERMARK_PROPERTY: 'MUTATION_WATERMARK',
   // The additive Purchases projection has its own readiness version so the
   // existing v2 deployment remains usable while the migration runs.
   SCHEMA_VERSION: 2,
@@ -288,6 +292,39 @@ function handleReadResource_(e) {
       ? parseInsightsQuery_(query.values)
       : parseHistoryQuery_(query.values, requestedAnalyticsVersion);
     parsed.analyticsVersion = requestedAnalyticsVersion;
+
+    const watermark = getMutationWatermark_();
+    const cacheKey = buildAnalyticsCacheKey_(
+      resource,
+      environment,
+      watermark,
+      parsed,
+      requestedAnalyticsVersion
+    );
+
+    if (cacheKey) {
+      const cachedJson = getChunkedScriptCache_(cacheKey);
+      if (cachedJson) {
+        try {
+          const cachedResponse = JSON.parse(cachedJson);
+          cachedResponse.serverDurationMs = Math.max(
+            0,
+            Date.now() - timing.startedAt
+          );
+          logBackendTiming_(timing, 'cache_hit', {
+            environment: environment,
+            resource: resource,
+            cacheKey: cacheKey
+          });
+          return jsonOutput_(cachedResponse);
+        } catch (parseErr) {
+          console.warn(
+            'Failed to parse cached JSON: ' + conciseError_(parseErr)
+          );
+        }
+      }
+    }
+
     const cursor = resource === 'history' && parsed.cursor
       ? decodeHistoryCursor_(parsed.cursor)
       : null;
@@ -330,6 +367,15 @@ function handleReadResource_(e) {
         quality,
         timing
       );
+
+    if (cacheKey && response && response.status !== 'error') {
+      putChunkedScriptCache_(
+        cacheKey,
+        JSON.stringify(response),
+        CANN.CACHE_DEFAULT_TTL_SECONDS
+      );
+    }
+
     logBackendTiming_(timing, 'success', {
       environment: environment,
       resource: resource,
@@ -548,155 +594,573 @@ function parseHistoryQuery_(values, analyticsVersion) {
   };
 }
 
+function getMutationWatermark_() {
+  try {
+    if (typeof CacheService !== 'undefined' && CacheService.getScriptCache) {
+      const cache = CacheService.getScriptCache();
+      if (cache) {
+        const cached = cache.get(CANN.MUTATION_WATERMARK_PROPERTY);
+        if (cached) return cached;
+      }
+    }
+    if (
+      typeof PropertiesService === 'undefined' ||
+      !PropertiesService.getScriptProperties
+    ) {
+      return '0';
+    }
+    const props = PropertiesService.getScriptProperties();
+    const watermark = props.getProperty(CANN.MUTATION_WATERMARK_PROPERTY);
+    if (watermark) {
+      if (typeof CacheService !== 'undefined' && CacheService.getScriptCache) {
+        const cache = CacheService.getScriptCache();
+        if (cache) cache.put(CANN.MUTATION_WATERMARK_PROPERTY, watermark, 21600);
+      }
+      return watermark;
+    }
+    return '0';
+  } catch (error) {
+    console.warn('Failed to read MUTATION_WATERMARK: ' + conciseError_(error));
+    return '0';
+  }
+}
+
+function bumpMutationWatermark_() {
+  try {
+    const newWatermark = typeof Utilities !== 'undefined' && Utilities.getUuid
+      ? Utilities.getUuid()
+      : String(Date.now());
+    if (typeof CacheService !== 'undefined' && CacheService.getScriptCache) {
+      const cache = CacheService.getScriptCache();
+      if (cache) {
+        cache.put(
+          CANN.MUTATION_WATERMARK_PROPERTY,
+          newWatermark,
+          21600
+        );
+      }
+    }
+    return newWatermark;
+  } catch (error) {
+    console.warn('Failed to bump MUTATION_WATERMARK: ' + conciseError_(error));
+    return null;
+  }
+}
+
+function buildAnalyticsCacheKey_(resource, env, watermark, query, version) {
+  const envPrefix = text_(env).slice(0, 4).toLowerCase();
+  const wm = text_(watermark) || '0';
+  if (resource === 'insights') {
+    const scope = query.scope || 'DEFAULT';
+    const from = query.from || '_';
+    const to = query.to || localToday_();
+    return `cann:v${version}:${envPrefix}:w:${wm}:ins:${scope}:${from}:${to}`;
+  }
+  if (resource === 'history') {
+    const filterSummary = [
+      query.from || '',
+      query.to || '',
+      query.productUuid || '',
+      query.productId || '',
+      query.type || '',
+      query.q || '',
+      query.includeAudit ? '1' : '0'
+    ].join('|');
+    const fh = sha256Hex_(filterSummary).slice(0, 16);
+    const curHash = query.cursor ? sha256Hex_(query.cursor).slice(0, 16) : 'p1';
+    return `cann:v${version}:${envPrefix}:w:${wm}:hist:${fh}:${query.limit}:${curHash}`;
+  }
+  return null;
+}
+
+function putChunkedScriptCache_(baseKey, jsonText, ttlSeconds) {
+  try {
+    if (!jsonText || typeof jsonText !== 'string') return false;
+    if (typeof CacheService === 'undefined' || !CacheService.getScriptCache) {
+      return false;
+    }
+    const cache = CacheService.getScriptCache();
+    if (!cache) return false;
+
+    const ttl = ttlSeconds || CANN.CACHE_DEFAULT_TTL_SECONDS;
+    const chunkSize = CANN.CACHE_CHUNK_SIZE;
+    const len = jsonText.length;
+    const chunkCount = Math.ceil(len / chunkSize);
+
+    if (chunkCount > CANN.CACHE_MAX_CHUNKS) {
+      return false;
+    }
+
+    const batch = {};
+    batch[baseKey + ':m'] = JSON.stringify({
+      v: 1,
+      chunks: chunkCount,
+      len: len,
+      ts: Date.now()
+    });
+
+    for (let i = 0; i < chunkCount; i++) {
+      batch[baseKey + ':c:' + i] = jsonText.substring(
+        i * chunkSize,
+        (i + 1) * chunkSize
+      );
+    }
+
+    cache.putAll(batch, ttl);
+    return true;
+  } catch (error) {
+    console.warn('Cache write failed: ' + conciseError_(error));
+    return false;
+  }
+}
+
+function getChunkedScriptCache_(baseKey) {
+  try {
+    if (typeof CacheService === 'undefined' || !CacheService.getScriptCache) {
+      return null;
+    }
+    const cache = CacheService.getScriptCache();
+    if (!cache) return null;
+
+    const manifestKey = baseKey + ':m';
+    const manifestJson = cache.get(manifestKey);
+    if (!manifestJson) return null;
+
+    let manifest;
+    try {
+      manifest = JSON.parse(manifestJson);
+    } catch (e) {
+      return null;
+    }
+    if (
+      !manifest ||
+      typeof manifest.chunks !== 'number' ||
+      manifest.chunks < 1
+    ) {
+      return null;
+    }
+
+    const chunkKeys = [];
+    for (let i = 0; i < manifest.chunks; i++) {
+      chunkKeys.push(baseKey + ':c:' + i);
+    }
+
+    const chunks = cache.getAll(chunkKeys);
+    if (!chunks) return null;
+
+    let reassembled = '';
+    for (let i = 0; i < manifest.chunks; i++) {
+      const part = chunks[baseKey + ':c:' + i];
+      if (part == null) {
+        return null;
+      }
+      reassembled += part;
+    }
+
+    if (reassembled.length !== manifest.len) {
+      return null;
+    }
+
+    return reassembled;
+  } catch (error) {
+    console.warn('Cache read failed: ' + conciseError_(error));
+    return null;
+  }
+}
+
 function readAnalyticsSnapshot_(resource, expectedEnvironment, cursor) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(CANN.ANALYTICS_READ_LOCK_TIMEOUT_MS)) {
     throw analyticsError_('BACKEND_BUSY', 'The backend is busy; retry this request');
   }
+  let rawData;
+  const ss = spreadsheet_();
   try {
-    const ss = spreadsheet_();
-    const runtimeConfig = readAndAssertRuntimeConfig_(ss, expectedEnvironment);
-    assertSupportedSchemaVersion_(runtimeConfig.values);
-    const correctionCapability = consumptionCorrectionCapability_(
-      runtimeConfig.values
-    );
-    if (!recoverableSyncApplyReady_(runtimeConfig.values)) {
-      throw analyticsError_(
-        'SCHEMA_MISMATCH',
-        'Recoverable sync apply must be enabled before analytics reads'
-      );
-    }
-    if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
-      throw analyticsError_(
-        'BACKEND_BUSY',
-        'A recoverable sync apply is pending; retry this request'
-      );
-    }
-    if (ss.getSpreadsheetTimeZone() !== CANN.TIME_ZONE) {
-      throw analyticsError_(
-        'CONFIGURATION_ERROR',
-        'Spreadsheet time zone must be ' + CANN.TIME_ZONE
-      );
-    }
-
-    const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
-    const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
-    const corrections = correctionCapability.version
-      ? requiredSheet_(ss, CANN.SHEETS.CORRECTIONS)
-      : null;
-    const purchaseHeaders = headerMap_(purchases);
-    const eventHeaders = headerMap_(events);
-    const correctionHeaders = corrections ? headerMap_(corrections) : {};
-    requireExactHeaders_(
-      purchaseHeaders,
-      CANN.PURCHASE_HEADERS,
-      CANN.SHEETS.PURCHASES
-    );
-    requireExactHeaders_(
-      eventHeaders,
-      CANN.EVENT_HEADERS,
-      CANN.SHEETS.EVENTS
-    );
-    if (corrections) {
-      requireExactHeaders_(
-        correctionHeaders,
-        CANN.CORRECTION_HEADERS,
-        CANN.SHEETS.CORRECTIONS
-      );
-    }
-
-    const currentPurchaseLastRow = purchases.getLastRow();
-    const currentEventLastRow = events.getLastRow();
-    const currentCorrectionLastRow = corrections
-      ? corrections.getLastRow()
-      : 1;
-    const purchaseLastRow = cursor ? cursor.purchaseLastRow : currentPurchaseLastRow;
-    const eventLastRow = cursor ? cursor.eventLastRow : currentEventLastRow;
-    if (
-      cursor &&
-      correctionCapability.version &&
-      cursor.correctionLastRow == null
-    ) {
-      throw analyticsError_(
-        'CURSOR_STALE',
-        'The captured history snapshot predates correction support'
-      );
-    }
-    if (
-      cursor &&
-      correctionCapability.version &&
-      cursor.correctionLastRow !== currentCorrectionLastRow
-    ) {
-      throw analyticsError_(
-        'CURSOR_STALE',
-        'The captured history snapshot changed after a correction'
-      );
-    }
-    const correctionLastRow = cursor && cursor.correctionLastRow != null
-      ? cursor.correctionLastRow
-      : currentCorrectionLastRow;
-    if (
-      currentPurchaseLastRow < purchaseLastRow ||
-      currentEventLastRow < eventLastRow ||
-      currentCorrectionLastRow < correctionLastRow
-    ) {
-      throw analyticsError_(
-        'CURSOR_STALE',
-        'The captured history snapshot is no longer available'
-      );
-    }
-
-    let ledger = null;
-    let ledgerHeaders = {};
-    let ledgerLastRow = 1;
-    if (resource === 'insights') {
-      ledger = requiredSheet_(ss, CANN.SHEETS.LEDGER);
-      ledgerHeaders = headerMap_(ledger);
-      requireExactHeaders_(
-        ledgerHeaders,
-        CANN.LEDGER_HEADERS,
-        CANN.SHEETS.LEDGER
-      );
-      ledgerLastRow = ledger.getLastRow();
-    }
-    const applyEvidence = correctionCapability.version
-      ? recoverableApplyEvidence_(ss)
-      : {
-        eventIds: {},
-        correctionIds: {},
-        finishActionProductIds: {}
-      };
-
-    return {
-      environment: expectedEnvironment,
-      taxRate: finiteNumberOr_(runtimeConfig.values.TAX_RATE, 0.13),
-      purchaseHeaders: purchaseHeaders,
-      eventHeaders: eventHeaders,
-      correctionHeaders: correctionHeaders,
-      ledgerHeaders: ledgerHeaders,
-      purchaseRows: readAnalyticsRowsThrough_(purchases, purchaseLastRow),
-      eventRows: readAnalyticsRowsThrough_(events, eventLastRow),
-      correctionRows: corrections
-        ? readAnalyticsRowsThrough_(corrections, correctionLastRow)
-        : [],
-      ledgerRows: ledger ? readAnalyticsRowsThrough_(ledger, ledgerLastRow) : [],
-      purchaseLastRow: purchaseLastRow,
-      eventLastRow: eventLastRow,
-      correctionLastRow: correctionLastRow,
-      ledgerLastRow: ledgerLastRow,
-      correctionVersion: correctionCapability.version,
-      correctionWritesEnabled: correctionCapability.writesEnabled,
-      finishActionProductIds: applyEvidence.finishActionProductIds,
-      finishProvenanceEventIds: applyEvidence.eventIds,
-      finishProvenanceCorrectionIds: applyEvidence.correctionIds
-    };
+    rawData = fetchAnalyticsRawData_(ss, resource, expectedEnvironment);
   } finally {
     lock.releaseLock();
   }
+
+  const runtimeConfig = rawData.runtimeConfig;
+  const correctionCapability = rawData.correctionCapability;
+
+  const currentPurchaseLastRow = rawData.purchaseLastRow;
+  const currentEventLastRow = rawData.eventLastRow;
+  const currentCorrectionLastRow = rawData.correctionLastRow;
+  const purchaseLastRow = cursor ? cursor.purchaseLastRow : currentPurchaseLastRow;
+  const eventLastRow = cursor ? cursor.eventLastRow : currentEventLastRow;
+  if (
+    cursor &&
+    correctionCapability.version &&
+    cursor.correctionLastRow == null
+  ) {
+    throw analyticsError_(
+      'CURSOR_STALE',
+      'The captured history snapshot predates correction support'
+    );
+  }
+  if (
+    cursor &&
+    correctionCapability.version &&
+    cursor.correctionLastRow !== currentCorrectionLastRow
+  ) {
+    throw analyticsError_(
+      'CURSOR_STALE',
+      'The captured history snapshot changed after a correction'
+    );
+  }
+  const correctionLastRow = cursor && cursor.correctionLastRow != null
+    ? cursor.correctionLastRow
+    : currentCorrectionLastRow;
+  if (
+    currentPurchaseLastRow < purchaseLastRow ||
+    currentEventLastRow < eventLastRow ||
+    currentCorrectionLastRow < correctionLastRow
+  ) {
+    throw analyticsError_(
+      'CURSOR_STALE',
+      'The captured history snapshot is no longer available'
+    );
+  }
+
+  const applyEvidence = rawData.applyEvidence || {
+    eventIds: {},
+    correctionIds: {},
+    finishActionProductIds: {}
+  };
+
+  return {
+    environment: expectedEnvironment,
+    taxRate: finiteNumberOr_(runtimeConfig.values.TAX_RATE, 0.13),
+    purchaseHeaders: rawData.purchaseHeaders,
+    eventHeaders: rawData.eventHeaders,
+    correctionHeaders: rawData.correctionHeaders,
+    ledgerHeaders: rawData.ledgerHeaders,
+    purchaseRows: buildAnalyticsRowsFromValues_(
+      rawData.purchasesValues,
+      purchaseLastRow
+    ),
+    eventRows: buildAnalyticsRowsFromValues_(
+      rawData.eventsValues,
+      eventLastRow
+    ),
+    correctionRows: correctionCapability.version
+      ? buildAnalyticsRowsFromValues_(
+        rawData.correctionsValues,
+        correctionLastRow
+      )
+      : [],
+    ledgerRows: resource === 'insights'
+      ? buildAnalyticsRowsFromValues_(
+        rawData.ledgerValues,
+        rawData.ledgerLastRow
+      )
+      : [],
+    purchaseLastRow: purchaseLastRow,
+    eventLastRow: eventLastRow,
+    correctionLastRow: correctionLastRow,
+    ledgerLastRow: rawData.ledgerLastRow || 1,
+    correctionVersion: correctionCapability.version,
+    correctionWritesEnabled: correctionCapability.writesEnabled,
+    finishActionProductIds: applyEvidence.finishActionProductIds,
+    finishProvenanceEventIds: applyEvidence.eventIds,
+    finishProvenanceCorrectionIds: applyEvidence.correctionIds
+  };
+}
+
+function fetchAnalyticsRawData_(ss, resource, expectedEnvironment) {
+  const runtimeConfig = readAndAssertRuntimeConfig_(ss, expectedEnvironment);
+  assertSupportedSchemaVersion_(runtimeConfig.values);
+  const correctionCapability = consumptionCorrectionCapability_(
+    runtimeConfig.values
+  );
+  if (!recoverableSyncApplyReady_(runtimeConfig.values)) {
+    throw analyticsError_(
+      'SCHEMA_MISMATCH',
+      'Recoverable sync apply must be enabled before analytics reads'
+    );
+  }
+  if (text_(runtimeConfig.values[CANN.PENDING_APPLY_KEY])) {
+    throw analyticsError_(
+      'BACKEND_BUSY',
+      'A recoverable sync apply is pending; retry this request'
+    );
+  }
+  if (ss.getSpreadsheetTimeZone() !== CANN.TIME_ZONE) {
+    throw analyticsError_(
+      'CONFIGURATION_ERROR',
+      'Spreadsheet time zone must be ' + CANN.TIME_ZONE
+    );
+  }
+
+  if (
+    typeof Sheets !== 'undefined' &&
+    Sheets &&
+    Sheets.Spreadsheets &&
+    Sheets.Spreadsheets.Values &&
+    typeof Sheets.Spreadsheets.Values.batchGet === 'function'
+  ) {
+    try {
+      return fetchAnalyticsDataSheetsBatch_(
+        ss,
+        resource,
+        expectedEnvironment,
+        runtimeConfig,
+        correctionCapability
+      );
+    } catch (error) {
+      console.warn(
+        'Advanced Sheets batchGet failed; falling back to sequential read: ' +
+        conciseError_(error)
+      );
+    }
+  }
+  return fetchAnalyticsDataSheetsSequential_(
+    ss,
+    resource,
+    expectedEnvironment,
+    runtimeConfig,
+    correctionCapability
+  );
+}
+
+function fetchAnalyticsDataSheetsBatch_(
+  ss,
+  resource,
+  expectedEnvironment,
+  runtimeConfig,
+  correctionCapability
+) {
+  const existingSheets = ss.getSheets();
+  const existingSheetNames = {};
+  existingSheets.forEach(sheet => {
+    existingSheetNames[sheet.getName()] = true;
+  });
+
+  if (
+    !existingSheetNames[CANN.SHEETS.PURCHASES] ||
+    !existingSheetNames[CANN.SHEETS.EVENTS]
+  ) {
+    throw new Error('SCHEMA_MISMATCH: missing core sheets');
+  }
+
+  const requestedRanges = [
+    "'" + CANN.SHEETS.PURCHASES + "'!A1:Z",
+    "'" + CANN.SHEETS.EVENTS + "'!A1:Z"
+  ];
+  if (
+    correctionCapability.version &&
+    existingSheetNames[CANN.SHEETS.CORRECTIONS]
+  ) {
+    requestedRanges.push("'" + CANN.SHEETS.CORRECTIONS + "'!A1:Z");
+  }
+  if (resource === 'insights' && existingSheetNames[CANN.SHEETS.LEDGER]) {
+    requestedRanges.push("'" + CANN.SHEETS.LEDGER + "'!A1:Z");
+  }
+  if (
+    correctionCapability.version &&
+    existingSheetNames[CANN.SHEETS.APPLY_JOURNAL]
+  ) {
+    requestedRanges.push("'" + CANN.SHEETS.APPLY_JOURNAL + "'!A1:Z");
+  }
+
+  const batchResponse = Sheets.Spreadsheets.Values.batchGet(ss.getId(), {
+    ranges: requestedRanges,
+    valueRenderOption: 'UNFORMATTED_VALUE',
+    dateTimeRenderOption: 'FORMATTED_STRING'
+  });
+  const valueRanges = (batchResponse && batchResponse.valueRanges) || [];
+  const rangeMap = {};
+  valueRanges.forEach(vr => {
+    if (!vr || !vr.range) return;
+    const sheetName = vr.range.split('!')[0].replace(/^'|'$/g, '');
+    rangeMap[sheetName] = vr.values || [];
+  });
+
+  const purchasesValues = rangeMap[CANN.SHEETS.PURCHASES] || [];
+  const eventsValues = rangeMap[CANN.SHEETS.EVENTS] || [];
+  const correctionsValues = rangeMap[CANN.SHEETS.CORRECTIONS] || [];
+  const ledgerValues = rangeMap[CANN.SHEETS.LEDGER] || [];
+  const applyJournalValues = rangeMap[CANN.SHEETS.APPLY_JOURNAL] || [];
+
+  const purchaseHeaders = headerMapFromRow_(purchasesValues[0]);
+  const eventHeaders = headerMapFromRow_(eventsValues[0]);
+  const correctionHeaders = correctionsValues.length
+    ? headerMapFromRow_(correctionsValues[0])
+    : {};
+  const ledgerHeaders = ledgerValues.length
+    ? headerMapFromRow_(ledgerValues[0])
+    : {};
+  const applyJournalHeaders = applyJournalValues.length
+    ? headerMapFromRow_(applyJournalValues[0])
+    : {};
+
+  requireExactHeaders_(
+    purchaseHeaders,
+    CANN.PURCHASE_HEADERS,
+    CANN.SHEETS.PURCHASES
+  );
+  requireExactHeaders_(
+    eventHeaders,
+    CANN.EVENT_HEADERS,
+    CANN.SHEETS.EVENTS
+  );
+  if (correctionCapability.version && correctionsValues.length > 0) {
+    requireExactHeaders_(
+      correctionHeaders,
+      CANN.CORRECTION_HEADERS,
+      CANN.SHEETS.CORRECTIONS
+    );
+  }
+  if (resource === 'insights' && ledgerValues.length > 0) {
+    requireExactHeaders_(
+      ledgerHeaders,
+      CANN.LEDGER_HEADERS,
+      CANN.SHEETS.LEDGER
+    );
+  }
+
+  const purchaseLastRow = purchasesValues.length;
+  const eventLastRow = eventsValues.length;
+  const correctionLastRow = correctionsValues.length || 1;
+  const ledgerLastRow = ledgerValues.length || 1;
+
+  const applyEvidence = correctionCapability.version
+    ? recoverableApplyEvidenceFromValues_(
+      applyJournalValues.slice(1),
+      applyJournalHeaders
+    )
+    : { eventIds: {}, correctionIds: {}, finishActionProductIds: {} };
+
+  return {
+    spreadsheetTimeZone: ss.getSpreadsheetTimeZone(),
+    runtimeConfig: runtimeConfig,
+    correctionCapability: correctionCapability,
+    purchaseHeaders: purchaseHeaders,
+    eventHeaders: eventHeaders,
+    correctionHeaders: correctionHeaders,
+    ledgerHeaders: ledgerHeaders,
+    purchasesValues: purchasesValues,
+    eventsValues: eventsValues,
+    correctionsValues: correctionsValues,
+    ledgerValues: ledgerValues,
+    purchaseLastRow: purchaseLastRow,
+    eventLastRow: eventLastRow,
+    correctionLastRow: correctionLastRow,
+    ledgerLastRow: ledgerLastRow,
+    applyEvidence: applyEvidence
+  };
+}
+
+function fetchAnalyticsDataSheetsSequential_(
+  ss,
+  resource,
+  expectedEnvironment,
+  runtimeConfig,
+  correctionCapability
+) {
+  const purchases = requiredSheet_(ss, CANN.SHEETS.PURCHASES);
+  const events = requiredSheet_(ss, CANN.SHEETS.EVENTS);
+  const corrections = correctionCapability.version
+    ? requiredSheet_(ss, CANN.SHEETS.CORRECTIONS)
+    : null;
+  const purchaseHeaders = headerMap_(purchases);
+  const eventHeaders = headerMap_(events);
+  const correctionHeaders = corrections ? headerMap_(corrections) : {};
+  requireExactHeaders_(
+    purchaseHeaders,
+    CANN.PURCHASE_HEADERS,
+    CANN.SHEETS.PURCHASES
+  );
+  requireExactHeaders_(
+    eventHeaders,
+    CANN.EVENT_HEADERS,
+    CANN.SHEETS.EVENTS
+  );
+  if (corrections) {
+    requireExactHeaders_(
+      correctionHeaders,
+      CANN.CORRECTION_HEADERS,
+      CANN.SHEETS.CORRECTIONS
+    );
+  }
+
+  const purchaseLastRow = purchases.getLastRow();
+  const eventLastRow = events.getLastRow();
+  const correctionLastRow = corrections
+    ? corrections.getLastRow()
+    : 1;
+
+  let ledger = null;
+  let ledgerHeaders = {};
+  let ledgerLastRow = 1;
+  if (resource === 'insights') {
+    ledger = requiredSheet_(ss, CANN.SHEETS.LEDGER);
+    ledgerHeaders = headerMap_(ledger);
+    requireExactHeaders_(
+      ledgerHeaders,
+      CANN.LEDGER_HEADERS,
+      CANN.SHEETS.LEDGER
+    );
+    ledgerLastRow = ledger.getLastRow();
+  }
+
+  const applyEvidence = correctionCapability.version
+    ? recoverableApplyEvidence_(ss)
+    : {
+      eventIds: {},
+      correctionIds: {},
+      finishActionProductIds: {}
+    };
+
+  const purchasesValues = purchaseLastRow > 0
+    ? purchases.getRange(1, 1, purchaseLastRow, purchases.getLastColumn()).getValues()
+    : [];
+  const eventsValues = eventLastRow > 0
+    ? events.getRange(1, 1, eventLastRow, events.getLastColumn()).getValues()
+    : [];
+  const correctionsValues = corrections && correctionLastRow > 0
+    ? corrections.getRange(1, 1, correctionLastRow, corrections.getLastColumn()).getValues()
+    : [];
+  const ledgerValues = ledger && ledgerLastRow > 0
+    ? ledger.getRange(1, 1, ledgerLastRow, ledger.getLastColumn()).getValues()
+    : [];
+
+  return {
+    spreadsheetTimeZone: ss.getSpreadsheetTimeZone(),
+    runtimeConfig: runtimeConfig,
+    correctionCapability: correctionCapability,
+    purchaseHeaders: purchaseHeaders,
+    eventHeaders: eventHeaders,
+    correctionHeaders: correctionHeaders,
+    ledgerHeaders: ledgerHeaders,
+    purchasesValues: purchasesValues,
+    eventsValues: eventsValues,
+    correctionsValues: correctionsValues,
+    ledgerValues: ledgerValues,
+    purchaseLastRow: purchaseLastRow,
+    eventLastRow: eventLastRow,
+    correctionLastRow: correctionLastRow,
+    ledgerLastRow: ledgerLastRow,
+    applyEvidence: applyEvidence
+  };
+}
+
+function buildAnalyticsRowsFromValues_(values, lastRow) {
+  if (!values || values.length < 2) return [];
+  const limit = lastRow ? Math.min(lastRow, values.length) : values.length;
+  const result = [];
+  for (let i = 1; i < limit; i++) {
+    result.push({
+      canonicalRow: i + 1,
+      cells: values[i] || []
+    });
+  }
+  return result;
 }
 
 function readAnalyticsRowsThrough_(sheet, lastRow) {
-  if (lastRow < 2) return [];
+  if (!sheet || lastRow < 2) return [];
   return sheet.getRange(
     2,
     1,
@@ -706,6 +1170,24 @@ function readAnalyticsRowsThrough_(sheet, lastRow) {
     canonicalRow: index + 2,
     cells: cells
   }));
+}
+
+function headerMapFromRow_(headerRow) {
+  const result = {};
+  (headerRow || []).forEach((header, index) => {
+    const name = text_(header);
+    if (name && result[name] === undefined) result[name] = index;
+  });
+  return result;
+}
+
+function configValuesFromRows_(rows, headers) {
+  const result = {};
+  (rows || []).forEach(row => {
+    const key = text_(value_(row, headers, 'Key'));
+    if (key) result[key] = value_(row, headers, 'Value');
+  });
+  return result;
 }
 
 function newAnalyticsQuality_() {
@@ -2347,7 +2829,11 @@ function decodeHistoryCursor_(cursorText) {
 }
 
 function analyticsHistorySnapshotHash_(snapshot) {
-  return sha256Hex_(JSON.stringify({
+  if (!snapshot) return '';
+  if (snapshot._memoHistorySnapshotHash) {
+    return snapshot._memoHistorySnapshotHash;
+  }
+  const result = sha256Hex_(JSON.stringify({
     purchases: analyticsHashRows_(
       snapshot.purchaseRows,
       snapshot.purchaseHeaders,
@@ -2370,9 +2856,17 @@ function analyticsHistorySnapshotHash_(snapshot) {
       snapshot.correctionVersion ? CANN.CORRECTION_HEADERS : []
     )
   }));
+  snapshot._memoHistorySnapshotHash = result;
+  return result;
 }
 
 function analyticsDataVersion_(snapshot, includeLedger) {
+  if (!snapshot) return '';
+  const key = includeLedger
+    ? '_memoDataVersionWithLedger'
+    : '_memoDataVersionWithoutLedger';
+  if (snapshot[key]) return snapshot[key];
+
   const value = {
     purchases: analyticsHashRows_(
       snapshot.purchaseRows,
@@ -2397,16 +2891,36 @@ function analyticsDataVersion_(snapshot, includeLedger) {
       CANN.LEDGER_HEADERS
     );
   }
-  return sha256Hex_(JSON.stringify(value));
+  const result = sha256Hex_(JSON.stringify(value));
+  snapshot[key] = result;
+  return result;
 }
 
 function analyticsHashRows_(rawRows, headers, fields) {
-  return (rawRows || []).map(raw => ({
-    row: raw.canonicalRow,
-    values: fields.map(field => (
-      analyticsHashValue_(value_(raw.cells, headers || {}, field))
-    ))
-  }));
+  const safeHeaders = headers || {};
+  const indices = (fields || []).map(field => {
+    const idx = safeHeaders[field];
+    return idx === undefined ? -1 : idx;
+  });
+  const numFields = indices.length;
+  const rows = rawRows || [];
+  const len = rows.length;
+  const result = new Array(len);
+  for (let i = 0; i < len; i++) {
+    const raw = rows[i];
+    const cells = (raw && raw.cells) || [];
+    const vals = new Array(numFields);
+    for (let j = 0; j < numFields; j++) {
+      const col = indices[j];
+      const cell = col >= 0 ? cells[col] : '';
+      vals[j] = analyticsHashValue_(cell);
+    }
+    result[i] = {
+      row: raw ? raw.canonicalRow : i + 2,
+      values: vals
+    };
+  }
+  return result;
 }
 
 function analyticsHashValue_(value) {
@@ -2743,6 +3257,7 @@ function handleLegacySyncLocked_(requestContext, timing) {
 
   phaseStarted = Date.now();
   recordBackendPhase_(timing, 'responseConstruction', phaseStarted);
+  bumpMutationWatermark_();
   return response;
 }
 
@@ -3164,6 +3679,7 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     upsertLedger_(ss, requestId, purchases.length, consumptions.length, allAccepted ? 'ACCEPTED' : 'PARTIAL', ledgerStarted - started, '', requestContext);
     recordBackendPhase_(timing, 'ledgerUpdate', ledgerStarted);
   }
+  bumpMutationWatermark_();
   return response;
 }
 
@@ -3367,6 +3883,7 @@ function onFormSubmit(e) {
       appendConsumptionRows_(ss, [event], true, null, runtimeContext);
       applyProductEffects_(context, [event]);
       updateFormAndDescriptionLocked_(ss, runtimeContext);
+      bumpMutationWatermark_();
       SpreadsheetApp.flush();
     }
   } finally {
@@ -3431,7 +3948,10 @@ function onInventoryEdit(e) {
   assertConfigEnvironment_(ss);
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
-  try { updateFormAndDescriptionLocked_(ss); } finally { lock.releaseLock(); }
+  try {
+    updateFormAndDescriptionLocked_(ss);
+    bumpMutationWatermark_();
+  } finally { lock.releaseLock(); }
 }
 
 // -----------------------------------------------------------------------------
@@ -3457,6 +3977,7 @@ function runReliabilityMigration() {
       interactionSummary: interactionSummary,
       reconciliation: reconciliation
     };
+    bumpMutationWatermark_();
     console.log(JSON.stringify(result));
     return result;
   } finally {
@@ -3657,6 +4178,8 @@ function rebuildInteractionSummaryLocked_(ss, enableFastPath) {
     readyToEnable: true,
     fastPathEnabled: fastPathEnabled
   };
+  bumpMutationWatermark_();
+  return result;
 }
 
 function ensureInteractionSummarySchema_(ss) {
@@ -5835,6 +6358,7 @@ function rebuildEffectiveProductProjections() {
         JSON.stringify(reconciliation.differences)
       );
     }
+    bumpMutationWatermark_();
     return {
       rebuiltProducts: rebuilt.rebuiltProducts,
       differences: reconciliation.differences
@@ -6893,6 +7417,7 @@ function applyRecoverableSyncLocked_(settings) {
           'V1 Form refresh deferred to recoverable repair: ' +
           conciseError_(error)
         );
+        bumpMutationWatermark_();
         return {
           applyId: applyId,
           complete: false,
@@ -6948,6 +7473,7 @@ function applyRecoverableSyncLocked_(settings) {
     product.finishedAt = effect.finishedAt;
     product.lastQuantity = effect.lastQuantity;
   });
+  bumpMutationWatermark_();
   return result;
 }
 
@@ -7114,6 +7640,7 @@ function repairPendingSyncApplyLocked_(runtimeContext) {
       2,
       [['']]
     )]);
+    bumpMutationWatermark_();
     return {
       repaired: true,
       applyId: applyId,
@@ -7129,6 +7656,7 @@ function repairPendingSyncApplyLocked_(runtimeContext) {
   const plan = JSON.parse(journalRecord.finalizationJson);
   if (plan.formRefreshRequired) updateFormAndDescriptionLocked_(ss);
   const result = finalizeRecoverableApplyLocked_(ss, applyId);
+  bumpMutationWatermark_();
   return {
     repaired: true,
     applyId: applyId,
@@ -7447,25 +7975,41 @@ function finishActionContext_(ss, runtimeContext, submittedActionIds) {
 }
 
 function recoverableApplyEvidence_(ss, runtimeContext) {
+  const sheet = runtimeContext && runtimeContext.sheets && runtimeContext.sheets.applyJournal
+    ? runtimeContext.sheets.applyJournal
+    : requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
+  const headers = runtimeContext && runtimeContext.headers && runtimeContext.headers.applyJournal
+    ? runtimeContext.headers.applyJournal
+    : headerMap_(sheet);
+  const rows = readDataRows_(sheet);
+  return recoverableApplyEvidenceFromValues_(rows, headers);
+}
+
+function recoverableApplyEvidenceFromValues_(rows, headers) {
   const evidence = {
     eventIds: {},
     correctionIds: {},
     finishActionProductIds: {}
   };
-  const sheet = runtimeContext && runtimeContext.sheets.applyJournal
-    ? runtimeContext.sheets.applyJournal
-    : requiredSheet_(ss, CANN.SHEETS.APPLY_JOURNAL);
-  const headers = runtimeContext && runtimeContext.headers.applyJournal
-    ? runtimeContext.headers.applyJournal
-    : headerMap_(sheet);
-  readDataRows_(sheet).forEach(row => {
-    if (text_(value_(row, headers, 'State')) !== 'COMPLETE') return;
+  const safeHeaders = headers || {};
+  (rows || []).forEach(row => {
+    if (!row) return;
+    const cells = Array.isArray(row) ? row : row.cells;
+    if (!cells || !cells.some(cell => cell !== '' && cell != null)) return;
+    if (text_(value_(cells, safeHeaders, 'State')) !== 'COMPLETE') return;
     const finalizationJson = text_(value_(
-      row,
-      headers,
+      cells,
+      safeHeaders,
       'Finalization JSON'
     ));
     if (!finalizationJson) return;
+    if (
+      finalizationJson.indexOf('"eventIds"') === -1 &&
+      finalizationJson.indexOf('"correctionActions"') === -1 &&
+      finalizationJson.indexOf('"finishActions"') === -1
+    ) {
+      return;
+    }
     let plan;
     try {
       plan = JSON.parse(finalizationJson);
