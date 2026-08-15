@@ -290,7 +290,15 @@ const purchaseWrites = writes(normalRuntime, 'Purchases');
 assert.deepEqual(purchaseWrites.map(entry => entry.row), [2, 2, 2, 2]);
 assert.deepEqual(purchaseWrites.map(entry => entry.column), [8, 10, 13, 17]);
 assert.equal(purchaseWrites.every(entry => entry.numRows === 1 && entry.numColumns === 1), true);
-assert.equal(normalRuntime.audit.structural.length, 0);
+// A committed sync bumps MUTATION_WATERMARK, which (as of v1.3.3 Fix 1) is
+// persisted to ScriptProperties as well as CacheService; that persistence is
+// the only structural change a normal sync should make.
+assert.equal(normalRuntime.audit.structural.length, 1);
+assert.deepEqual(
+  normalRuntime.audit.structural.map(entry => entry.operation),
+  ['setScriptProperty'],
+);
+assert.equal(normalRuntime.audit.structural[0].name, 'MUTATION_WATERMARK');
 assert.equal(
   normalRuntime.audit.services.filter(entry => entry.service === 'SpreadsheetApp' && entry.method === 'openById').length,
   1,
@@ -350,7 +358,14 @@ assert.equal(dataReads(emptyRuntime, 'Form Responses 1').length, 0);
 assert.equal(writes(emptyRuntime, 'Purchases').length, 0);
 assert.equal(writes(emptyRuntime, 'ConsumptionEvents').length, 0);
 assert.equal(writes(emptyRuntime, 'Form Responses 1').length, 0);
-assert.equal(emptyRuntime.audit.structural.length, 0);
+// Even an empty v2 batch is a successful sync request, so it still bumps
+// MUTATION_WATERMARK, which is persisted to ScriptProperties (v1.3.3 Fix 1).
+assert.equal(emptyRuntime.audit.structural.length, 1);
+assert.deepEqual(
+  emptyRuntime.audit.structural.map(entry => entry.operation),
+  ['setScriptProperty'],
+);
+assert.equal(emptyRuntime.audit.structural[0].name, 'MUTATION_WATERMARK');
 
 // The measured adaptive branch switches to one UUID-column Set read for larger
 // batches, avoiding one TextFinder service operation per submitted item.
@@ -551,7 +566,14 @@ assert.equal(legacyResponse.success, true);
 assert.equal(legacyResponse.message, 'Sync complete');
 assert.deepEqual(legacyResponse.productIdMap, {});
 assert.equal(productRow(legacyRuntime, '*P1')[headerIndex(PURCHASE_HEADERS, 'Uses')], 2.5);
-assert.equal(legacyRuntime.audit.structural.length, 0);
+// A committed legacy sync also bumps MUTATION_WATERMARK, persisted to
+// ScriptProperties (v1.3.3 Fix 1).
+assert.equal(legacyRuntime.audit.structural.length, 1);
+assert.deepEqual(
+  legacyRuntime.audit.structural.map(entry => entry.operation),
+  ['setScriptProperty'],
+);
+assert.equal(legacyRuntime.audit.structural[0].name, 'MUTATION_WATERMARK');
 
 // Before migration, GET uses the exact legacy canonical-history calculation.
 // The projection migration must reproduce that response byte-for-byte at the

@@ -1193,7 +1193,40 @@ function splitSheetRange(range) {
   };
 }
 
-function getSheetValuesObject(runtime, spreadsheetId, range) {
+// Mirrors backend_additions.gs's spreadsheetLocalDateSerial_: format the wall-clock
+// components of the Date in the spreadsheet's canonical time zone, then treat those
+// components as if they were UTC to compute the Sheets serial number. Kept in sync
+// deliberately -- this is what the real Advanced Sheets Values API returns for a
+// date cell when valueRenderOption is UNFORMATTED_VALUE and dateTimeRenderOption is
+// SERIAL_NUMBER (the default when unspecified).
+function dateToSheetsSerial(dateValue) {
+  const parts = formatDateInTimeZone(dateValue, 'America/New_York', 'yyyy,MM,dd,HH,mm,ss,SSS')
+    .split(',')
+    .map(Number);
+  return Date.UTC(
+    parts[0],
+    parts[1] - 1,
+    parts[2],
+    parts[3],
+    parts[4],
+    parts[5],
+    parts[6],
+  ) / MILLISECONDS_PER_DAY + 25569;
+}
+
+function applyValueRenderOptions(rows, options) {
+  if (!options || options.valueRenderOption !== 'UNFORMATTED_VALUE') return rows;
+  const dateTimeRenderOption = options.dateTimeRenderOption || 'SERIAL_NUMBER';
+  return rows.map(row => row.map(cell => {
+    if (!(cell instanceof Date)) return cell;
+    if (dateTimeRenderOption === 'FORMATTED_STRING') {
+      return formatDateInTimeZone(cell, 'America/New_York', 'yyyy-MM-dd HH:mm:ss');
+    }
+    return dateToSheetsSerial(cell);
+  }));
+}
+
+function getSheetValuesObject(runtime, spreadsheetId, range, options) {
   const normalizedSpreadsheetId = String(spreadsheetId);
   const spreadsheet = runtime.spreadsheets.get(normalizedSpreadsheetId);
   if (!spreadsheet) throw new Error('Spreadsheet not found: ' + normalizedSpreadsheetId);
@@ -1226,7 +1259,7 @@ function getSheetValuesObject(runtime, spreadsheetId, range) {
   return {
     range: String(range),
     majorDimension: 'ROWS',
-    values: trimmed,
+    values: applyValueRenderOptions(trimmed, options),
   };
 }
 
@@ -1250,7 +1283,7 @@ function sheetsValuesBatchGet(runtime, spreadsheetId, options) {
     spreadsheetId: normalizedSpreadsheetId,
     ranges: ranges.slice(),
   });
-  const valueRanges = ranges.map(range => getSheetValuesObject(runtime, spreadsheetId, range));
+  const valueRanges = ranges.map(range => getSheetValuesObject(runtime, spreadsheetId, range, options));
   return {
     spreadsheetId: normalizedSpreadsheetId,
     valueRanges,
@@ -1963,12 +1996,15 @@ module.exports = {
   FakeSpreadsheet,
   FakeTextFinder,
   FakeTextOutput,
+  applyValueRenderOptions,
   buildConfigRows,
   cloneMatrix,
   cloneValue,
   columnToLetters,
   createAppsScriptRuntime,
+  dateToSheetsSerial,
   deterministicUuid,
+  getSheetValuesObject,
   lettersToColumn,
   makeRow,
   makeSheetRows,
