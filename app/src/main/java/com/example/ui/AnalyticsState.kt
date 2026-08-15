@@ -507,7 +507,6 @@ class AnalyticsCoordinator(
 
     private fun loadInsightsCacheThenRefresh() {
         insightsLoaded = true
-        _insights.update { it.copy(isInitialLoading = true, isStale = true) }
         scope.launch {
             repository.readCachedInsights()?.let { cached ->
                 val range = cached.cachedInsightsRange()
@@ -516,6 +515,7 @@ class AnalyticsCoordinator(
                     displayedRange = range,
                     isFromCache = true,
                     isStale = true,
+                    isInitialLoading = false,
                     lastUpdatedEpochMillis = cached.generatedAtEpochMillis,
                 )
             }
@@ -525,12 +525,12 @@ class AnalyticsCoordinator(
 
     private fun loadHistoryCacheThenRefresh() {
         historyLoaded = true
-        _history.update { it.copy(isInitialLoading = true) }
         scope.launch {
             repository.readCachedHistory()?.let { cached ->
                 _history.value = stateFromResponse(cached, cached.filters).copy(
                     isFromCache = true,
                     isStale = true,
+                    isInitialLoading = false,
                     hasMore = false,
                     hasFreshCursor = false,
                     nextCursor = null,

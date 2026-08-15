@@ -1193,20 +1193,26 @@ function splitSheetRange(range) {
   };
 }
 
-function sheetsValuesGet(runtime, spreadsheetId, range) {
+function getSheetValuesObject(runtime, spreadsheetId, range) {
   const normalizedSpreadsheetId = String(spreadsheetId);
-  runtime.audit.record('services', {
-    service: 'Sheets',
-    method: 'Spreadsheets.Values.get',
-    spreadsheetId: normalizedSpreadsheetId,
-    range: String(range),
-  });
   const spreadsheet = runtime.spreadsheets.get(normalizedSpreadsheetId);
   if (!spreadsheet) throw new Error('Spreadsheet not found: ' + normalizedSpreadsheetId);
   const parsed = splitSheetRange(range);
   const sheet = spreadsheet.getSheetByName(parsed.sheetName);
   if (!sheet) throw new Error('Advanced Sheets sheet not found: ' + parsed.sheetName);
-  const values = sheet.getRange(parsed.a1).getValues();
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (lastRow === 0 || lastCol === 0) {
+    return {
+      range: String(range),
+      majorDimension: 'ROWS',
+      values: [],
+    };
+  }
+  const parsedCoords = parseA1(parsed.a1, sheet.getMaxRows(), sheet.getMaxColumns());
+  const effectiveNumRows = Math.min(parsedCoords.numRows, Math.max(1, lastRow - parsedCoords.row + 1));
+  const effectiveNumCols = Math.min(parsedCoords.numColumns, Math.max(1, lastCol - parsedCoords.column + 1));
+  const values = sheet.getRange(parsedCoords.row, parsedCoords.column, effectiveNumRows, effectiveNumCols).getValues();
   while (values.length && values.at(-1).every(value => value === '' || value == null)) {
     values.pop();
   }
@@ -1221,6 +1227,33 @@ function sheetsValuesGet(runtime, spreadsheetId, range) {
     range: String(range),
     majorDimension: 'ROWS',
     values: trimmed,
+  };
+}
+
+function sheetsValuesGet(runtime, spreadsheetId, range) {
+  const normalizedSpreadsheetId = String(spreadsheetId);
+  runtime.audit.record('services', {
+    service: 'Sheets',
+    method: 'Spreadsheets.Values.get',
+    spreadsheetId: normalizedSpreadsheetId,
+    range: String(range),
+  });
+  return getSheetValuesObject(runtime, spreadsheetId, range);
+}
+
+function sheetsValuesBatchGet(runtime, spreadsheetId, options) {
+  const normalizedSpreadsheetId = String(spreadsheetId);
+  const ranges = (options && options.ranges) || [];
+  runtime.audit.record('services', {
+    service: 'Sheets',
+    method: 'Spreadsheets.Values.batchGet',
+    spreadsheetId: normalizedSpreadsheetId,
+    ranges: ranges.slice(),
+  });
+  const valueRanges = ranges.map(range => getSheetValuesObject(runtime, spreadsheetId, range));
+  return {
+    spreadsheetId: normalizedSpreadsheetId,
+    valueRanges,
   };
 }
 
@@ -1280,6 +1313,93 @@ class FakeScriptProperties {
     delete this.values[name];
     this.runtime.audit.record('structural', { operation: 'deleteScriptProperty', name });
     return this;
+  }
+}
+
+class FakeCache {
+  constructor(runtime, scope = 'script') {
+    this.runtime = runtime;
+    this.scope = scope;
+    this.store = new Map();
+  }
+
+  get(key) {
+    const k = String(key);
+    const entry = this.store.get(k);
+    let value = null;
+    const now = this.runtime.clock ? this.runtime.clock.now() : Date.now();
+    if (entry) {
+      if (now > entry.expiresAt) {
+        this.store.delete(k);
+      } else {
+        value = entry.value;
+      }
+    }
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'get', key: k, hit: value !== null });
+    return value;
+  }
+
+  put(key, value, expirationInSeconds = 600) {
+    const k = String(key);
+    const v = String(value);
+    if (k.length > 250) throw new Error('Cache key exceeds 250 chars: ' + k.length);
+    if (Buffer.byteLength(v, 'utf8') > 100 * 1024) throw new Error('Cache value exceeds 100KB: ' + Buffer.byteLength(v, 'utf8'));
+    const exp = Math.min(Math.max(1, Number(expirationInSeconds) || 600), 21600);
+    const now = this.runtime.clock ? this.runtime.clock.now() : Date.now();
+    this.store.set(k, { value: v, expiresAt: now + exp * 1000 });
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'put', key: k, expirationInSeconds: exp });
+  }
+
+  getAll(keys) {
+    const result = {};
+    (keys || []).forEach(k => {
+      const val = this.get(k);
+      if (val !== null) result[k] = val;
+    });
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'getAll', keys: (keys || []).map(String) });
+    return result;
+  }
+
+  putAll(values, expirationInSeconds = 600) {
+    Object.entries(values || {}).forEach(([k, v]) => {
+      this.put(k, v, expirationInSeconds);
+    });
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'putAll', count: Object.keys(values || {}).length });
+  }
+
+  remove(key) {
+    const k = String(key);
+    this.store.delete(k);
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'remove', key: k });
+  }
+
+  removeAll(keys) {
+    (keys || []).forEach(k => this.store.delete(String(k)));
+    this.runtime.audit.record('services', { service: 'CacheService', scope: this.scope, method: 'removeAll', keys: (keys || []).map(String) });
+  }
+}
+
+class FakeCacheService {
+  constructor(runtime) {
+    this.runtime = runtime;
+    this.scriptCache = new FakeCache(runtime, 'script');
+    this.userCache = new FakeCache(runtime, 'user');
+    this.documentCache = new FakeCache(runtime, 'document');
+  }
+
+  getScriptCache() {
+    this.runtime.audit.record('services', { service: 'CacheService', method: 'getScriptCache' });
+    return this.scriptCache;
+  }
+
+  getUserCache() {
+    this.runtime.audit.record('services', { service: 'CacheService', method: 'getUserCache' });
+    return this.userCache;
+  }
+
+  getDocumentCache() {
+    this.runtime.audit.record('services', { service: 'CacheService', method: 'getDocumentCache' });
+    return this.documentCache;
   }
 }
 
@@ -1584,6 +1704,7 @@ function createAppsScriptRuntime(options = {}) {
     FORM_ID: formId,
   }, options.properties || {}));
   const lock = new FakeScriptLock(runtime);
+  const cacheService = new FakeCacheService(runtime);
   const forms = new Map();
   const form = new FakeForm(runtime, Object.assign({
     id: formId,
@@ -1698,13 +1819,18 @@ function createAppsScriptRuntime(options = {}) {
         batchUpdate(body, id) {
           return sheetsBatchUpdate(runtime, body, id);
         },
-        Values: {
+        Values: Object.assign({
           get(id, range) {
             return sheetsValuesGet(runtime, id, range);
           },
-        },
+        }, options.enableBatchGet ? {
+          batchGet(id, options) {
+            return sheetsValuesBatchGet(runtime, id, options);
+          },
+        } : {}),
       },
     },
+    CacheService: cacheService,
     LockService: {
       getScriptLock() {
         audit.record('locks', { operation: 'getScriptLock' });
@@ -1745,6 +1871,8 @@ function createAppsScriptRuntime(options = {}) {
     logs,
     properties,
     lock,
+    cacheService,
+    scriptCache: cacheService.scriptCache,
     form,
     forms,
     spreadsheets,
@@ -1822,6 +1950,8 @@ function createAppsScriptRuntime(options = {}) {
 module.exports = {
   AUDIT_BUCKETS,
   AuditRecorder,
+  FakeCache,
+  FakeCacheService,
   FakeDataValidationBuilder,
   FakeForm,
   FakeFormItem,
@@ -1845,4 +1975,5 @@ module.exports = {
   parseA1,
   rangeA1,
   sheetsSerialToDate,
+  sheetsValuesBatchGet,
 };

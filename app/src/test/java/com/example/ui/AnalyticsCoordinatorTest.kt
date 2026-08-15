@@ -75,8 +75,7 @@ class AnalyticsCoordinatorTest {
         val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
         try {
             coordinator.onRunwayVisible()
-            assertTrue(coordinator.insights.value.isInitialLoading)
-            assertTrue(coordinator.insights.value.isStale)
+            awaitState { coordinator.insights.value.isInitialLoading }
             coordinator.onRunwayVisible()
 
             val request = repository.nextInsightsRequest()
@@ -756,9 +755,377 @@ class AnalyticsCoordinatorTest {
 
             val request = repository.nextInsightsRequest()
             assertTrue(coordinator.insights.value.isInitialLoading)
-            assertTrue(coordinator.insights.value.isStale)
+            assertFalse(coordinator.insights.value.isRefreshing)
             request.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
             awaitState { !coordinator.insights.value.isStale && !coordinator.insights.value.isInitialLoading }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun warmStartOnInsightsScreenEmitsCacheImmediatelyWithoutBlockingLoader() = runBlocking {
+        val cached = insightsResponse(
+            scope = "DEFAULT",
+            generatedAtEpochMillis = 1_700_000_000_000L,
+        )
+        val repository = ControlledAnalyticsDataSource(cachedInsights = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+
+            awaitState {
+                coordinator.insights.value.data == cached &&
+                    coordinator.insights.value.isFromCache &&
+                    coordinator.insights.value.isStale &&
+                    !coordinator.insights.value.isInitialLoading &&
+                    coordinator.insights.value.isRefreshing
+            }
+            assertEquals(1, repository.cachedInsightsReadCount)
+            assertEquals(1_700_000_000_000L, coordinator.insights.value.lastUpdatedEpochMillis)
+
+            val liveRequest = repository.nextInsightsRequest()
+            val fresh = insightsResponse(
+                scope = "DEFAULT",
+                generatedAtEpochMillis = 1_700_000_001_000L,
+            )
+            liveRequest.response.complete(fresh)
+            awaitState {
+                coordinator.insights.value.data == fresh &&
+                    !coordinator.insights.value.isFromCache &&
+                    !coordinator.insights.value.isStale &&
+                    !coordinator.insights.value.isRefreshing &&
+                    !coordinator.insights.value.isInitialLoading
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun warmStartOnHistoryScreenEmitsCacheImmediatelyWithoutBlockingLoader() = runBlocking {
+        val cached = historyResponse(
+            eventIds = listOf("cached-1", "cached-2"),
+            nextCursor = null,
+        )
+        val repository = ControlledAnalyticsDataSource(cachedHistory = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onHistoryVisible()
+
+            awaitState {
+                coordinator.history.value.events.map { it.eventUuid } == listOf("cached-1", "cached-2") &&
+                    coordinator.history.value.isFromCache &&
+                    coordinator.history.value.isStale &&
+                    !coordinator.history.value.isInitialLoading &&
+                    coordinator.history.value.isRefreshing
+            }
+            assertEquals(1, repository.cachedHistoryReadCount)
+
+            val liveRequest = repository.nextHistoryRequest()
+            val fresh = historyResponse(
+                eventIds = listOf("fresh-1"),
+                nextCursor = null,
+            )
+            liveRequest.response.complete(fresh)
+            awaitState {
+                coordinator.history.value.events.map { it.eventUuid } == listOf("fresh-1") &&
+                    !coordinator.history.value.isFromCache &&
+                    !coordinator.history.value.isStale &&
+                    !coordinator.history.value.isRefreshing &&
+                    !coordinator.history.value.isInitialLoading
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun coldStartWithEmptyCacheSetsInitialLoadingTrueAndRefreshingFalse() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+
+            val request = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isInitialLoading)
+            assertFalse(coordinator.insights.value.isRefreshing)
+            assertEquals(null, coordinator.insights.value.data)
+
+            val fresh = insightsResponse(generatedAtEpochMillis = 1_700_000_000_000L)
+            request.response.complete(fresh)
+            awaitState {
+                coordinator.insights.value.data == fresh &&
+                    !coordinator.insights.value.isInitialLoading &&
+                    !coordinator.insights.value.isRefreshing &&
+                    !coordinator.insights.value.isStale
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun coldStartHistoryWithEmptyCacheSetsInitialLoadingTrueAndRefreshingFalse() = runBlocking {
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onHistoryVisible()
+
+            val request = repository.nextHistoryRequest()
+            assertTrue(coordinator.history.value.isInitialLoading)
+            assertFalse(coordinator.history.value.isRefreshing)
+            assertTrue(coordinator.history.value.events.isEmpty())
+
+            val fresh = historyResponse(eventIds = listOf("fresh-1"), nextCursor = null)
+            request.response.complete(fresh)
+            awaitState {
+                coordinator.history.value.events.map { it.eventUuid } == listOf("fresh-1") &&
+                    !coordinator.history.value.isInitialLoading &&
+                    !coordinator.history.value.isRefreshing &&
+                    !coordinator.history.value.isStale
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun networkRefreshCompletionClearsRefreshingAndStale() = runBlocking {
+        val cached = insightsResponse(generatedAtEpochMillis = 1_700_000_000_000L)
+        val repository = ControlledAnalyticsDataSource(cachedInsights = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+            val request = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            assertTrue(coordinator.insights.value.isStale)
+
+            val fresh = insightsResponse(generatedAtEpochMillis = 1_700_000_001_000L)
+            request.response.complete(fresh)
+
+            awaitState {
+                coordinator.insights.value.data == fresh &&
+                    !coordinator.insights.value.isRefreshing &&
+                    !coordinator.insights.value.isStale &&
+                    !coordinator.insights.value.isFromCache
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun networkErrorWithCachedDataPreservesCachedDataAndMarksStale() = runBlocking {
+        val cached = insightsResponse(generatedAtEpochMillis = 1_700_000_000_000L)
+        val repository = ControlledAnalyticsDataSource(cachedInsights = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+            val request = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+
+            request.response.completeExceptionally(
+                AnalyticsApiException("BACKEND_BUSY", "Server busy", retryable = true),
+            )
+
+            awaitState {
+                coordinator.insights.value.error != null &&
+                    !coordinator.insights.value.isRefreshing &&
+                    !coordinator.insights.value.isInitialLoading &&
+                    coordinator.insights.value.isStale &&
+                    coordinator.insights.value.data == cached
+            }
+            assertEquals("BACKEND_BUSY", coordinator.insights.value.error?.code)
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun networkErrorWithCachedHistoryPreservesCachedEventsAndMarksStale() = runBlocking {
+        val cached = historyResponse(eventIds = listOf("cached-1"), nextCursor = null)
+        val repository = ControlledAnalyticsDataSource(cachedHistory = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onHistoryVisible()
+            val request = repository.nextHistoryRequest()
+            assertTrue(coordinator.history.value.isRefreshing)
+
+            request.response.completeExceptionally(
+                AnalyticsApiException("BACKEND_BUSY", "Server busy", retryable = true),
+            )
+
+            awaitState {
+                coordinator.history.value.error != null &&
+                    !coordinator.history.value.isRefreshing &&
+                    !coordinator.history.value.isInitialLoading &&
+                    coordinator.history.value.isStale &&
+                    coordinator.history.value.events.map { it.eventUuid } == listOf("cached-1")
+            }
+            assertEquals("BACKEND_BUSY", coordinator.history.value.error?.code)
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun runwayRefreshFloorEnforcesTwoMinuteIntervalOnLogScreen() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val request1 = repository.nextInsightsRequest()
+            request1.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing && !coordinator.insights.value.isStale }
+
+            simulatedNow += 60_000L
+            coordinator.markStale()
+            yield()
+            assertTrue(coordinator.insights.value.isStale)
+            assertFalse(coordinator.insights.value.isRefreshing)
+            assertFalse(repository.hasQueuedInsightsRequest())
+
+            simulatedNow = 1_000_000L + RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
+            coordinator.markStale()
+            val request2 = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            request2.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing && !coordinator.insights.value.isStale }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun runwayRefreshFloorExactBoundaryCheck() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val request1 = repository.nextInsightsRequest()
+            request1.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing && !coordinator.insights.value.isStale }
+
+            // At 119,999 ms -> rejected by floor
+            simulatedNow = 1_000_000L + RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS - 1L
+            coordinator.markStale()
+            yield()
+            assertTrue(coordinator.insights.value.isStale)
+            assertFalse(coordinator.insights.value.isRefreshing)
+            assertFalse(repository.hasQueuedInsightsRequest())
+
+            // At exactly 120,000 ms -> accepted by floor
+            simulatedNow = 1_000_000L + RUNWAY_ONLY_REFRESH_MIN_INTERVAL_MILLIS
+            coordinator.markStale()
+            val request2 = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            request2.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing && !coordinator.insights.value.isStale }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun switchingFromLogToInsightsTabBypassesRunwayFloorImmediately() = runBlocking {
+        var simulatedNow = 1_000_000L
+        val repository = ControlledAnalyticsDataSource()
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope, clock = { simulatedNow })
+        try {
+            coordinator.onRunwayVisible()
+            val request1 = repository.nextInsightsRequest()
+            request1.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing }
+
+            // Stale triggered at +30s on Runway screen
+            simulatedNow += 30_000L
+            coordinator.markStale()
+            yield()
+            assertFalse(repository.hasQueuedInsightsRequest())
+
+            // Switch to Insights screen -> fires immediate refresh bypassing 120s floor
+            coordinator.onInsightsVisible()
+            val request2 = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+            request2.response.complete(insightsResponse(generatedAtEpochMillis = simulatedNow))
+            awaitState { !coordinator.insights.value.isRefreshing && !coordinator.insights.value.isStale }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun historyCacheImmediatePresentationBeforeNetwork() = runBlocking {
+        val cached = historyResponse(eventIds = listOf("cached-1", "cached-2"), nextCursor = null)
+        val repository = ControlledAnalyticsDataSource(cachedHistory = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onHistoryVisible()
+
+            awaitState {
+                coordinator.history.value.events.map { it.eventUuid } == listOf("cached-1", "cached-2") &&
+                    coordinator.history.value.isFromCache &&
+                    coordinator.history.value.isStale &&
+                    !coordinator.history.value.isInitialLoading &&
+                    coordinator.history.value.isRefreshing &&
+                    !coordinator.history.value.hasFreshCursor
+            }
+            assertEquals(1, repository.cachedHistoryReadCount)
+
+            val liveRequest = repository.nextHistoryRequest()
+            val fresh = historyResponse(eventIds = listOf("fresh-1", "fresh-2"), nextCursor = "cursor-fresh")
+            liveRequest.response.complete(fresh)
+
+            awaitState {
+                coordinator.history.value.events.map { it.eventUuid } == listOf("fresh-1", "fresh-2") &&
+                    !coordinator.history.value.isFromCache &&
+                    !coordinator.history.value.isStale &&
+                    !coordinator.history.value.isRefreshing &&
+                    coordinator.history.value.hasFreshCursor
+            }
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
+    @Test
+    fun offlineNetworkErrorWithCachedDataPreservesCacheWithOfflineErrorCode() = runBlocking {
+        val cached = insightsResponse(generatedAtEpochMillis = 1_700_000_000_000L)
+        val repository = ControlledAnalyticsDataSource(cachedInsights = cached)
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onInsightsVisible()
+            val request = repository.nextInsightsRequest()
+            assertTrue(coordinator.insights.value.isRefreshing)
+
+            request.response.completeExceptionally(
+                AnalyticsApiException("OFFLINE", "Device is offline", retryable = true),
+            )
+
+            awaitState {
+                coordinator.insights.value.error != null &&
+                    !coordinator.insights.value.isRefreshing &&
+                    !coordinator.insights.value.isInitialLoading &&
+                    coordinator.insights.value.isStale &&
+                    coordinator.insights.value.isFromCache &&
+                    coordinator.insights.value.data == cached
+            }
+            assertEquals("OFFLINE", coordinator.insights.value.error?.code)
         } finally {
             coordinatorScope.cancel()
         }
@@ -902,10 +1269,13 @@ class AnalyticsCoordinatorTest {
 
     private class ControlledAnalyticsDataSource(
         private val cachedInsights: InsightsResponseDto? = null,
+        private val cachedHistory: HistoryResponseDto? = null,
     ) : AnalyticsDataSource {
         private val historyRequests = Channel<HistoryRequest>(Channel.UNLIMITED)
         private val insightsRequests = Channel<InsightsRequest>(Channel.UNLIMITED)
         var cachedInsightsReadCount = 0
+            private set
+        var cachedHistoryReadCount = 0
             private set
 
         override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto {
@@ -933,7 +1303,10 @@ class AnalyticsCoordinatorTest {
             return cachedInsights
         }
 
-        override suspend fun readCachedHistory(): HistoryResponseDto? = null
+        override suspend fun readCachedHistory(): HistoryResponseDto? {
+            cachedHistoryReadCount += 1
+            return cachedHistory
+        }
 
         suspend fun nextHistoryRequest(): HistoryRequest =
             withTimeout(2_000) { historyRequests.receive() }
