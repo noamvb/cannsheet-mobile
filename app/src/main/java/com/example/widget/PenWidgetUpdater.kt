@@ -39,15 +39,18 @@ object PenWidgetUpdater {
             appContext.resources.getDimension(R.dimen.widget_compact_breakpoint_height) /
                 appContext.resources.displayMetrics.density
         ).toInt()
-        val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
-        val compact = minHeightDp in 1 until compactBreakpointHeightDp
+        val spec = PenWidgetSizing.resolve(
+            widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0),
+            heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0),
+            compactBreakpointHeightDp = compactBreakpointHeightDp,
+        )
         manager.updateAppWidget(
             appWidgetId,
             PenWidgetRenderer.buildRemoteViews(
                 context = appContext,
                 appWidgetId = appWidgetId,
                 model = model,
-                compact = compact,
+                spec = spec,
             ),
         )
     }

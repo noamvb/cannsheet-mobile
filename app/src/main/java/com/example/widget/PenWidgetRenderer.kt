@@ -2,6 +2,7 @@ package com.example.widget
 
 import android.content.Context
 import android.os.SystemClock
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import com.example.R
@@ -11,16 +12,16 @@ object PenWidgetRenderer {
         context: Context,
         appWidgetId: Int,
         model: PenWidgetUiModel,
-        compact: Boolean = false,
+        spec: PenWidgetLayoutSpec = PenWidgetSizing.base,
     ): RemoteViews = when (model) {
-        is PenWidgetUiModel.Message -> buildMessageViews(context, appWidgetId, model)
+        is PenWidgetUiModel.Message -> buildMessageViews(context, appWidgetId, model, spec)
         is PenWidgetUiModel.Composing -> buildInteractiveViews(
             context = context,
             appWidgetId = appWidgetId,
             productName = model.productName.resolve(context),
             subtitle = model.subtitle,
             seconds = model.seconds,
-            compact = compact,
+            spec = spec,
             recentlyQueued = model.recentlyQueued,
             awaitingCommit = null,
             canDecrement = model.canDecrement,
@@ -34,7 +35,7 @@ object PenWidgetRenderer {
             productName = model.productName.resolve(context),
             subtitle = model.subtitle,
             seconds = model.frozenSeconds,
-            compact = compact,
+            spec = spec,
             recentlyQueued = false,
             awaitingCommit = model,
             canDecrement = false,
@@ -47,9 +48,12 @@ object PenWidgetRenderer {
         context: Context,
         appWidgetId: Int,
         model: PenWidgetUiModel.Message,
+        spec: PenWidgetLayoutSpec,
     ): RemoteViews = RemoteViews(context.packageName, R.layout.widget_pen_message).apply {
         setTextViewText(R.id.widget_pen_message_title, model.title.resolve(context))
         setTextViewText(R.id.widget_pen_message_hint, model.hint.resolve(context))
+        setTextSize(R.id.widget_pen_message_title, spec.textSizes.messageTitleSp)
+        setTextSize(R.id.widget_pen_message_hint, spec.textSizes.messageHintSp)
         setContentDescription(R.id.widget_pen_message_root, model.hint.resolve(context))
         setOnClickPendingIntent(
             R.id.widget_pen_message_root,
@@ -70,7 +74,7 @@ object PenWidgetRenderer {
         productName: String,
         subtitle: PenWidgetText,
         seconds: Int,
-        compact: Boolean,
+        spec: PenWidgetLayoutSpec,
         recentlyQueued: Boolean,
         awaitingCommit: PenWidgetUiModel.AwaitingCommit?,
         canDecrement: Boolean,
@@ -78,14 +82,16 @@ object PenWidgetRenderer {
         submitEnabled: Boolean,
     ): RemoteViews = RemoteViews(
         context.packageName,
-        if (compact) R.layout.widget_pen_consumption_compact else R.layout.widget_pen_consumption,
+        if (spec.compact) R.layout.widget_pen_consumption_compact else R.layout.widget_pen_consumption,
     ).apply {
+        val compact = spec.compact
         setTextViewText(R.id.widget_pen_name, productName)
         setTextViewText(R.id.widget_pen_subtitle, subtitle.resolve(context))
         setViewVisibility(
             R.id.widget_pen_subtitle,
             if (compact) View.GONE else View.VISIBLE,
         )
+        applyTextSizes(this, spec.textSizes)
         val isSaving = awaitingCommit?.remainingMillis == 0L
         val showCompactConfirmation = compact && recentlyQueued && seconds == 0
         setTextViewText(
@@ -222,6 +228,24 @@ object PenWidgetRenderer {
             enabled = canIncrement && awaitingCommit == null,
         )
         setSubmitButtonEnabled(this, R.id.widget_pen_submit, submitEnabled && !isSaving)
+    }
+
+    /**
+     * The layouts grow their panels through weights, but `sp` sizes are fixed at
+     * inflation, so the text has to be resized for the size actually rendered.
+     */
+    private fun applyTextSizes(remoteViews: RemoteViews, sizes: PenWidgetTextSizes) {
+        remoteViews.setTextSize(R.id.widget_pen_name, sizes.nameSp)
+        remoteViews.setTextSize(R.id.widget_pen_subtitle, sizes.subtitleSp)
+        remoteViews.setTextSize(R.id.widget_pen_counter, sizes.counterSp)
+        remoteViews.setTextSize(R.id.widget_pen_countdown, sizes.countdownSp)
+        remoteViews.setTextSize(R.id.widget_pen_submit, sizes.submitSp)
+        remoteViews.setTextSize(R.id.widget_pen_minus, sizes.stepSp)
+        remoteViews.setTextSize(R.id.widget_pen_plus, sizes.stepSp)
+    }
+
+    private fun RemoteViews.setTextSize(viewId: Int, sizeSp: Float) {
+        setTextViewTextSize(viewId, TypedValue.COMPLEX_UNIT_SP, sizeSp)
     }
 
     private fun setStepButtonEnabled(remoteViews: RemoteViews, viewId: Int, enabled: Boolean) {

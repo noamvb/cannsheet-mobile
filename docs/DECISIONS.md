@@ -927,3 +927,62 @@ historical rationale.
   `app/src/test/java/com/example/ui/AnalyticsCoordinatorTest.kt`,
   `tests/run_e2e_verification.sh`
 
+
+## ADR-023: Let the pen widget's controls grow instead of a dead bottom spacer
+
+- Status: Accepted; implemented for Cannsheet Mobile v1.3.4.
+- Date: 2026-08-17
+- Context: ADR-015 point 4 added a zero-content `TextView` with
+  `layout_weight="1"` to the bottom of both interactive widget layouts so that
+  extra launcher height was "absorbed without distorting the controls". It
+  absorbed the height literally: every control kept its fixed `dp` size and the
+  spacer took the entire remainder. A widget resized to roughly `285x295dp`
+  spent about half its area on empty background below the `+`/`−` row, which is
+  what the owner reported. The same layouts also fix every text size in `sp` at
+  inflation, so even a taller counter panel would have drawn base-size glyphs.
+- Decision:
+  1. Delete the weighted bottom spacer from `widget_pen_consumption.xml` and
+     `widget_pen_consumption_compact.xml`, and give the counter row and the
+     step row `layout_weight` `3` and `2` on top of their existing `dp` heights.
+     The `dp` values become floors that any surplus height is shared over,
+     rather than fixed sizes.
+  2. Give the counter panel and the submit button `layout_height="match_parent"`
+     inside the counter row, and weight the row horizontally `8:1` with a `40dp`
+     submit floor, so the submit control stays at least `48dp` wide at the
+     `140dp` minimum resize width and widens with the widget.
+  3. Add `PenWidgetSizing`, a pure function from the launcher-reported
+     `OPTION_APPWIDGET_MIN_WIDTH`/`MIN_HEIGHT` to a `PenWidgetLayoutSpec`
+     carrying the compact decision and eight `sp` text sizes, interpolated
+     between a base set at `140x160dp` and a largest set at `280x320dp` and
+     rounded to half a point. `PenWidgetRenderer` applies them with
+     `setTextViewTextSize`.
+  4. Scale by `min(widthFraction, heightFraction)` so a tall narrow widget does
+     not grow text its counter panel cannot hold, and clamp at the full-scale
+     size so text stops growing rather than tracking the widget forever.
+  5. Mirror the same weights in `widget_pen_consumption_preview.xml` so the
+     API 31+ picker preview fills the same way the placed widget does.
+- Rationale: `RemoteViews` cannot set layout geometry below API 31, and
+  `TextView` autosizing would rescale the counter every time its text changed
+  between `0s`, `30s`, `Saving…`, and `✓`. Weights handle the geometry in XML
+  where they work on every supported API level, and one tested pure function
+  handles the text, which keeps the size policy unit-testable without a device.
+  Reporting minimums rather than maximums keeps the chosen sizes valid in both
+  orientations.
+- Consequences: When a widget is shorter than its own content the two rows now
+  share the shortfall proportionally instead of the bottom control being
+  clipped, so at the `110dp` compact floor a control can measure about `2dp`
+  under its nominal height; `PenWidgetRendererTest` encodes that tolerance
+  explicitly below `160dp` and holds the full floor above it. Presentation
+  only: no Room, DataStore, queue, network, backend, or quantity-contract
+  change, and `secondsToUses` is untouched. `PenWidgetRenderer.buildRemoteViews`
+  now takes a `PenWidgetLayoutSpec` instead of a `compact: Boolean`.
+- Related files: `app/src/main/java/com/example/widget/PenWidgetSizing.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/main/res/layout/widget_pen_consumption.xml`,
+  `app/src/main/res/layout/widget_pen_consumption_compact.xml`,
+  `app/src/main/res/layout/widget_pen_consumption_preview.xml`,
+  `app/src/test/java/com/example/widget/PenWidgetSizingTest.kt`,
+  `app/src/androidTest/java/com/example/widget/PenWidgetRendererTest.kt`,
+  `docs/images/pen-widget-285x295-before.png`,
+  `docs/images/pen-widget-285x295-after.png`
