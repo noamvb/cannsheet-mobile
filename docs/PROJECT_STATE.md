@@ -1,14 +1,20 @@
 # Project state
 
-Last updated: 2026-08-17
+Last updated: 2026-08-18
 
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit `df59c08b1815c77fe03273c89c7234ceee9b7296`
-  (v1.3.3); `main` has since advanced with documentation-only commits
-- Current release metadata in `app/build.gradle.kts`: version name `1.3.3`,
-  version code `34`
+- Latest application release source commit `f33a8ef5f441261c887355972cc0736e72532b05`
+  (v1.3.4, published 2026-08-18)
+- Current release metadata in `app/build.gradle.kts`: version name `1.3.4`,
+  version code `35`
+- Widget resize-scaling fix [PR #90](https://github.com/noamvb/cannsheet-mobile/pull/90)
+  was squash-merged as `3ef1f0ffa11111b3e3ce2765514484671a42fb54`. Version-only
+  release [PR #91](https://github.com/noamvb/cannsheet-mobile/pull/91) was
+  squash-merged as `f33a8ef5f441261c887355972cc0736e72532b05`, whose main run
+  [32096495724](https://github.com/noamvb/cannsheet-mobile/actions/runs/32096495724)
+  went green on all six jobs and is the commit tag `v1.3.4` points at.
 - Version-only release [PR #84](https://github.com/noamvb/cannsheet-mobile/pull/84)
   was squash-merged as `9118da294c65e8d89a4214f4946399ba0928929b`. Its PR gate
   passed in [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262).
@@ -439,7 +445,7 @@ were not changed or probed.
   interaction, emulator instrumentation execution, or production-data action
   has been performed; Android instrumentation source was compiled only.
 
-### Widget resize scaling (v1.3.4)
+### Widget resize scaling (released in v1.3.4)
 
 - The v1.2.27 sizing work (ADR-015) ended both interactive layouts with a
   zero-content `TextView` carrying `layout_weight="1"`. Every control kept its
