@@ -986,3 +986,57 @@ historical rationale.
   `app/src/androidTest/java/com/example/widget/PenWidgetRendererTest.kt`,
   `docs/images/pen-widget-285x295-before.png`,
   `docs/images/pen-widget-285x295-after.png`
+
+## ADR-024: Keep the existing release signing key despite its debug-style name
+
+### Context
+
+While wiring a separate on-device model app to Cannsheet, the published release APKs were
+inspected and the signing certificate reads:
+
+```
+Signer #1 certificate DN: C=US, O=Android, CN=Android Debug
+Signer #1 certificate SHA-256 digest: a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e
+```
+
+The name invites the conclusion that `release-apk.yml` fell back to debug signing because
+the keystore secrets were missing. It did not, and that conclusion was reached and then
+withdrawn during this investigation. The facts:
+
+- `RELEASE_KEYSTORE_BASE64`, `RELEASE_STORE_PASSWORD`, `RELEASE_KEY_ALIAS`,
+  `RELEASE_KEY_PASSWORD` and `RELEASES_TOKEN` are all present on the repository.
+- The workflow asserts each is non-empty with `test -n` before building, so an absent
+  secret fails the release rather than silently degrading it.
+- The certificate digest is identical across v1.3.2, v1.3.3 and v1.3.4, so the key is
+  stable and in-place updates work.
+
+The keystore held in the secret simply carries a debug-style distinguished name. It is a
+real, private, consistently used key.
+
+### Decision
+
+Keep it. Do not replace the signing key.
+
+### Consequences
+
+- In-place updates through Obtainium continue to work, which is the property that matters.
+- Replacing the key would produce a different certificate, and Android cannot install an
+  APK over one signed by a different key. The only path would be uninstalling Cannsheet,
+  which destroys the Room database **and any pending offline queue rows that have not yet
+  reached the spreadsheet**. That cost is not justified by a cosmetic name.
+- If the key is ever replaced deliberately, prefer APK Signature Scheme v3 key rotation
+  with a signing lineage, which preserves in-place updates, over generating a fresh
+  unrelated key.
+- The digest above is recorded so a future release can be checked against it. A change in
+  this value between releases is a serious problem and means updates will fail.
+- If the keystore originated as an Android debug keystore it carries the well-known
+  `android` store and key passwords. The file itself is a repository secret, so this is a
+  weak second factor rather than an open door, but it is a reason not to treat the digest
+  as a strong identity claim.
+
+### Not verified
+
+The keystore's origin and its actual passwords were not inspected; only the certificate it
+produces was. Whether it is a copied AGP debug keystore or a purpose-made keystore given
+those distinguished-name values is unknown.
+
