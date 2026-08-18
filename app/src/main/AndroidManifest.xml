@@ -5,6 +5,20 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      Lets this app ask the LocalLLM app to write a summary of analytics this app has
+      already received. The permission is signature|knownSigner and is granted because this
+      app's signing certificate is listed in LocalLLM's known_signers.xml; the two apps do
+      not share a key. LocalLLM must be installed first. Absence is handled gracefully: the
+      summary card simply does not appear.
+    -->
+    <uses-permission android:name="com.noamv.localllm.permission.INFERENCE" />
+
+    <!-- Required from Android 11 for this app to see the LocalLLM service at all. -->
+    <queries>
+        <package android:name="com.noamv.localllm" />
+    </queries>
+
 
     <application
         android:name=".CannsheetApplication"

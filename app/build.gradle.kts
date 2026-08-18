@@ -1,6 +1,7 @@
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
+  alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.devtools.ksp)
 }
 
@@ -81,6 +82,8 @@ android {
   buildFeatures {
     compose = true
     buildConfig = true
+    // Generates the binder stubs for the LocalLLM inference service.
+    aidl = true
   }
 }
 
@@ -129,6 +132,7 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
+  implementation(libs.kotlinx.serialization.json)
   implementation(libs.logging.interceptor)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
