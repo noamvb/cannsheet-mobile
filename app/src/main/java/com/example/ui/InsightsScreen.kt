@@ -120,6 +120,9 @@ fun InsightsScreen(
                 onRefresh = viewModel::refreshInsights,
                 runwayState = runwayPresentation.estimates,
                 windowWidth = windowWidth,
+                // The unmasked value: null means the queue depth is unknown, which must
+                // suppress the summary just as a non-zero count does.
+                pendingActionCount = runwayPresentation.pendingActionCount,
             )
         } else {
             HistoryContent(
@@ -150,6 +153,10 @@ internal fun InsightsContent(
     runwayState: RunwayEstimateState =
         RunwayEstimateState.Suppressed(RunwaySuppressionReason.NO_SNAPSHOT),
     windowWidth: WindowWidth = WindowWidth.COMPACT,
+    // Distinct from pendingCount: null means the queue depth is unknown, which must
+    // suppress the generated summary exactly as a non-zero count does. Defaulted from
+    // pendingCount so existing callers and tests are unaffected.
+    pendingActionCount: Int? = pendingCount,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
     var selectedProductId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -233,6 +240,9 @@ internal fun InsightsContent(
                 onSelect = onRefresh,
                 onCustom = { showCustom = true },
             )
+        }
+        item {
+            InsightNarrativeCard(state = state, pendingActionCount = pendingActionCount)
         }
         if (pendingCount > 0) {
             item { PendingBanner(pendingCount, isSyncing, onSync) }
