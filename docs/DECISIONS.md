@@ -1040,3 +1040,43 @@ The keystore's origin and its actual passwords were not inspected; only the cert
 produces was. Whether it is a copied AGP debug keystore or a purpose-made keystore given
 those distinguished-name values is unknown.
 
+## ADR-025: The generated Insights summary is stricter than the figures it describes
+
+### Context
+
+`v1.4.0` adds an optional written summary above the Insights statistics, produced on device
+by the model hosted in `noamvb/local-llm`.
+
+The statistics themselves are shown from a cached or stale snapshot under a visible
+"not current" notice, which is correct: a labelled number under a warning is honest. Prose
+is not read that way. "You logged 42 times this month" reads as authoritative even when
+three logs are still sitting in the offline queue.
+
+### Decision
+
+`CannsheetLlmFacts.shouldSummarise` suppresses the summary on a cached, stale,
+range-changing, refreshing, errored or absent snapshot, and whenever local actions are
+queued — mirroring `deriveRunwayPresentationState`. A `null` pending-action count also
+suppresses: the screen masks the unknown case with `?: 0`, which is right for a banner and
+wrong for prose, so `InsightsContent` takes a separate nullable parameter.
+
+No projection is ever transmitted. `AGENTS.md` requires runway and spend projections not be
+persisted, transmitted, or treated as confirmed values, and sending them over IPC to
+another app is transmission. Only recorded figures are sent, and a test fails if any fact
+label contains runway, project, forecast, estimate, per day, will last, or remaining.
+
+### Consequences
+
+- The summary appears less often than the statistics do. That is intended.
+- Dates come only from `response.range`; the mapper never reads a device clock.
+- Incomplete source data is surfaced as its own fact so the model can qualify rather than
+  narrate a range that silently dropped rows.
+- The permission is `signature|knownSigner`; this app's certificate digest is listed in the
+  model app's `known_signers.xml`. The two apps do not share a key.
+
+### Not verified
+
+The card has not been observed rendering on a device. Doing so needs a live Apps Script
+analytics response together with a release-signed build, and the gate deliberately refuses
+the cached snapshot a debug build most easily produces.
+
