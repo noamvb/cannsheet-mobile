@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Heights below are floors, not fixed sizes: the two control rows carry weights
+  so a resized widget spends its extra height on the counter and the buttons
+  instead of on empty background. PenWidgetSizing grows the text to match.
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_pen_root"
     android:layout_width="match_parent"
@@ -29,17 +34,18 @@
         android:textSize="10sp" />
 
     <LinearLayout
+        android:id="@+id/widget_pen_counter_row"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="56dp"
+        android:layout_weight="3"
         android:gravity="center_vertical"
-        android:minHeight="56dp"
         android:orientation="horizontal">
 
         <FrameLayout
             android:id="@+id/widget_pen_counter_panel"
             android:layout_width="0dp"
-            android:layout_height="56dp"
-            android:layout_weight="1"
+            android:layout_height="match_parent"
+            android:layout_weight="8"
             android:background="@drawable/widget_counter_panel"
             android:padding="4dp">
 
@@ -67,9 +73,10 @@
 
         <Button
             android:id="@+id/widget_pen_submit"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="40dp"
+            android:layout_height="match_parent"
             android:layout_marginStart="8dp"
+            android:layout_weight="1"
             android:background="@drawable/widget_submit_button"
             android:contentDescription="@string/pen_widget_submit"
             android:minHeight="0dp"
@@ -82,15 +89,17 @@
     </LinearLayout>
 
     <LinearLayout
+        android:id="@+id/widget_pen_step_row"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="40dp"
         android:layout_marginTop="8dp"
+        android:layout_weight="2"
         android:orientation="horizontal">
 
         <Button
             android:id="@+id/widget_pen_minus"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="match_parent"
             android:layout_weight="1"
             android:background="@drawable/widget_step_button_disabled"
             android:contentDescription="@string/pen_widget_decrease"
@@ -106,7 +115,7 @@
         <Button
             android:id="@+id/widget_pen_plus"
             android:layout_width="0dp"
-            android:layout_height="40dp"
+            android:layout_height="match_parent"
             android:layout_marginStart="8dp"
             android:layout_weight="1"
             android:background="@drawable/widget_step_button_disabled"
@@ -120,9 +129,4 @@
             android:textSize="24sp"
             android:textStyle="bold" />
     </LinearLayout>
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
 </LinearLayout>

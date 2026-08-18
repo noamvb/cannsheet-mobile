@@ -1,13 +1,14 @@
 # Project state
 
-Last updated: 2026-08-15
+Last updated: 2026-08-17
 
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit `9118da294c65e8d89a4214f4946399ba0928929b`
-- Current release metadata in `app/build.gradle.kts`: version name `1.3.2`,
-  version code `33`
+- Latest application release source commit `df59c08b1815c77fe03273c89c7234ceee9b7296`
+  (v1.3.3); `main` has since advanced with documentation-only commits
+- Current release metadata in `app/build.gradle.kts`: version name `1.3.3`,
+  version code `34`
 - Version-only release [PR #84](https://github.com/noamvb/cannsheet-mobile/pull/84)
   was squash-merged as `9118da294c65e8d89a4214f4946399ba0928929b`. Its PR gate
   passed in [run 31859570262](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859570262).
@@ -437,6 +438,41 @@ were not changed or probed.
   not physical-device evidence. No PR #55 launcher screenshot, physical widget
   interaction, emulator instrumentation execution, or production-data action
   has been performed; Android instrumentation source was compiled only.
+
+### Widget resize scaling (v1.3.4)
+
+- The v1.2.27 sizing work (ADR-015) ended both interactive layouts with a
+  zero-content `TextView` carrying `layout_weight="1"`. Every control kept its
+  fixed `dp` height, so all surplus launcher height went to that spacer: a
+  widget resized to about `285x295dp` showed roughly half its area as empty
+  background under the `+`/`−` row. ADR-023 supersedes that point.
+- The spacer is gone. The counter row and step row now carry `layout_weight`
+  `3` and `2` over their existing `dp` heights, the counter panel and submit
+  button fill the counter row, and the row is weighted `8:1` horizontally with
+  a `40dp` submit floor so the submit control measures at least `48dp` wide at
+  the `140dp` minimum resize width.
+- `PenWidgetSizing` maps the launcher-reported
+  `OPTION_APPWIDGET_MIN_WIDTH`/`MIN_HEIGHT` onto a `PenWidgetLayoutSpec` holding
+  the compact decision and eight `sp` text sizes, interpolated between a base
+  set at `140x160dp` and a largest set at `280x320dp`, clamped at both ends and
+  rounded to half a point. `PenWidgetRenderer` applies them through
+  `setTextViewTextSize`; it now takes that spec instead of a `compact: Boolean`.
+- Growth uses `min(widthFraction, heightFraction)`, so a tall narrow widget does
+  not grow text wider than its counter panel.
+- This is the first widget work on this repository verified by executed Android
+  instrumentation rather than compilation alone. All 27
+  `com.example.widget` instrumented tests passed on a local
+  `google_apis/arm64-v8a` API 36 emulator, including three new
+  `PenWidgetRendererTest` cases that measure dead space, panel growth, and text
+  growth. Twelve `PenWidgetSizingTest` JVM cases cover the size mapping.
+- Before/after renders at `285x295dp` in dark mode were captured from the real
+  `RemoteViews` path on that emulator and are checked in at
+  `docs/images/pen-widget-285x295-before.png` and
+  `docs/images/pen-widget-285x295-after.png`. No physical device was used: the
+  Samsung SM-F966W was not connected, and a debug build cannot be installed over
+  the production package without an uninstall that would destroy Room data.
+- Presentation only. No Room, DataStore, queue, network, Apps Script, endpoint,
+  package ID, or signing change, and `secondsToUses` is untouched.
 
 ## Purchase autofill defaults feature work
 
