@@ -9,6 +9,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
@@ -95,6 +96,13 @@ internal fun terminalState(current: NarrativeState, accumulated: String): Narrat
 internal fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): NarrativeState {
     val context = LocalContext.current
     val response = state.data
+
+    DisposableEffect(context) {
+        val warmup = LocalLlmClient(context).warmup()
+        onDispose {
+            warmup.close()
+        }
+    }
 
     val narrative by produceState<NarrativeState>(
         initialValue = NarrativeState.Hidden,
