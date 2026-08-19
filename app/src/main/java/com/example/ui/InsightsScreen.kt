@@ -194,6 +194,11 @@ internal fun InsightsContent(
         AnalyticsErrorState(state.error, onRetry = { onRefresh(state.displayedRange) })
         return
     }
+    // Called here, above the LazyColumn, so the generation coroutine survives the card
+    // being scrolled off-screen and back. LazyColumn disposes an off-screen item's
+    // composition entirely; driving this from inside the item would restart generation
+    // every time it re-entered the viewport.
+    val narrativeState = rememberNarrativeState(state, pendingActionCount)
 
     Row(Modifier.fillMaxSize()) {
         Box(
@@ -242,7 +247,7 @@ internal fun InsightsContent(
             )
         }
         item {
-            InsightNarrativeCard(state = state, pendingActionCount = pendingActionCount)
+            InsightNarrativeCard(narrative = narrativeState)
         }
         if (pendingCount > 0) {
             item { PendingBanner(pendingCount, isSyncing, onSync) }
