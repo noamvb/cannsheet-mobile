@@ -92,7 +92,7 @@ internal fun terminalState(current: NarrativeState, accumulated: String): Narrat
  * position.
  */
 @Composable
-fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): NarrativeState {
+internal fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): NarrativeState {
     val context = LocalContext.current
     val response = state.data
 
@@ -167,7 +167,7 @@ fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): Na
  * for why.
  */
 @Composable
-fun InsightNarrativeCard(
+internal fun InsightNarrativeCard(
     narrative: NarrativeState,
     modifier: Modifier = Modifier,
 ) {
