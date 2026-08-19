@@ -6,8 +6,11 @@ Last updated: 2026-08-19
 
 - Canonical branch: `main`
 - Latest application release source commit `d2638a1` (v1.4.0, published 2026-08-18)
-- Current release metadata in `app/build.gradle.kts`: version name `1.4.2`,
-  version code `38`
+- Current release metadata in `app/build.gradle.kts`: version name `1.4.3`,
+  version code `39`
+- Holds LocalLLM warmup binding across the Insights screen lifecycle
+  ([PR #103](https://github.com/noamvb/cannsheet-mobile/pull/103), squash-merged as
+  `27d3a56`).
 - The summary no longer regenerates when scrolled out of view and back
   ([PR #100](https://github.com/noamvb/cannsheet-mobile/pull/100), squash-merged as
   `e557894`). Generation is driven above the `LazyColumn`, which item virtualisation
