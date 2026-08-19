@@ -78,22 +78,21 @@ internal fun terminalState(current: NarrativeState, accumulated: String): Narrat
 }
 
 /**
- * A written summary of the analytics already on screen, generated on this device.
+ * Drives [NarrativeState] for the given [state]/[pendingActionCount] and survives the card
+ * being scrolled off-screen and back.
  *
- * The card is additive and silent about its own absence. It renders nothing when the
- * LocalLLM app is missing, no model is on disk, the snapshot is not one
- * [CannsheetLlmFacts.shouldSummarise] accepts, or generation fails. The Insights screen is
- * complete without it. The one visible-but-empty state is a brief loading indicator: once
- * every pre-flight gate has passed and generation is about to start, a cold engine load and
- * first token can take several seconds, and showing nothing during that window reads as the
- * feature being broken rather than working.
+ * This must be called from a composable that is not itself torn down by scrolling — the
+ * caller, not [InsightNarrativeCard]. [InsightNarrativeCard] is placed inside a `LazyColumn`
+ * item, and `LazyColumn` disposes an off-screen item's entire composition once it scrolls
+ * far enough away, discarding any `remember`/`produceState` state that lived inside it. If
+ * generation were driven from inside the card itself, scrolling the card out of view and
+ * back would restart it from scratch — indistinguishable from the summary "regenerating"
+ * for no reason. Hoisting this to the caller, above the `LazyColumn`, keeps the generation
+ * coroutine alive for as long as Insights itself is on screen, regardless of scroll
+ * position.
  */
 @Composable
-fun InsightNarrativeCard(
-    state: InsightsUiState,
-    pendingActionCount: Int?,
-    modifier: Modifier = Modifier,
-) {
+fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): NarrativeState {
     val context = LocalContext.current
     val response = state.data
 
@@ -155,6 +154,23 @@ fun InsightNarrativeCard(
         value = terminalState(value, builder.toString())
     }
 
+    return narrative
+}
+
+/**
+ * Renders [narrative]. The card is additive and silent about its own absence:
+ * [NarrativeState.Hidden] and [NarrativeState.Failed] draw nothing at all — the Insights
+ * screen is complete without it.
+ *
+ * Generation itself is driven by [rememberNarrativeState], called by the caller above the
+ * `LazyColumn` this card lives in — never inside this composable. See that function's doc
+ * for why.
+ */
+@Composable
+fun InsightNarrativeCard(
+    narrative: NarrativeState,
+    modifier: Modifier = Modifier,
+) {
     val cardBody = narrative.toCardBody()
     if (cardBody is NarrativeCardBody.None) return
     val loading = cardBody is NarrativeCardBody.Loading
