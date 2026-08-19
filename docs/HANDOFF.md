@@ -4,7 +4,24 @@ Last updated: 2026-08-19
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current release: v1.4.2
+## Current release: v1.4.3
+
+`v1.4.3` (`versionCode 39`, `versionName 1.4.3`) holds a LocalLLM warmup binding open while
+the Insights overview screen is active. This keeps LocalLLM resident and prevents the inference
+service from being terminated with a freshly loaded model in memory during the gap between the
+status check and generation.
+
+### Shipped changes
+
+1. **Hold LocalLLM warmup binding across Insights screen lifecycle** (PR #103, squashed `27d3a56`)
+   - Adopted the `LocalLlmClient.warmup(): AutoCloseable` binding handle from LocalLLM client.
+   - `rememberNarrativeState()` holds the warmup binding via `DisposableEffect` for the duration
+     the Insights Overview screen is mounted, and safely releases the binding on disposal.
+
+2. **Version bump to 1.4.3 (versionCode 39)**
+   - `versionCode` 38 → 39, `versionName` 1.4.2 → 1.4.3.
+
+## v1.4.2
 
 `v1.4.2` (`versionCode 38`, `versionName 1.4.2`) stops the Insights summary regenerating when
 it is scrolled out of view and back. A patch bump: no behaviour change beyond the card no
