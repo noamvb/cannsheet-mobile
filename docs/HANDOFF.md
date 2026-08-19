@@ -4,7 +4,50 @@ Last updated: 2026-08-19
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current release: v1.4.1
+## Current release: v1.4.2
+
+`v1.4.2` (`versionCode 38`, `versionName 1.4.2`) stops the Insights summary regenerating when
+it is scrolled out of view and back. A patch bump: no behaviour change beyond the card no
+longer redoing work it had already done.
+
+### Shipped changes
+
+1. **The summary no longer regenerates on scroll** (PR #100, squashed `e557894`)
+   - The card sits in a `LazyColumn` item, and `LazyColumn` disposes an off-screen item's
+     entire composition once it scrolls far enough away — discarding the `produceState`
+     that was driving generation. Scrolling back built a fresh composition and started
+     again from nothing: a visible regeneration, plus another binder request and another
+     on-device model run every round trip.
+   - `rememberNarrativeState()` is now called once above the `LazyColumn` and the resolved
+     state passed down; the card only renders. See `docs/DECISIONS.md` ADR-027.
+
+2. **Version bump** (PR #101, squashed `152d141`)
+   - `versionCode` 37 → 38, `versionName` 1.4.1 → 1.4.2.
+
+### Release provenance
+
+- Merged pull requests: **#100** (`e557894`), **#101** (`152d141`).
+- Tagged commit **`152d141b9ff27b523f4473ce8edb49b301014f3e`**, the tip of `main`.
+- Proven by push-to-main run **`32278056196`**, event `push`, conclusion `success`, with all
+  six required jobs individually `success`: `Classify changes and scan repository`,
+  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
+  `Cannsheet Android PR validation`.
+- `v1.4.2` is an **annotated** tag pointing at exactly that commit, restoring the convention
+  the ship-release skill specifies and that v1.4.1 deviated from (v1.4.1's tag is
+  lightweight; it is published and must not be re-tagged).
+- Release workflow **`32278927941`**: all three jobs succeeded.
+- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.2.apk`
+  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.2.apk.sha256`.
+- Published APK SHA-256:
+  `b515500fb225c4249df44ec72f45c3671408ff08dfc72622bd37b1539b4d2236`, independently
+  downloaded and checked with `shasum -a 256 -c` against the published asset.
+- Signing certificate SHA-256:
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted from the
+  APK's v2 signing block and **identical to v1.4.1**, so Obtainium updates in place. The
+  debug-style DN is deliberate and documented in ADR-024.
+- Package `com.noamv.cannsheet.mobile`, `versionCode 38`, `versionName 1.4.2`, minSdk 24.
+
+## v1.4.1
 
 `v1.4.1` (`versionCode 37`, `versionName 1.4.1`) gives the Insights narrative card a loading
 state: an indeterminate progress bar and "Writing a summary on this phone…" from the moment
@@ -61,7 +104,10 @@ feature visible while it works, without changing what the feature does.
   phone…" text, and the transition into and out of it) has not been observed rendering on a
   device against a live analytics response with this release build. ADR-025's correction
   confirms the underlying **summary card** renders correctly against real data; it predates
-  this release's loading-state addition and does not cover it.
+  the loading-state addition and does not cover it.
+- The v1.4.2 scroll fix has not been observed on a device either. The defect it corrects
+  *was* reported from the phone by the owner, so the bug is confirmed on hardware even
+  though the fix is verified only by unit tests and CI.
 - No Apps Script deployment or live spreadsheet change was made in this cycle.
 
 ## Companion app
