@@ -261,8 +261,32 @@ jobs:
           arch: ${{ matrix.api-level == 24 && 'x86' || 'x86_64' }}
           force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          emulator-options: -no-window -gpu swiftshader_indirect -no-audio -no-boot-anim -no-snapshot-save -no-snapshot-load
+          script: |
+            # Reattach adb before Gradle touches the device. The emulator's own post-boot
+            # setup can leave the server half-attached -- `Unable to connect to adb daemon
+            # on port: 5037` followed by `adb: device offline` -- while still reporting
+            # sys.boot_completed=1, so the runner declares the emulator booted and hands a
+            # broken connection to Gradle. Downstream that lands as
+            # `InstallException: Broken pipe (32)` installing the test APK, or as a hang
+            # with no output at all. Observed repeatedly in poop-schedule on 2026-08-19;
+            # this job has not hit it, and these lines are here so it cannot.
+            adb kill-server || true
+            adb start-server
+            timeout 180 adb wait-for-device
+            # wait-for-device returns on "device" state, which proved necessary but not
+            # sufficient -- poll the property the tests actually depend on.
+            timeout 180 sh -c 'until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = "1" ]; do sleep 2; done'
+            adb devices -l
+            # The build and its teardown are one line on purpose. This action feeds the
+            # script to `sh -c` one line at a time, so a failing build would end the script
+            # and never reach a cleanup line beneath it, leaving the emulator alive for the
+            # action's own untimed `adb emu kill` to hang on -- defeating the timeout. The
+            # status is captured and re-exited so a real failure still reports.
+            #
+            # `-x` on the kernel-truncated comm names: Linux truncates to 15 characters, so
+            # `qemu-system-x86_64` never matches. `-f` would match pkill's own command line.
+            timeout 1200 ./gradlew --no-daemon connectedDebugAndroidTest; rc=$?; pkill -9 -x qemu-system-x86 || true; pkill -9 -x crashpad_handle || true; exit $rc
 
   required:
     name: Cannsheet Android PR validation
