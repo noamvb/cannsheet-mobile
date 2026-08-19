@@ -1080,3 +1080,49 @@ The card has not been observed rendering on a device. Doing so needs a live Apps
 analytics response together with a release-signed build, and the gate deliberately refuses
 the cached snapshot a debug build most easily produces.
 
+**Update, 2026-08-19:** observed, on a Galaxy Z Fold 7 running the release-signed 1.4.0
+build against a live account. The card rendered within about eight seconds of opening
+Insights from a cold `local-llm` process, and every figure in the summary matched the
+statistics displayed lower on the same screen. This was after `local-llm` 0.1.2 fixed a
+defect that had been deleting the model on every app switch, which is most of why the
+card had never been seen running before.
+
+## ADR-026: The narrative card shows a loading state, and it must be provably total
+
+### Context
+
+Generation takes ten-plus seconds before the first token and eight more after. The card
+sat empty that whole window, indistinguishable from "no model installed" — which it is
+deliberately silent for — and read as broken. `produceState<String?>` compounded this: a
+failure and "not started" both collapsed to `null`, so the card had no way to express that
+generation was underway even if it wanted to.
+
+### Decision
+
+`NarrativeState` gains `Loading`, set immediately after every pre-flight gate has passed
+and immediately before `client.generate()`. That ordering is the fix: a phone with no
+model installed still sees nothing at all, forever, because nothing before that point
+changed.
+
+A card that can appear is a card that can get stuck, so three ways it could hang were
+closed before this shipped:
+
+- `terminalState()` makes the end of a generation total. A flow that completes having
+  emitted zero fragments would otherwise leave `Loading` in place permanently — reachable,
+  not theoretical, because `LocalLlmClient` does not re-send text through `onComplete` for
+  a streaming request, so a service answering only there closes the flow with no emissions.
+- The collection is bounded by a 90 s timeout. A successful bind is no guarantee of ever
+  being answered; a wedged service emits no fragment, no completion and no error.
+- `EngineState.UNSUPPORTED` is an explicit gate. It reports `modelDownloaded = true` on
+  purpose (`noamvb/local-llm` v0.1.2, see ADR-025's update above), so it cleared the
+  existing check and would have drawn a spinner only to have the request refused a moment
+  later.
+
+A blank first fragment keeps the loading body rather than collapsing the Card, since
+models routinely open with a newline and tearing the Card down one frame after raising it
+is worse than either state alone.
+
+The `poop-schedule` insight card ships the identical state names, mapping shape, and
+loading-state composition — down to the caption text and test tag — so the two stay one
+feature rather than two that happen to look similar.
+

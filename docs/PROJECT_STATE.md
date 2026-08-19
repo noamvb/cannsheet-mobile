@@ -1,14 +1,21 @@
 # Project state
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
 
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit `f33a8ef5f441261c887355972cc0736e72532b05`
-  (v1.3.4, published 2026-08-18)
-- Current release metadata in `app/build.gradle.kts`: version name `1.3.4`,
-  version code `35`
+- Latest application release source commit `d2638a1` (v1.4.0, published 2026-08-18)
+- Current release metadata in `app/build.gradle.kts`: version name `1.4.1`,
+  version code `37`
+- The Insights narrative card gained a loading state in
+  [PR #97](https://github.com/noamvb/cannsheet-mobile/pull/97), squash-merged as
+  `21a9fd8`. It shows an indeterminate progress bar and "Writing a summary on this
+  phone…" from the moment generation is committed to until the first token arrives,
+  replacing the ten-plus seconds of blank space that read as the feature being broken.
+  See [ADR-026](DECISIONS.md#adr-026-the-narrative-card-shows-a-loading-state-and-it-must-be-provably-total).
+- The card was **observed rendering on a device for the first time** on 2026-08-19,
+  correcting the "not verified" claim ADR-025 had carried since v1.4.0.
 - Widget resize-scaling fix [PR #90](https://github.com/noamvb/cannsheet-mobile/pull/90)
   was squash-merged as `3ef1f0ffa11111b3e3ce2765514484671a42fb54`. Version-only
   release [PR #91](https://github.com/noamvb/cannsheet-mobile/pull/91) was
