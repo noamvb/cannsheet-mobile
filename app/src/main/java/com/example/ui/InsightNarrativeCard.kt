@@ -97,10 +97,11 @@ internal fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: 
     val context = LocalContext.current
     val response = state.data
 
-    DisposableEffect(context) {
-        val warmup = LocalLlmClient(context).warmup()
+    val shouldWarm = CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)
+    DisposableEffect(context, shouldWarm) {
+        val warmup = if (shouldWarm) LocalLlmClient(context).warmup() else null
         onDispose {
-            warmup.close()
+            warmup?.close()
         }
     }
 
