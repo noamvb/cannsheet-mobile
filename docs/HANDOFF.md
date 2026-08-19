@@ -18,8 +18,29 @@ status check and generation.
    - `rememberNarrativeState()` holds the warmup binding via `DisposableEffect` for the duration
      the Insights Overview screen is mounted, and safely releases the binding on disposal.
 
-2. **Version bump to 1.4.3 (versionCode 39)**
+2. **Version bump to 1.4.3 (versionCode 39)** (PR #104, squashed `1dc4cca`)
    - `versionCode` 38 → 39, `versionName` 1.4.2 → 1.4.3.
+
+### Release provenance
+
+- Merged pull requests: **#103** (`27d3a56`), **#104** (`1dc4cca`).
+- Tagged commit **`1dc4cca1bbe43e9dd747e5b9175db731d70fe5c9`**, the tip of `main`.
+- Proven by push-to-main run **`32292855160`**, event `push`, conclusion `success`, with all
+  six required jobs individually `success`: `Classify changes and scan repository`,
+  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
+  `Cannsheet Android PR validation`.
+- `v1.4.3` is an **annotated** tag pointing at exactly that commit.
+- Release workflow **`32293494930`**: all three jobs (`Confirm tested main commit`,
+  `Verify and build signed APK`, `Publish verified Cannsheet APK`) succeeded.
+- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.3.apk`
+  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.3.apk.sha256`.
+- Published APK SHA-256:
+  `f8cef5d38a38396fd6e527426526b7d75d66d729bc6ed5eaacaca4dd5b416f90`, independently
+  downloaded and checked with `shasum -a 256 -c` against the published asset.
+- Signing certificate SHA-256:
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted from the
+  APK's v2 signing block and **identical to v1.4.2 and v1.4.1**, so Obtainium updates in place.
+- Package `com.noamv.cannsheet.mobile`, `versionCode 39`, `versionName 1.4.3`, minSdk 24.
 
 ## v1.4.2
 
