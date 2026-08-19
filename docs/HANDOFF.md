@@ -4,7 +4,28 @@ Last updated: 2026-08-19
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current release: v1.4.3
+## Current release: v1.4.4
+
+`v1.4.4` (`versionCode 40`, `versionName 1.4.4`) is a patch release with two follow-up
+refinements to the LocalLLM prewarm work.
+
+### Shipped changes
+
+1. **Unbind cleanup on failed binds** (PR #106, squashed `a8125a5`)
+   - `LocalLlmClient.warmup()` now always calls `unbindService` on close, including when
+     `bindService` returned `false`. Previously a failed bind left `close()` a no-op,
+     leaking the registered `ServiceConnection` on every Insights open where LocalLLM is
+     absent or refuses the bind.
+2. **Insights warmup gated on data availability** (PR #106, squashed `a8125a5`)
+   - `rememberNarrativeState()` now keys its warmup `DisposableEffect` on
+     `CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)`, so the binding only
+     opens when a summary generation is actually plausible. Previously it fired
+     unconditionally, so a screen with too little data to summarise still paid the cost
+     of loading the 2 GB model.
+3. **Version bump to 1.4.4 (versionCode 40)**
+   - `versionCode` 39 → 40, `versionName` 1.4.3 → 1.4.4.
+
+## v1.4.3
 
 `v1.4.3` (`versionCode 39`, `versionName 1.4.3`) holds a LocalLLM warmup binding open while
 the Insights overview screen is active. This keeps LocalLLM resident and prevents the inference
