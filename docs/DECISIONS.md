@@ -1126,3 +1126,33 @@ The `poop-schedule` insight card ships the identical state names, mapping shape,
 loading-state composition — down to the caption text and test tag — so the two stay one
 feature rather than two that happen to look similar.
 
+
+## ADR-027: Generation is driven above the LazyColumn, not inside the card
+
+### Context
+
+The narrative card sits in a `LazyColumn` item. `LazyColumn` disposes an off-screen item's
+entire composition once it scrolls far enough away, discarding any `remember` or
+`produceState` state that lived inside it.
+
+With generation driven by a `produceState` inside the card, scrolling it out of view
+discarded that coroutine, and scrolling back created a fresh composition that started
+again from nothing. The owner saw the summary visibly regenerate for no reason, and every
+round trip cost another binder request and another model run on the phone.
+
+### Decision
+
+`rememberNarrativeState()` is called once in the Insights content composable, above the
+`LazyColumn`, and the resolved state is passed down. The card only renders it. Item
+virtualisation cannot reach the screen-level scope, so generation survives any amount of
+scrolling.
+
+`produceState` still keys on the snapshot identity, range, cache/stale flags and pending
+action count, so a genuine change restarts generation as it should — only scroll no longer
+counts as a change.
+
+### Consequences
+
+The general shape is worth remembering: work whose cost or visible identity should outlive
+a scroll must not be owned by a composable the list is free to dispose. The same fix landed
+in `poop-schedule` as D-016; the two insight cards continue to track each other.

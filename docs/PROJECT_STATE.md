@@ -6,8 +6,13 @@ Last updated: 2026-08-19
 
 - Canonical branch: `main`
 - Latest application release source commit `d2638a1` (v1.4.0, published 2026-08-18)
-- Current release metadata in `app/build.gradle.kts`: version name `1.4.1`,
-  version code `37`
+- Current release metadata in `app/build.gradle.kts`: version name `1.4.2`,
+  version code `38`
+- The summary no longer regenerates when scrolled out of view and back
+  ([PR #100](https://github.com/noamvb/cannsheet-mobile/pull/100), squash-merged as
+  `e557894`). Generation is driven above the `LazyColumn`, which item virtualisation
+  cannot dispose. See
+  [ADR-027](DECISIONS.md#adr-027-generation-is-driven-above-the-lazycolumn-not-inside-the-card).
 - The Insights narrative card gained a loading state in
   [PR #97](https://github.com/noamvb/cannsheet-mobile/pull/97), squash-merged as
   `21a9fd8`. It shows an indeterminate progress bar and "Writing a summary on this
