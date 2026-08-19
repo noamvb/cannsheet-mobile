@@ -6,8 +6,12 @@ Last updated: 2026-08-19
 
 - Canonical branch: `main`
 - Latest application release source commit `d2638a1` (v1.4.0, published 2026-08-18)
-- Current release metadata in `app/build.gradle.kts`: version name `1.4.3`,
-  version code `39`
+- Current release metadata in `app/build.gradle.kts`: version name `1.4.4`,
+  version code `40`
+- `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
+  Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
+  ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
+  `a8125a5`).
 - Holds LocalLLM warmup binding across the Insights screen lifecycle
   ([PR #103](https://github.com/noamvb/cannsheet-mobile/pull/103), squash-merged as
   `27d3a56`).
