@@ -1226,3 +1226,54 @@ not safe as static XML content descriptions.
 - `app/src/main/java/com/example/widget/PenWidgetActions.kt`
 - `app/src/main/java/com/example/widget/PenWidgetActionRouter.kt`
 - `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`
+
+## ADR-030: Keep pen-widget configuration optional and launcher-invokable
+
+### Context
+
+Widget instances created before configuration support have no per-instance keys,
+and Android 12+'s `configuration_optional` feature means a host may add a widget
+without ever launching the configuration activity. The new settings must therefore
+be absent-safe and must not replace the existing loaded-cart, persistence, queue, or
+wire contracts. The configuration activity is started by the launcher, which runs
+under a different Android UID from Cannsheet.
+
+### Decision
+
+Persist pinned product ID, discreet mode, and an optional step override under
+app-widget-ID-suffixed DataStore keys. Missing, blank, or out-of-range values read as
+the default configuration; widget deletion removes all three keys. The updater reads
+the configuration once, passes the pin and discreet flag into presentation, and
+applies a valid step override over the size-resolved layout spec. Discreet mode is
+presentation-only: it replaces the product name with the generic `Pen cart` label and
+the status/count subtitle with `Tap to log`, while retaining queued confirmation and
+accessibility descriptions.
+
+The configuration activity is explicitly `exported="true"` because the launcher must
+invoke it across the application boundary. This corrects the attached implementation
+plan's `exported="false"` value, which was observed to prevent the API-36 launcher
+from opening the settings screen. The activity initializes `RESULT_CANCELED`, only
+returns `RESULT_OK` after durable configuration and serialized rendering, and never
+updates `AppWidgetManager` directly.
+
+### Consequences
+
+- Existing and optionally configured widgets preserve the pre-configuration default
+  behavior, while restored IDs cannot inherit stale configuration after deletion.
+- Stored and transmitted quantities remain uses-only; widget seconds stay a display
+  and input concern, and no new backend or Room contract is introduced.
+- The configuration surface is available to the launcher as required by Android's
+  app-widget host contract. The activity intentionally does not expose a network or
+  production-data mutation path beyond the existing widget update boundary.
+
+### Related files
+
+- `app/src/main/java/com/example/widget/PenWidgetConfigureActivity.kt`
+- `app/src/main/java/com/example/widget/PenWidgetInstanceConfig.kt`
+- `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`
+- `app/src/main/java/com/example/widget/PenWidgetDataSource.kt`
+- `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`
+- `app/src/main/java/com/example/widget/PenWidgetUiModel.kt`
+- `app/src/main/AndroidManifest.xml`
+- `app/src/main/res/xml/pen_consumption_widget_info.xml`
+- `app/src/main/res/xml-v31/pen_consumption_widget_info.xml`

@@ -19,6 +19,7 @@
     <string name="queue_alert_settings_blocked">Android is blocking Cannsheet notifications. Turn them on in Android Settings, then try again.</string>
     <string name="pen_widget_label">Pen quick log</string>
     <string name="pen_widget_description">Log a loaded pen cart from your home screen.</string>
+    <string name="pen_widget_configure_label">Pen widget settings</string>
     <string name="pen_widget_no_carts">No pen carts</string>
     <string name="pen_widget_no_carts_hint">Tap to open Cannsheet Mobile.</string>
     <string name="pen_widget_no_cart_loaded">No cart loaded</string>
@@ -34,6 +35,12 @@
     <string name="pen_widget_saving">Saving…</string>
     <string name="pen_widget_loading">Loading…</string>
     <string name="pen_widget_generic_cart">Pen cart</string>
+    <string name="pen_widget_discreet_subtitle">Tap to log</string>
+    <string name="pen_widget_follow_loaded_cart">Follow the loaded cart</string>
+    <string name="pen_widget_discreet_mode">Discreet mode</string>
+    <string name="pen_widget_discreet_mode_hint">Hide the product name and use counts</string>
+    <string name="pen_widget_step_size">Step size</string>
+    <string name="pen_widget_save">Save</string>
     <string name="pen_widget_open_app_description">%1$s. Double tap to open Cannsheet Mobile.</string>
     <string name="pen_widget_undo_window">Undo within %1$d seconds</string>
     <string name="pen_widget_seconds_short" translatable="false">%1$ds</string>

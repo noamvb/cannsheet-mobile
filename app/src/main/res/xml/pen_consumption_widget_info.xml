@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/pen_widget_description"
+    android:configure="com.noamv.cannsheet.mobile/com.example.widget.PenWidgetConfigureActivity"
     android:initialLayout="@layout/widget_pen_initial"
     android:minWidth="110dp"
     android:minHeight="160dp"

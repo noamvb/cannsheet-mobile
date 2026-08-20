@@ -61,12 +61,17 @@ fun buildPenWidgetUiModel(
     draft: PenWidgetDraft,
     lastQueuedAtMillis: Long?,
     nowMillis: Long,
+    discreet: Boolean = false,
 ): PenWidgetUiModel {
     if (draft is PenWidgetDraft.AwaitingCommit) {
         val product = (penState as? PenQuickLogState.Loaded)?.product
         return PenWidgetUiModel.AwaitingCommit(
-            productName = product?.name?.let { PenWidgetText.Literal(it) }
-                ?: PenWidgetText.Resource(R.string.pen_widget_generic_cart),
+            productName = if (discreet) {
+                PenWidgetText.Resource(R.string.pen_widget_generic_cart)
+            } else {
+                product?.name?.let { PenWidgetText.Literal(it) }
+                    ?: PenWidgetText.Resource(R.string.pen_widget_generic_cart)
+            },
             subtitle = PenWidgetText.Resource(
                 R.string.pen_widget_undo_window,
                 listOf(UNDO_WINDOW_MILLIS / 1_000L),
@@ -104,11 +109,20 @@ fun buildPenWidgetUiModel(
                     openTarget = PenWidgetOpenTarget.Settings,
                 )
             } else {
+                val recentlyQueued = wasRecentlyQueued(lastQueuedAtMillis, nowMillis)
                 PenWidgetUiModel.Composing(
-                    productName = PenWidgetText.Literal(penState.product.name),
-                    subtitle = buildSubtitle(penState, lastQueuedAtMillis, nowMillis),
+                    productName = if (discreet) {
+                        PenWidgetText.Resource(R.string.pen_widget_generic_cart)
+                    } else {
+                        PenWidgetText.Literal(penState.product.name)
+                    },
+                    subtitle = if (discreet && !recentlyQueued) {
+                        PenWidgetText.Resource(R.string.pen_widget_discreet_subtitle)
+                    } else {
+                        buildSubtitle(penState, lastQueuedAtMillis, nowMillis)
+                    },
                     seconds = composing.seconds,
-                    recentlyQueued = wasRecentlyQueued(lastQueuedAtMillis, nowMillis),
+                    recentlyQueued = recentlyQueued,
                     canDecrement = composing.seconds > 0,
                     canIncrement = composing.seconds < MAX_SECONDS,
                     canSubmit = composing.seconds > 0,

@@ -7,7 +7,10 @@ import com.example.domain.buildPenQuickLogState
 import kotlinx.coroutines.flow.first
 
 object PenWidgetDataSource {
-    suspend fun loadPenState(context: Context): PenQuickLogState {
+    suspend fun loadPenState(
+        context: Context,
+        pinnedProductId: String? = null,
+    ): PenQuickLogState {
         val graph = CannsheetGraph.get(context.applicationContext)
         val preferences = graph.consumptionPreferences.preferences.first()
         val pendingUses = graph.repository.pendingProductUses.first()
@@ -18,7 +21,7 @@ object PenWidgetDataSource {
         return buildPenQuickLogState(
             products = graph.repository.allProducts.first(),
             interactions = graph.repository.productInteractions.first(),
-            explicitProductId = preferences.loadedPenProductId,
+            explicitProductId = pinnedProductId ?: preferences.loadedPenProductId,
             globalPresets = preferences.quantityPresets,
             presetOverrides = preferences.quantityPresetOverrides,
             secondsPerUseOverrides = preferences.secondsPerUseOverrides,
