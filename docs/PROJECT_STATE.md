@@ -42,7 +42,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A6 merged; A7 in progress)
+## Pen widget expansion (A1-A7 merged; release A tag pending)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -141,7 +141,14 @@ Last updated: 2026-08-20
   passed all six jobs, including API 24 and API 36. No physical phone or
   production data action was used.
 
-## Release B widget surfaces (B1 and B2 merged; B3 in progress)
+- A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
+  It is the version-only change for `versionCode 41` and `versionName 1.4.5`;
+  the exact post-merge `main` run [32362664715](https://github.com/noamvb/cannsheet-mobile/actions/runs/32362664715)
+  passed all six required jobs. The `v1.4.5` tag and signed publication remain
+  pending explicit repository-owner approval under the release runbook; no tag,
+  signed APK, or production installation has been performed.
+
+## Release B widget surfaces (B1-B3 merged; B4 in progress)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -163,8 +170,8 @@ Last updated: 2026-08-20
   `docs/images/pen-quick-tile-undo.png`; no physical phone or production data
   action was used. Its exact post-merge `main` run `32373120078` passed all six
   required jobs.
-- B3 (`feat: add a sync status home-screen widget`) is implemented on
-  `agent/sync-status-widget` and is awaiting its PR gate. It reads only the
+- B3 (`feat: add a sync status home-screen widget`) is squash-merged as PR #118 /
+  `45affae`. It reads only the
   existing aggregate pending-action count and sync preference timestamps, shows
   relative last-sync labels and a queue-stuck state, and routes `Sync now`
   through `SyncScheduler.enqueueImmediate`. `CannsheetWidgetRefresher` fans out
@@ -177,12 +184,34 @@ Last updated: 2026-08-20
   `docs/images/sync-status-widget-stuck.png`. No queue rows, product names,
   quantities, dates, Room schema, offline payload, backend contract, endpoint,
   package ID, or version metadata are changed. No physical phone or production
-  data action was used.
+  data action was used. The exact post-merge `main` run [32379701895](https://github.com/noamvb/cannsheet-mobile/actions/runs/32379701895)
+  passed all six required jobs.
+- B4 (`feat: add a multi-cart quick log widget`) is in progress on
+  `agent/multi-cart-widget`. It offers up to four fixed buttons for selectable
+  pen carts, orders them by recent interaction, shows an overflow link when
+  renderable carts exceed the fixed surface, and suppresses the grid for the
+  shared durable undo state. Each button captures that cart's first effective
+  preset, converts display seconds with `secondsToUses` before Room/queue
+  logging, and leaves the loaded-cart preference unchanged. The updater routes
+  multi-cart IDs through the shared `PenWidgetRuntime` commit callback so a
+  deferred commit cannot repaint the instance with the single-cart layout.
+  The focused JVM model suite passed 7/7 and the exact local Android gate passed
+  with JDK 17.0.20, Gradle 9.3.1, Android Platform 36.1, and Build Tools
+  36.0.0. API-36 emulator evidence observed two distinct cart rows with
+  `0.5` uses each, correct product UUIDs, unchanged loaded preference `*P104`,
+  light/dark rendering, launcher restart persistence, and horizontal resize
+  behavior. Screenshots are `docs/images/multi-cart-widget-grid.png`,
+  `docs/images/multi-cart-widget-grid-light.png`, and
+  `docs/images/multi-cart-widget-undo.png`. The emulator network remained
+  disabled; exact fixture rows were removed afterward. The launcher test
+  instance remains on the isolated emulator because its shell offers no
+  deterministic widget-delete operation; no physical phone or production data
+  action was used.
 
 ## v1.4.5 widget expansion (release candidate)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
-pen-widget expansion from A1 through A6. It remains a release candidate until
+pen-widget expansion from A1 through A7. It remains a release candidate until
 the exact validated `main` SHA is tagged and the signed APK is independently
 verified.
 
