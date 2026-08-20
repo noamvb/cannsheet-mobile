@@ -22,6 +22,17 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+        super.onRestored(context, oldWidgetIds, newWidgetIds)
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetStateRepository(appContext).remapWidgetIds(oldWidgetIds, newWidgetIds)
+            PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
+            newWidgetIds.forEach { PenWidgetUpdater.update(appContext, it) }
+        }
+    }
+
     override fun onAppWidgetOptionsChanged(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -64,6 +75,19 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
                 }
             }
             firstFailure?.let { throw it }
+        }
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        // Last instance removed. onDeleted already cleared per-id keys; nothing to do here beyond
+        // cancelling any timer that outlived them.
+        val pendingResult = goAsync()
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetScheduler.cancelCommit(
+                context.applicationContext,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            )
         }
     }
 

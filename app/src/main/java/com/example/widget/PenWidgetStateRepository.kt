@@ -32,6 +32,16 @@ data class PenWidgetCommitClaim(
     val claimId: String,
 )
 
+private data class RemappedState(
+    val newWidgetId: Int,
+    val draftSeconds: Int?,
+    val pendingCommit: String?,
+    val lastQueuedAtMillis: Long?,
+    val pinnedProductId: String?,
+    val discreet: Boolean?,
+    val stepSecondsOverride: Int?,
+)
+
 /**
  * Atomic per-widget state. Every read-modify-write mutation happens inside one DataStore edit so
  * two rapid ± taps cannot overwrite one another and undo/commit cannot both win the race.
@@ -270,6 +280,53 @@ class PenWidgetStateRepository internal constructor(
             stepSecondsOverride = preferences[stepOverrideKey(appWidgetId)]
                 ?.takeIf { it in 1..MAX_SECONDS },
         )
+    }
+
+    /**
+     * Moves every per-widget key from [oldWidgetIds][i] to [newWidgetIds][i] in one edit. Android
+     * remaps app widget ids on restore; without this the restored widget reads a foreign id's
+     * state and any pending commit is stranded.
+     */
+    suspend fun remapWidgetIds(oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+        require(oldWidgetIds.size == newWidgetIds.size) {
+            "Restored widget id arrays must be the same length."
+        }
+        oldWidgetIds.forEach(::requireValidWidgetId)
+        newWidgetIds.forEach(::requireValidWidgetId)
+        dataStore.edit { preferences ->
+            // Snapshot every value first: a restore can map 42 -> 17 while 17 also maps
+            // elsewhere, so removing as we go would corrupt the chain.
+            val snapshot = oldWidgetIds.mapIndexed { index, oldId ->
+                RemappedState(
+                    newWidgetId = newWidgetIds[index],
+                    draftSeconds = preferences[draftKey(oldId)],
+                    pendingCommit = preferences[pendingKey(oldId)],
+                    lastQueuedAtMillis = preferences[lastQueuedKey(oldId)],
+                    pinnedProductId = preferences[pinnedProductKey(oldId)],
+                    discreet = preferences[discreetKey(oldId)],
+                    stepSecondsOverride = preferences[stepOverrideKey(oldId)],
+                )
+            }
+
+            oldWidgetIds.forEach { oldId ->
+                preferences.remove(draftKey(oldId))
+                preferences.remove(pendingKey(oldId))
+                preferences.remove(lastQueuedKey(oldId))
+                preferences.remove(pinnedProductKey(oldId))
+                preferences.remove(discreetKey(oldId))
+                preferences.remove(stepOverrideKey(oldId))
+            }
+
+            snapshot.forEach { state ->
+                val newId = state.newWidgetId
+                state.draftSeconds?.let { preferences[draftKey(newId)] = it }
+                state.pendingCommit?.let { preferences[pendingKey(newId)] = it }
+                state.lastQueuedAtMillis?.let { preferences[lastQueuedKey(newId)] = it }
+                state.pinnedProductId?.let { preferences[pinnedProductKey(newId)] = it }
+                state.discreet?.let { preferences[discreetKey(newId)] = it }
+                state.stepSecondsOverride?.let { preferences[stepOverrideKey(newId)] = it }
+            }
+        }
     }
 
     suspend fun writeConfig(appWidgetId: Int, config: PenWidgetInstanceConfig) {

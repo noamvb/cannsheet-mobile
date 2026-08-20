@@ -15,9 +15,8 @@ import org.junit.Test
 /**
  * Pure-JVM coverage for the A6 restore-remapping contract.
  *
- * These tests intentionally call the planned public
- * [PenWidgetStateRepository.remapWidgetIds] API. They remain compile-gated
- * until that production method is added.
+ * These tests intentionally call the public
+ * [PenWidgetStateRepository.remapWidgetIds] API introduced for A6.
  */
 class PenWidgetRestoreTest {
     @Test

@@ -1323,6 +1323,40 @@ added to queue-alert notification paths.
 - `app/src/main/res/values/strings.xml`
 - `app/src/test/java/com/example/widget/PenWidgetUiModelTest.kt`
 
+## ADR-033: Remap widget state before restore rendering and use size-mapped RemoteViews
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: Android can assign new app-widget IDs during backup/restore, while
+  the pen widget stores draft seconds, pending commits, queue timestamps, and
+  optional configuration under ID-suffixed DataStore keys. Without a restore
+  callback, a pending commit becomes unreachable. Separately, Android 12+ can
+  select a `RemoteViews` variant by rendered size, avoiding repeated data reads
+  for resize-only changes; older API levels still require the existing options
+  callback and single-view path.
+- Decision: `onRestored` snapshots every per-widget key for each old/new ID pair
+  inside one DataStore edit, removes all old keys, writes the captured values to
+  the new IDs, then flushes overdue commits and renders the restored widgets in
+  that order. Snapshot-before-remove is required for overlapping mappings. On
+  API 31+, `PenWidgetUpdater` supplies compact, base, and large `RemoteViews`
+  variants at `110x110`, `140x160`, and `280x320` through the guarded
+  `RemoteViews(Map<SizeF, RemoteViews>)` constructor. Each variant applies the
+  optional per-widget step override; API 24–30 retain the existing live-size
+  `RemoteViews` fallback. The provider keeps `onAppWidgetOptionsChanged` for
+  older hosts and cancels the final widget's invalid-ID WorkManager name in
+  `onDisabled`.
+- Consequences: Restore preserves the durable widget draft, pending commit, and
+  configuration boundaries without changing Room, offline queue, or wire
+  contracts. API 24 instrumentation remains safe because the API 31 constructor
+  is guarded, and API 31+ hosts can select a prepared rendering without needing
+  a full data reload for every size transition. The five remapping cases are
+  covered by pure-JVM tests, including overlapping IDs and unrelated widgets.
+- Related files: `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`,
+  `app/src/main/java/com/example/widget/PenConsumptionWidgetProvider.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/test/java/com/example/widget/PenWidgetRestoreTest.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`
+
 ## ADR-032: Deep-link the interactive pen widget name to the cart picker
 
 - Status: Accepted

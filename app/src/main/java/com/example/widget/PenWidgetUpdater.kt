@@ -3,6 +3,9 @@ package com.example.widget
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
+import android.util.SizeF
+import android.widget.RemoteViews
 import com.example.R
 
 object PenWidgetUpdater {
@@ -51,14 +54,60 @@ object PenWidgetUpdater {
         )
         val spec = config.stepSecondsOverride?.let { resolvedSpec.copy(stepSeconds = it) }
             ?: resolvedSpec
-        manager.updateAppWidget(
-            appWidgetId,
+        val compactSpec = PenWidgetSizing.resolve(
+            widthDp = 110,
+            heightDp = 110,
+            compactBreakpointHeightDp = compactBreakpointHeightDp,
+        ).let { resolved ->
+            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
+        }
+        val baseSpec = PenWidgetSizing.resolve(
+            widthDp = 140,
+            heightDp = 160,
+            compactBreakpointHeightDp = compactBreakpointHeightDp,
+        ).let { resolved ->
+            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
+        }
+        val largeSpec = PenWidgetSizing.resolve(
+            widthDp = 280,
+            heightDp = 320,
+            compactBreakpointHeightDp = compactBreakpointHeightDp,
+        ).let { resolved ->
+            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
+        }
+
+        val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            RemoteViews(
+                mapOf(
+                    SizeF(110f, 110f) to PenWidgetRenderer.buildRemoteViews(
+                        appContext,
+                        appWidgetId,
+                        model,
+                        compactSpec,
+                    ),
+                    SizeF(140f, 160f) to PenWidgetRenderer.buildRemoteViews(
+                        appContext,
+                        appWidgetId,
+                        model,
+                        baseSpec,
+                    ),
+                    SizeF(280f, 320f) to PenWidgetRenderer.buildRemoteViews(
+                        appContext,
+                        appWidgetId,
+                        model,
+                        largeSpec,
+                    ),
+                ),
+            )
+        } else {
             PenWidgetRenderer.buildRemoteViews(
-                context = appContext,
-                appWidgetId = appWidgetId,
-                model = model,
-                spec = spec,
-            ),
-        )
+                appContext,
+                appWidgetId,
+                model,
+                spec,
+            )
+        }
+
+        manager.updateAppWidget(appWidgetId, views)
     }
 }
