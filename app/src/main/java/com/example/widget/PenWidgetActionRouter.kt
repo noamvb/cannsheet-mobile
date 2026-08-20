@@ -17,6 +17,9 @@ internal class PenWidgetActionRouter(
     private val stateRepository: (Context) -> PenWidgetStateRepository = {
         PenWidgetStateRepository(it)
     },
+    private val configRepository: (Context) -> PenWidgetConfigRepository = {
+        PenWidgetConfigRepository(it)
+    },
     private val loadPenState: suspend (Context, String?) -> PenQuickLogState = {
         context, pinnedProductId ->
         PenWidgetDataSource.loadPenState(context, pinnedProductId)
@@ -31,6 +34,7 @@ internal class PenWidgetActionRouter(
 ) {
     suspend fun handle(context: Context, action: String, appWidgetId: Int, intent: Intent) {
         val state = stateRepository(context)
+        val config = configRepository(context)
         val step = intent.getIntExtra(EXTRA_STEP_SECONDS, STEP_SECONDS)
             .coerceIn(1, MAX_SECONDS)
         when (action) {
@@ -39,13 +43,13 @@ internal class PenWidgetActionRouter(
             ACTION_RESET -> state.resetDraftSeconds(appWidgetId)
             in PRESET_ACTIONS -> {
                 val index = PRESET_ACTIONS.indexOf(action)
-                val pinnedProductId = state.readConfig(appWidgetId).pinnedProductId
+                val pinnedProductId = config.read(appWidgetId).pinnedProductId
                 val penState = loadPenState(context, pinnedProductId) as? PenQuickLogState.Loaded
                     ?: return
                 val seconds = penWidgetPresetSeconds(penState).getOrNull(index) ?: return
                 state.setDraftSeconds(appWidgetId, seconds)
             }
-            ACTION_SUBMIT -> submit(context, appWidgetId, state)
+            ACTION_SUBMIT -> submit(context, appWidgetId, state, config)
             ACTION_UNDO -> {
                 val commitId = intent.getStringExtra(EXTRA_COMMIT_ID) ?: return
                 if (state.undo(appWidgetId, commitId, nowMillis = now())) {
@@ -60,8 +64,9 @@ internal class PenWidgetActionRouter(
         context: Context,
         appWidgetId: Int,
         state: PenWidgetStateRepository,
+        config: PenWidgetConfigRepository,
     ) {
-        val pinnedProductId = state.readConfig(appWidgetId).pinnedProductId
+        val pinnedProductId = config.read(appWidgetId).pinnedProductId
         val loaded = loadPenState(context, pinnedProductId) as? PenQuickLogState.Loaded ?: return
         val seconds = state.read(appWidgetId).draftSeconds
         val payload = submitPenLog(

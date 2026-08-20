@@ -2,16 +2,17 @@
 <!--
     Cannsheet Mobile backup policy (API 24-30).
 
-    Included: user settings and pen_widget_state. The widget DataStore carries
-    drafts, per-instance configuration, and pending payloads that must survive
-    device transfer so AppWidgetProvider.onRestored can remap old IDs to the
-    new IDs.
+    Included: user settings and pen_widget_config. Per-instance widget
+    configuration carries no synchronization identity and is safe to restore
+    onto any install; AppWidgetProvider.onRestored remaps its IDs.
 
     Excluded: everything that participates in queue synchronization or
     represents a point-in-time server snapshot. Restoring cannsheet_db would
     reintroduce a sync_request_state requestId/payloadFingerprint pair the
     server may already have audited, and an analytics_cache row whose
-    sourceDataVersion no longer describes any real server state.
+    sourceDataVersion no longer describes any real server state. pen_widget_state
+    holds captured commit payloads that the application flushes on start, so
+    restoring it would re-queue consumptions the source device already recorded.
 
     Keep this file and res/xml/data_extraction_rules.xml in agreement.
 -->
@@ -20,4 +21,5 @@
     <exclude domain="database" path="cannsheet_db-wal" />
     <exclude domain="database" path="cannsheet_db-shm" />
     <exclude domain="file" path="datastore/sync_preferences.preferences_pb" />
+    <exclude domain="file" path="datastore/pen_widget_state.preferences_pb" />
 </full-backup-content>

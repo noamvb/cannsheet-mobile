@@ -28,6 +28,7 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetConfigRepository(appContext).remapWidgetIds(oldWidgetIds, newWidgetIds)
             PenWidgetStateRepository(appContext).remapWidgetIds(oldWidgetIds, newWidgetIds)
             PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
             newWidgetIds.forEach { PenWidgetUpdater.update(appContext, it) }
@@ -55,6 +56,7 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         val appContext = context.applicationContext
         PenWidgetRuntime.launchReceiver(pendingResult) {
             val state = PenWidgetStateRepository(appContext)
+            val config = PenWidgetConfigRepository(appContext)
             var firstFailure: Throwable? = null
             appWidgetIds.forEach { appWidgetId ->
                 val commitResult = runCatching {
@@ -76,6 +78,13 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
                     PenWidgetRuntime.cancelCommitTimer(appWidgetId)
                     PenWidgetScheduler.cancelCommit(appContext, appWidgetId)
                     state.clear(appWidgetId)
+                }
+                // Configuration carries no queue-participating payload, so it is always safe to
+                // drop for a deleted widget instance regardless of whether the commit above
+                // succeeded.
+                val configClearResult = runCatching { config.clear(appWidgetId) }
+                configClearResult.exceptionOrNull()?.let { error ->
+                    if (firstFailure == null) firstFailure = error
                 }
             }
             firstFailure?.let { throw it }

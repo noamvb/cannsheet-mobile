@@ -119,8 +119,8 @@ class PenWidgetConfigureActivity : ComponentActivity() {
                         product.productStatus.isSelectable &&
                             ProductTypeCodes.normalize(product.type) == ProductTypeCodes.PEN
                     }
-                    val config = PenWidgetStateRepository(applicationContext)
-                        .readConfig(appWidgetId)
+                    val config = PenWidgetConfigRepository(applicationContext)
+                        .read(appWidgetId)
                     products to config
                 }
             }.onSuccess { (products, config) ->
@@ -142,7 +142,7 @@ class PenWidgetConfigureActivity : ComponentActivity() {
         isSaving = true
         lifecycleScope.launch {
             runCatching {
-                PenWidgetStateRepository(applicationContext).writeConfig(appWidgetId, config)
+                PenWidgetConfigRepository(applicationContext).write(appWidgetId, config)
                 PenWidgetRuntime.withSerialized {
                     PenWidgetUpdater.update(applicationContext, appWidgetId)
                 }

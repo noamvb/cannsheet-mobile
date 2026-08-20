@@ -13,15 +13,40 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pure-JVM coverage for the A6 restore-remapping contract.
+ * Pure-JVM coverage for the restore-remapping contract.
  *
- * These tests intentionally call the public
- * [PenWidgetStateRepository.remapWidgetIds] API introduced for A6.
+ * Configuration and queue state now live in two separate DataStores -
+ * [PenWidgetConfigRepository] and [PenWidgetStateRepository] respectively - because only the
+ * config store is safe to back up. `PenConsumptionWidgetProvider.onRestored` remaps both stores
+ * with the same old/new id arrays, so most tests below exercise both repositories the same way.
  */
 class PenWidgetRestoreTest {
     @Test
-    fun remapMovesDraftPendingAndConfigToTheNewId() = runBlocking {
-        val repository = repository()
+    fun remapMovesDraftAndPendingInTheStateStore() = runBlocking {
+        val repository = stateRepository()
+
+        repository.setDraftSeconds(42, 40)
+        val pending = seedPendingState(repository, 43, "moved")
+
+        repository.remapWidgetIds(
+            oldWidgetIds = intArrayOf(42, 43),
+            newWidgetIds = intArrayOf(17, 18),
+        )
+
+        assertEquals(40, repository.read(17).draftSeconds)
+        assertNull(repository.read(17).pendingCommit)
+
+        val movedPendingState = repository.read(18)
+        assertEquals(pending, movedPendingState.pendingCommit)
+        assertEquals(9_000L, movedPendingState.lastQueuedAtMillis)
+
+        assertStateEmpty(repository, 42)
+        assertStateEmpty(repository, 43)
+    }
+
+    @Test
+    fun remapMovesConfigInTheConfigStore() = runBlocking {
+        val repository = configRepository()
         val draftConfig = PenWidgetInstanceConfig(
             pinnedProductId = "draft-product",
             discreet = true,
@@ -32,31 +57,26 @@ class PenWidgetRestoreTest {
             discreet = false,
             stepSecondsOverride = 5,
         )
-
-        repository.setDraftSeconds(42, 40)
-        repository.writeConfig(42, draftConfig)
-        val pending = seedPendingState(repository, 43, "moved", pendingConfig)
+        repository.write(42, draftConfig)
+        repository.write(43, pendingConfig)
 
         repository.remapWidgetIds(
             oldWidgetIds = intArrayOf(42, 43),
             newWidgetIds = intArrayOf(17, 18),
         )
 
-        assertEquals(40, repository.read(17).draftSeconds)
-        assertNull(repository.read(17).pendingCommit)
-        assertEquals(draftConfig, repository.readConfig(17))
-
-        val movedPendingState = repository.read(18)
-        assertEquals(pending, movedPendingState.pendingCommit)
-        assertEquals(9_000L, movedPendingState.lastQueuedAtMillis)
-        assertEquals(pendingConfig, repository.readConfig(18))
+        assertEquals(draftConfig, repository.read(17))
+        assertEquals(pendingConfig, repository.read(18))
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, repository.read(42))
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, repository.read(43))
     }
 
     @Test
     fun remapClearsTheOldId() = runBlocking {
-        val repository = repository()
-        repository.setDraftSeconds(42, 50)
-        repository.writeConfig(
+        val state = stateRepository()
+        val config = configRepository()
+        state.setDraftSeconds(42, 50)
+        config.write(
             42,
             PenWidgetInstanceConfig(
                 pinnedProductId = "draft-product",
@@ -64,25 +84,22 @@ class PenWidgetRestoreTest {
                 stepSecondsOverride = 30,
             ),
         )
-        seedPendingState(
-            repository = repository,
-            appWidgetId = 43,
-            prefix = "cleared",
-            config = PenWidgetInstanceConfig(pinnedProductId = "pending-product"),
-        )
+        seedPendingState(state, 43, "cleared")
+        config.write(43, PenWidgetInstanceConfig(pinnedProductId = "pending-product"))
 
-        repository.remapWidgetIds(
-            oldWidgetIds = intArrayOf(42, 43),
-            newWidgetIds = intArrayOf(17, 18),
-        )
+        state.remapWidgetIds(oldWidgetIds = intArrayOf(42, 43), newWidgetIds = intArrayOf(17, 18))
+        config.remapWidgetIds(oldWidgetIds = intArrayOf(42, 43), newWidgetIds = intArrayOf(17, 18))
 
-        assertEmpty(repository, 42)
-        assertEmpty(repository, 43)
+        assertStateEmpty(state, 42)
+        assertStateEmpty(state, 43)
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, config.read(42))
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, config.read(43))
     }
 
     @Test
     fun remapHandlesOverlappingOldAndNewIds() = runBlocking {
-        val repository = repository()
+        val state = stateRepository()
+        val config = configRepository()
         val firstConfig = PenWidgetInstanceConfig(
             pinnedProductId = "first-product",
             discreet = true,
@@ -93,26 +110,25 @@ class PenWidgetRestoreTest {
             discreet = false,
             stepSecondsOverride = 5,
         )
-        repository.setDraftSeconds(42, 40)
-        repository.writeConfig(42, firstConfig)
-        repository.setDraftSeconds(17, 70)
-        repository.writeConfig(17, secondConfig)
+        state.setDraftSeconds(42, 40)
+        config.write(42, firstConfig)
+        state.setDraftSeconds(17, 70)
+        config.write(17, secondConfig)
 
-        repository.remapWidgetIds(
-            oldWidgetIds = intArrayOf(42, 17),
-            newWidgetIds = intArrayOf(17, 99),
-        )
+        state.remapWidgetIds(oldWidgetIds = intArrayOf(42, 17), newWidgetIds = intArrayOf(17, 99))
+        config.remapWidgetIds(oldWidgetIds = intArrayOf(42, 17), newWidgetIds = intArrayOf(17, 99))
 
-        assertEquals(40, repository.read(17).draftSeconds)
-        assertEquals(firstConfig, repository.readConfig(17))
-        assertEquals(70, repository.read(99).draftSeconds)
-        assertEquals(secondConfig, repository.readConfig(99))
-        assertEmpty(repository, 42)
+        assertEquals(40, state.read(17).draftSeconds)
+        assertEquals(firstConfig, config.read(17))
+        assertEquals(70, state.read(99).draftSeconds)
+        assertEquals(secondConfig, config.read(99))
+        assertStateEmpty(state, 42)
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, config.read(42))
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun remapRejectsMismatchedArrayLengths() = runBlocking {
-        repository().remapWidgetIds(
+        stateRepository().remapWidgetIds(
             oldWidgetIds = intArrayOf(42),
             newWidgetIds = intArrayOf(17, 18),
         )
@@ -120,42 +136,38 @@ class PenWidgetRestoreTest {
 
     @Test
     fun remapLeavesUnrelatedWidgetsUntouched() = runBlocking {
-        val repository = repository()
+        val state = stateRepository()
+        val config = configRepository()
         val unrelatedConfig = PenWidgetInstanceConfig(
             pinnedProductId = "unrelated-product",
             discreet = true,
             stepSecondsOverride = 10,
         )
-        val unrelatedPending = seedPendingState(
-            repository = repository,
-            appWidgetId = 88,
-            prefix = "unrelated",
-            config = unrelatedConfig,
-        )
-        val unrelatedBefore = repository.read(88)
-        val unrelatedConfigBefore = repository.readConfig(88)
+        val unrelatedPending = seedPendingState(state, 88, "unrelated")
+        config.write(88, unrelatedConfig)
+        val unrelatedStateBefore = state.read(88)
+        val unrelatedConfigBefore = config.read(88)
 
-        repository.setDraftSeconds(42, 30)
-        repository.remapWidgetIds(
-            oldWidgetIds = intArrayOf(42),
-            newWidgetIds = intArrayOf(17),
-        )
+        state.setDraftSeconds(42, 30)
+        state.remapWidgetIds(oldWidgetIds = intArrayOf(42), newWidgetIds = intArrayOf(17))
+        config.remapWidgetIds(oldWidgetIds = intArrayOf(42), newWidgetIds = intArrayOf(17))
 
-        assertEquals(unrelatedBefore, repository.read(88))
-        assertEquals(unrelatedConfigBefore, repository.readConfig(88))
-        assertEquals(unrelatedPending, repository.read(88).pendingCommit)
-        assertTrue(repository.read(88).lastQueuedAtMillis != null)
-        assertEquals(30, repository.read(17).draftSeconds)
-        assertFalse(repository.read(42).pendingCommit != null)
+        assertEquals(unrelatedStateBefore, state.read(88))
+        assertEquals(unrelatedConfigBefore, config.read(88))
+        assertEquals(unrelatedPending, state.read(88).pendingCommit)
+        assertTrue(state.read(88).lastQueuedAtMillis != null)
+        assertEquals(30, state.read(17).draftSeconds)
+        assertFalse(state.read(42).pendingCommit != null)
     }
 
-    private fun repository() = PenWidgetStateRepository(InMemoryPreferencesDataStore())
+    private fun stateRepository() = PenWidgetStateRepository(InMemoryPreferencesDataStore())
+
+    private fun configRepository() = PenWidgetConfigRepository(InMemoryPreferencesDataStore())
 
     private suspend fun seedPendingState(
         repository: PenWidgetStateRepository,
         appWidgetId: Int,
         prefix: String,
-        config: PenWidgetInstanceConfig,
     ): PenWidgetCommitPayload {
         val completed = payload("$prefix-completed", seconds = 20)
         assertTrue(repository.submitCommit(appWidgetId, completed))
@@ -173,7 +185,6 @@ class PenWidgetRestoreTest {
 
         val pending = payload("$prefix-pending", seconds = 30)
         assertTrue(repository.submitCommit(appWidgetId, pending))
-        repository.writeConfig(appWidgetId, config)
         return pending
     }
 
@@ -192,12 +203,8 @@ class PenWidgetRestoreTest {
         time = "12:00",
     )
 
-    private suspend fun assertEmpty(
-        repository: PenWidgetStateRepository,
-        appWidgetId: Int,
-    ) {
+    private suspend fun assertStateEmpty(repository: PenWidgetStateRepository, appWidgetId: Int) {
         assertEquals(PenWidgetStoredState(0, null, null), repository.read(appWidgetId))
-        assertEquals(PenWidgetInstanceConfig.DEFAULT, repository.readConfig(appWidgetId))
     }
 
     private class InMemoryPreferencesDataStore : DataStore<Preferences> {

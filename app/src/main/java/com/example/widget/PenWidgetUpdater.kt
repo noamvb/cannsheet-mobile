@@ -37,7 +37,9 @@ object PenWidgetUpdater {
             return
         }
         val repository = PenWidgetStateRepository(appContext)
-        val config = repository.readConfig(appWidgetId)
+        val configRepository = PenWidgetConfigRepository(appContext)
+        configRepository.migrateFromLegacyStore(appWidgetId, repository)
+        val config = configRepository.read(appWidgetId)
         val state = repository.read(appWidgetId)
         val draft = state.pendingCommit?.let(PenWidgetDraft::AwaitingCommit)
             ?: PenWidgetDraft.Composing(state.draftSeconds)

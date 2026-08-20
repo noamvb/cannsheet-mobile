@@ -18,7 +18,7 @@ class PenWidgetInstanceConfigTest {
     fun defaultConfigFollowsTheLoadedCart() = runBlocking {
         assertEquals(
             PenWidgetInstanceConfig.DEFAULT,
-            repository().readConfig(42),
+            repository().read(42),
         )
     }
 
@@ -26,12 +26,12 @@ class PenWidgetInstanceConfigTest {
     fun blankPinnedProductIdIsTreatedAsAbsent() = runBlocking {
         val repository = repository()
 
-        repository.writeConfig(
+        repository.write(
             42,
             PenWidgetInstanceConfig(pinnedProductId = "  \t  "),
         )
 
-        assertNull(repository.readConfig(42).pinnedProductId)
+        assertNull(repository.read(42).pinnedProductId)
     }
 
     @Test
@@ -39,12 +39,12 @@ class PenWidgetInstanceConfigTest {
         val repository = repository()
 
         listOf(-1, 0, MAX_SECONDS + 1, Int.MAX_VALUE).forEach { invalidStep ->
-            repository.writeConfig(
+            repository.write(
                 42,
                 PenWidgetInstanceConfig(stepSecondsOverride = invalidStep),
             )
 
-            assertNull(repository.readConfig(42).stepSecondsOverride)
+            assertNull(repository.read(42).stepSecondsOverride)
         }
     }
 
@@ -78,7 +78,7 @@ class PenWidgetInstanceConfigTest {
         )
     }
 
-    private fun repository() = PenWidgetStateRepository(InMemoryPreferencesDataStore())
+    private fun repository() = PenWidgetConfigRepository(InMemoryPreferencesDataStore())
 
     private fun discreetModel(
         lastQueuedAtMillis: Long? = null,
