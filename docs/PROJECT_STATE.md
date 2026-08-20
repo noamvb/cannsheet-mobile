@@ -141,7 +141,7 @@ Last updated: 2026-08-20
   passed all six jobs, including API 24 and API 36. No physical phone or
   production data action was used.
 
-## Release B widget surfaces (B1 merged; B2 in progress)
+## Release B widget surfaces (B1 and B2 merged; B3 in progress)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -151,8 +151,8 @@ Last updated: 2026-08-20
   `docs/images/launcher-shortcuts-menu.png`. The exact post-merge `main` run
   `32366164663` passed all six required jobs. No physical phone or production
   data action was used.
-- B2 (`feat: add a quick settings tile for one-tap pen logging`) is implemented
-  on `agent/quick-settings-tile` and is awaiting its PR gate. The tile reserves
+- B2 (`feat: add a quick settings tile for one-tap pen logging`) is squash-merged
+  as PR #117 / `1d17c3d`. The tile reserves
   `PEN_TILE_WIDGET_ID = Int.MAX_VALUE`, sets the first configured preset into
   the existing DataStore draft, and reuses the shared claim/write/complete path
   with the same five-second undo window and WorkManager backstop. The tile
@@ -161,7 +161,23 @@ Last updated: 2026-08-20
   and the resulting product usage in the normal app UI. Screenshots are
   `docs/images/pen-quick-tile-normal.png` and
   `docs/images/pen-quick-tile-undo.png`; no physical phone or production data
-  action was used.
+  action was used. Its exact post-merge `main` run `32373120078` passed all six
+  required jobs.
+- B3 (`feat: add a sync status home-screen widget`) is implemented on
+  `agent/sync-status-widget` and is awaiting its PR gate. It reads only the
+  existing aggregate pending-action count and sync preference timestamps, shows
+  relative last-sync labels and a queue-stuck state, and routes `Sync now`
+  through `SyncScheduler.enqueueImmediate`. `CannsheetWidgetRefresher` fans out
+  pen-widget and sync-status refreshes in separate `runCatching` blocks. API-36
+  emulator evidence covered empty, pending, and stuck states, light/dark
+  rendering, resize to the launcher-wide span, launcher restart persistence, and
+  the WorkManager enqueue path. Screenshots are
+  `docs/images/sync-status-widget-empty.png`,
+  `docs/images/sync-status-widget-pending.png`, and
+  `docs/images/sync-status-widget-stuck.png`. No queue rows, product names,
+  quantities, dates, Room schema, offline payload, backend contract, endpoint,
+  package ID, or version metadata are changed. No physical phone or production
+  data action was used.
 
 ## v1.4.5 widget expansion (release candidate)
 

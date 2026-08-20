@@ -1429,3 +1429,35 @@ added to queue-alert notification paths.
   `app/src/main/java/com/example/widget/PenWidgetCommitCoordinator.kt`,
   `app/src/test/java/com/example/widget/PenTileStateTest.kt`,
   `app/src/androidTest/java/com/example/widget/PenWidgetStateRepositoryTest.kt`
+
+## ADR-035: Keep the sync-status widget aggregate and scheduler-backed
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: The app already knows the pending-action count and meaningful-sync
+  timestamps, but that information currently requires opening the app. A home
+  screen surface must remain compatible with the queue-integrity rule and must
+  not create a second synchronization path.
+- Decision: Add a separate `com.example.widget.sync` `AppWidgetProvider` whose
+  pure model consumes only the aggregate pending count and the existing sync
+  preference timestamps. Render a relative last-sync label (`Never synced`,
+  minutes/hours ago, `yesterday`, or days ago) and a stuck state based on the
+  existing `QUEUE_STUCK_THRESHOLD_MILLIS`. The single widget tap calls
+  `SyncScheduler.enqueueImmediate`; it never calls `SyncEngine` directly. Use a
+  single `CannsheetWidgetRefresher` implementation with independent refresh
+  guards for both widget surfaces.
+- Consequences: The widget exposes no queue row, product name, quantity, or
+  absolute date, and adds no Room schema, stored/transmitted payload, endpoint,
+  package, version, or synchronization contract. Empty, pending, and stuck
+  states are presentation-only and re-render from the existing repositories.
+  API-31 provider metadata is guarded by the `xml-v31` resource overlay while
+  the base provider remains available on API 24–30.
+- Related files: `app/src/main/java/com/example/widget/sync/SyncStatusWidgetProvider.kt`,
+  `app/src/main/java/com/example/widget/sync/SyncStatusUiModel.kt`,
+  `app/src/main/java/com/example/widget/sync/SyncStatusRenderer.kt`,
+  `app/src/main/java/com/example/widget/sync/SyncStatusUpdater.kt`,
+  `app/src/main/java/com/example/widget/CannsheetWidgetRefresher.kt`,
+  `app/src/main/res/layout/widget_sync_status.xml`,
+  `app/src/main/res/xml/sync_status_widget_info.xml`,
+  `app/src/main/res/xml-v31/sync_status_widget_info.xml`,
+  `app/src/test/java/com/example/widget/sync/SyncStatusUiModelTest.kt`

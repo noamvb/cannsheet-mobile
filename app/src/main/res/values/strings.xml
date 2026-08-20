@@ -76,4 +76,16 @@
     <string name="pen_tile_label">Log pen</string>
     <string name="pen_tile_no_cart">No cart loaded</string>
     <string name="pen_tile_undo">Undo</string>
+    <string name="sync_status_widget_label">Sync status</string>
+    <string name="sync_status_widget_description">See pending entries and sync status from your home screen.</string>
+    <string name="sync_status_widget_title">Sync status</string>
+    <string name="sync_status_widget_pending_none">0 pending</string>
+    <plurals name="sync_status_widget_pending">
+        <item quantity="one">%1$d pending entry</item>
+        <item quantity="other">%1$d pending entries</item>
+    </plurals>
+    <string name="sync_status_widget_stuck">Sync is behind</string>
+    <string name="sync_status_widget_pending_status">Waiting to sync</string>
+    <string name="sync_status_widget_ready">Up to date</string>
+    <string name="sync_status_widget_sync_now">Sync now</string>
 </resources>
