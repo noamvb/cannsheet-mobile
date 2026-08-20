@@ -1701,6 +1701,18 @@ publication path and its successful post-publication verification is the
 release evidence. No application data, endpoint, package identity, or signing
 configuration is changed by the path.
 
+### Verification status
+
+The annotated `v1.4.5` tag resolves to
+`f32f7c0c96690c74288bf0428b946d74716a7e81`. Historical workflow run
+`32420347803` passed all three jobs, and the public release contains exactly the
+APK and checksum assets. Independent download verification confirmed checksum
+`c368876603a2b0ed4d92da60e51157c15e23248f47fca9e399fd90815c669d16`, package
+metadata `com.noamv.cannsheet.mobile` / `41` / `1.4.5` / min `24` / target `36`,
+v2 signing, and certificate SHA-256 continuity with `v1.4.4`. The legacy
+tag-triggered run `32420325645` failed before build at the expected current-tip
+guard and did not publish a release.
+
 ### Related files
 
 - `.github/workflows/release-apk.yml`

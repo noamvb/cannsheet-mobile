@@ -5,10 +5,10 @@ Last updated: 2026-08-20
 ## Repository state
 
 - Canonical branch: `main`
-- Latest published application release source commit `ee1e6ab` (v1.4.4)
+- Latest published application release source commit
+  `f32f7c0c96690c74288bf0428b946d74716a7e81` (v1.4.5)
 - Current release metadata in `app/build.gradle.kts`: version name `1.4.5`,
-  version code `41` (release candidate; v1.4.4 remains the latest published
-  release until the release runbook completes).
+  version code `41` (published; B9 is the next version-only change).
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -145,12 +145,13 @@ Last updated: 2026-08-20
   It is the version-only change for `versionCode 41` and `versionName 1.4.5`;
   the exact post-merge `main` run [32362664715](https://github.com/noamvb/cannsheet-mobile/actions/runs/32362664715)
   passed all six required jobs. Repository-owner authorization for publication
-  was received on 2026-08-20, but no tag has been pushed yet: the release
-  workflow present at this validated commit requires the tagged SHA to equal the
-  current `origin/main` tip, while `origin/main` has since advanced to Release B
-  (`a3e0ed2`). A separate dispatch-only historical release workflow is being
-  added so this exact tag can be published without moving it to Release B; no
-  signed APK or production installation has been performed.
+  was received on 2026-08-20. The annotated tag `v1.4.5` resolves to the exact
+  validated Release A SHA, and the historical publication workflow [run
+  32420347803](https://github.com/noamvb/cannsheet-mobile/actions/runs/32420347803)
+  passed target validation, signed build, publication, and post-publication
+  verification. The legacy tag-triggered run [32420325645](https://github.com/noamvb/cannsheet-mobile/actions/runs/32420325645)
+  correctly stopped at its obsolete current-tip guard before building or
+  publishing. No physical phone or production data action was used.
 
 ## Release B widget surfaces (B1-B8 merged; B9 pending)
 
@@ -278,18 +279,32 @@ Last updated: 2026-08-20
   validation run `32418762081` passed all six required jobs; no B9 version bump
   has started.
 
-## v1.4.5 widget expansion (release candidate)
+## v1.4.5 widget expansion (published)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
-pen-widget expansion from A1 through A7. The owner authorized publication on
-2026-08-20, but the tag remains absent because the tag-triggered workflow at
-the validated commit `f32f7c0c96690c74288bf0428b946d74716a7e81` rejects a tag
-whose SHA is not the current `origin/main`; Release B currently makes that
-tip `a3e0ed27b2ccc8fd30dca6ada0d040dc9cacd7da`. The new
-`.github/workflows/release-historical-apk.yml` dispatch path will validate and
-publish the historical tag from the current workflow source while rebuilding
-from the exact Release A SHA. The exact historical Release A main run is
-`32362664715`; no signed APK or production installation has been performed.
+pen-widget expansion from A1 through A7. The annotated tag `v1.4.5` resolves
+to the exact validated Release A commit
+`f32f7c0c96690c74288bf0428b946d74716a7e81`, even though the current
+`origin/main` is Release B. The historical publication workflow
+[32420347803](https://github.com/noamvb/cannsheet-mobile/actions/runs/32420347803)
+rebuilt from the historical source, published the release, and completed its
+post-publication checks.
+
+The public release is [Cannsheet Mobile v1.4.5](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.4.5)
+in `noamvb/cannsheet-mobile-releases`. It contains exactly:
+
+- `Cannsheet-Mobile-1.4.5.apk`
+- `Cannsheet-Mobile-1.4.5.apk.sha256`
+
+Independent download verification passed with SHA-256
+`c368876603a2b0ed4d92da60e51157c15e23248f47fca9e399fd90815c669d16`.
+Independent `aapt` readback confirmed package
+`com.noamv.cannsheet.mobile`, version code `41`, version name `1.4.5`, min SDK
+`24`, and target SDK `36`. Independent `apksigner` readback confirmed APK
+Signature Scheme v2 and certificate SHA-256
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, matching
+the independently downloaded `v1.4.4` APK. No phone installation was
+performed; the owner should update through Obtainium.
 
 ### Shipped changes
 
