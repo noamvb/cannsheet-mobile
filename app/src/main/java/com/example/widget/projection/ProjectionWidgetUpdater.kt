@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.content.Context
 import com.example.data.CannsheetGraph
 import com.example.widget.PenWidgetRuntime
-import kotlinx.coroutines.flow.first
 
 /** Reads one cached Insights snapshot and renders it without fetching or refreshing analytics. */
 object ProjectionWidgetUpdater {
@@ -28,8 +27,8 @@ object ProjectionWidgetUpdater {
         if (appWidgetId < 0) return
 
         val appContext = context.applicationContext
-        val mode = appContext.projectionWidgetConfigurationDataStore.data
-            .first()[ProjectionWidgetConfiguration.modeKey(appWidgetId)]
+        val mode = ProjectionWidgetStateRepository(appContext)
+            .readMode(appWidgetId)
             .toProjectionMode()
         val snapshot = runCatching {
             CannsheetGraph.get(appContext).analyticsRepository.readCachedInsights()

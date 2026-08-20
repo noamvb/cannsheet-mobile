@@ -265,7 +265,12 @@ Last updated: 2026-08-20
   large resize, and the Insights deep link. A populated projection was not
   claimed because the isolated emulator had no cached Insights snapshot; the
   launcher shell's automated remove gesture opened the app drawer, so
-  removal/re-add remains unverified. Evidence images are
+  removal/re-add remains unverified. A durable Insights cache write now invokes
+  the installed widget refresher after the upsert, with refresh failures kept
+  best-effort, so a newly populated cache can replace the unavailable state.
+  Projection mode keys are remapped atomically in `onRestored` before restored
+  instances render; focused tests cover the cache-write callback and overlapping
+  restore IDs. Evidence images are
   `docs/images/projection-widget-preview.png`,
   `docs/images/projection-widget-configure-spend.png`, and
   `docs/images/projection-widget-empty-light.png`.

@@ -4,7 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.os.Bundle
-import androidx.datastore.preferences.core.edit
 import com.example.widget.PenWidgetRuntime
 
 /** Delivers cache-only projection updates for all configured widget instances. */
@@ -19,6 +18,18 @@ class ProjectionWidgetProvider : AppWidgetProvider() {
         val appContext = context.applicationContext
         PenWidgetRuntime.launchReceiver(pendingResult) {
             appWidgetIds.forEach { appWidgetId ->
+                ProjectionWidgetUpdater.update(appContext, appWidgetId)
+            }
+        }
+    }
+
+    override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+        super.onRestored(context, oldWidgetIds, newWidgetIds)
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            ProjectionWidgetStateRepository(appContext).remapWidgetIds(oldWidgetIds, newWidgetIds)
+            newWidgetIds.forEach { appWidgetId ->
                 ProjectionWidgetUpdater.update(appContext, appWidgetId)
             }
         }
@@ -43,11 +54,7 @@ class ProjectionWidgetProvider : AppWidgetProvider() {
         val pendingResult = goAsync()
         val appContext = context.applicationContext
         PenWidgetRuntime.launchReceiver(pendingResult) {
-            appContext.projectionWidgetConfigurationDataStore.edit { preferences ->
-                appWidgetIds.forEach { appWidgetId ->
-                    preferences.remove(ProjectionWidgetConfiguration.modeKey(appWidgetId))
-                }
-            }
+            ProjectionWidgetStateRepository(appContext).clear(appWidgetIds)
         }
     }
 }

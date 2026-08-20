@@ -1636,6 +1636,11 @@ snapshot, persists a projection, or transmits a derived figure. The renderer
 uses only API-24-safe `TextView` RemoteViews, places the source snapshot's
 as-of date beside every ready figure, and renders an explicit reason when no
 figure can be shown. Every instance's action opens the existing Insights route.
+The analytics repository invokes the installed widget refresher only after an
+Insights cache upsert completes; the callback is suspend-aware and best-effort
+so a refresh failure cannot turn a successful analytics fetch into a retry.
+The provider remaps mode keys atomically in `onRestored` before updating the new
+IDs, including overlapping old/new ID mappings.
 
 ### Consequences
 
@@ -1653,9 +1658,14 @@ evidence when a suitable snapshot and deterministic host control are available.
 - `app/src/main/java/com/example/widget/projection/ProjectionWidgetProvider.kt`
 - `app/src/main/java/com/example/widget/projection/ProjectionWidgetConfigureActivity.kt`
 - `app/src/main/java/com/example/widget/projection/ProjectionWidgetUpdater.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetStateRepository.kt`
 - `app/src/main/java/com/example/widget/projection/ProjectionWidgetRenderer.kt`
 - `app/src/main/java/com/example/widget/projection/ProjectionUiModel.kt`
+- `app/src/main/java/com/example/data/AnalyticsData.kt`
+- `app/src/main/java/com/example/data/CannsheetGraph.kt`
 - `app/src/main/res/layout/widget_projection.xml`
 - `app/src/main/res/xml/projection_widget_info.xml`
 - `app/src/main/res/xml-v31/projection_widget_info.xml`
 - `app/src/test/java/com/example/widget/projection/ProjectionUiModelTest.kt`
+- `app/src/test/java/com/example/widget/projection/ProjectionWidgetStateRepositoryTest.kt`
+- `app/src/test/java/com/example/data/AnalyticsDataTest.kt`

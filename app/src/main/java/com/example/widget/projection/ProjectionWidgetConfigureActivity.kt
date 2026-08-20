@@ -2,7 +2,6 @@ package com.example.widget.projection
 
 import android.app.Activity
 import android.appwidget.AppWidgetManager
-import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -33,16 +32,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import androidx.lifecycle.lifecycleScope
 import com.example.R
 import com.example.widget.PenWidgetRuntime
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -58,10 +54,6 @@ object ProjectionWidgetConfiguration {
 
     fun modeKey(appWidgetId: Int) = stringPreferencesKey("$MODE_KEY_PREFIX$appWidgetId")
 }
-
-internal val Context.projectionWidgetConfigurationDataStore by preferencesDataStore(
-    name = ProjectionWidgetConfiguration.DATASTORE_NAME,
-)
 
 private enum class ProjectionConfigurationState {
     LOADING,
@@ -120,8 +112,7 @@ class ProjectionWidgetConfigureActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val mode = withContext(Dispatchers.IO) {
-                    applicationContext.projectionWidgetConfigurationDataStore.data
-                        .first()[ProjectionWidgetConfiguration.modeKey(appWidgetId)]
+                    ProjectionWidgetStateRepository(applicationContext).readMode(appWidgetId)
                 }
                 selectedMode = mode
                     ?.takeIf { it == ProjectionWidgetConfiguration.MODE_RUNWAY || it == ProjectionWidgetConfiguration.MODE_SPEND }
@@ -142,9 +133,8 @@ class ProjectionWidgetConfigureActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    applicationContext.projectionWidgetConfigurationDataStore.edit { preferences ->
-                        preferences[ProjectionWidgetConfiguration.modeKey(appWidgetId)] = selectedMode
-                    }
+                    ProjectionWidgetStateRepository(applicationContext)
+                        .writeMode(appWidgetId, selectedMode)
                 }
                 PenWidgetRuntime.withSerialized {
                     ProjectionWidgetUpdater.update(applicationContext, appWidgetId)
