@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B2 in progress
+## Current widget expansion: A7 release candidate; B3 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -92,7 +92,7 @@ and the exact post-merge `main` run was [32361027225](https://github.com/noamvb/
 green on all six jobs including API 24 and API 36. No physical phone or
 production data action was used.
 
-## Release B: B1 merged; B2 in progress
+## Release B: B1 and B2 merged; B3 in progress
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -100,8 +100,8 @@ static shortcuts and verified Log, Purchase, and Insights routing. The exact
 post-merge `main` run was `32366164663`, green on all six required jobs. Its
 menu screenshot is `docs/images/launcher-shortcuts-menu.png`.
 
-B2 (`feat: add a quick settings tile for one-tap pen logging`) is implemented
-on `agent/quick-settings-tile` and is awaiting the PR gate. It reserves
+B2 (`feat: add a quick settings tile for one-tap pen logging`) is squash-merged
+as PR #117 / `1d17c3d`. It reserves
 `Int.MAX_VALUE` as the non-AppWidget tile key, writes the first preset into the
 existing draft before calling the shared `submitPenLog` helper, and retains the
 existing durable five-second undo/claim/write/complete behavior plus the
@@ -110,8 +110,25 @@ third page, `Undo` immediately after tapping, automatic return to the product
 label after the window, and the corresponding product usage in the normal app
 UI. The two screenshots are `docs/images/pen-quick-tile-normal.png` and
 `docs/images/pen-quick-tile-undo.png`. The full connected API-36 suite passed
-144/144, and the final exact local gate passed. No physical phone or
+144/144, and the final exact local gate passed. Its exact post-merge `main` run
+was `32373120078`, green on all six required jobs. No physical phone or
 production-data action was used.
+
+B3 (`feat: add a sync status home-screen widget`) is implemented on
+`agent/sync-status-widget` and is awaiting its PR gate. It adds a compact,
+horizontal-resizable `RemoteViews` widget with aggregate pending count, a
+relative last-sync label, a stuck-queue state, and a `Sync now` tap that calls
+`SyncScheduler.enqueueImmediate` rather than `SyncEngine` directly. The shared
+`CannsheetWidgetRefresher` now fans out independently to the pen and sync-status
+widgets. API-36 emulator evidence covered empty, pending, and stuck states,
+light/dark rendering, resize to the launcher-wide span, launcher restart
+persistence, and the WorkManager enqueue path. Evidence images are
+`docs/images/sync-status-widget-empty.png`,
+`docs/images/sync-status-widget-pending.png`, and
+`docs/images/sync-status-widget-stuck.png`. The API-31-only metadata path was
+not manually repeated on API 24; the base provider XML remains the API-24
+surface and the API-24 CI job is the compatibility check. No physical phone or
+production data action was used.
 
 ## Current release: v1.4.5 (release candidate; pending publication)
 

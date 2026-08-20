@@ -5,8 +5,8 @@ import com.example.data.CannsheetGraph
 import com.example.data.sync.QueueAlertScheduler
 import com.example.data.sync.SyncScheduler
 import com.example.notifications.QueueAlertNotifier
+import com.example.widget.CannsheetWidgetRefresher
 import com.example.widget.PenWidgetCommitCoordinator
-import com.example.widget.PenWidgetRefresher
 import com.example.widget.PenWidgetRuntime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -25,7 +25,7 @@ class CannsheetApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         val graph = CannsheetGraph.get(this)
-        graph.installWidgetRefresher(PenWidgetRefresher(this))
+        graph.installWidgetRefresher(CannsheetWidgetRefresher(this))
         graph.installQueueAlertPresenter(QueueAlertNotifier(this))
         PenWidgetRuntime.launchSerialized {
             PenWidgetCommitCoordinator.flushOverdue(this@CannsheetApplication, System.currentTimeMillis())
