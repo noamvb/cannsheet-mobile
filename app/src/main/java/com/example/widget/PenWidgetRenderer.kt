@@ -202,11 +202,11 @@ object PenWidgetRenderer {
 
         setOnClickPendingIntent(
             R.id.widget_pen_name,
-            pendingIntent(context, appWidgetId, ACTION_OPEN_LOG),
+            pendingIntent(context, appWidgetId, ACTION_OPEN_CART_PICKER),
         )
         setContentDescription(
             R.id.widget_pen_name,
-            context.getString(R.string.pen_widget_open_app_description, productName),
+            context.getString(R.string.pen_widget_open_picker_description, productName),
         )
 
         setContentDescription(

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import com.example.MainActivity
+import com.example.domain.EXTRA_OPEN_CART_PICKER
 import com.example.domain.EXTRA_START_ROUTE
 
 const val ACTION_DECREMENT = "com.noamv.cannsheet.mobile.widget.DECREMENT"
@@ -16,6 +17,7 @@ const val ACTION_PRESET_1 = "com.noamv.cannsheet.mobile.widget.PRESET_1"
 const val ACTION_PRESET_2 = "com.noamv.cannsheet.mobile.widget.PRESET_2"
 const val ACTION_PRESET_3 = "com.noamv.cannsheet.mobile.widget.PRESET_3"
 const val ACTION_OPEN_LOG = "com.noamv.cannsheet.mobile.widget.OPEN_LOG"
+const val ACTION_OPEN_CART_PICKER = "com.noamv.cannsheet.mobile.widget.OPEN_CART_PICKER"
 const val ACTION_OPEN_SETTINGS = "com.noamv.cannsheet.mobile.widget.OPEN_SETTINGS"
 const val EXTRA_APP_WIDGET_ID = "com.noamv.cannsheet.mobile.widget.APP_WIDGET_ID"
 const val EXTRA_COMMIT_ID = "com.noamv.cannsheet.mobile.widget.COMMIT_ID"
@@ -44,11 +46,14 @@ fun pendingIntent(
     stepSeconds: Int? = null,
 ): PendingIntent {
     val requestCode = 31 * appWidgetId + action.hashCode()
-    if (action == ACTION_OPEN_LOG || action == ACTION_OPEN_SETTINGS) {
+    if (action == ACTION_OPEN_LOG || action == ACTION_OPEN_CART_PICKER || action == ACTION_OPEN_SETTINGS) {
         val startRoute = if (action == ACTION_OPEN_SETTINGS) "settings" else "consumption"
         val activityIntent = Intent(context, MainActivity::class.java).apply {
             this.action = action
             putExtra(EXTRA_START_ROUTE, startRoute)
+            if (action == ACTION_OPEN_CART_PICKER) {
+                putExtra(EXTRA_OPEN_CART_PICKER, true)
+            }
             data = Uri.parse("cannsheet://pen-widget/$appWidgetId/$action")
             addFlags(
                 Intent.FLAG_ACTIVITY_NEW_TASK or

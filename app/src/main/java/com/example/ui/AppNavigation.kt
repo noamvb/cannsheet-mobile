@@ -59,6 +59,7 @@ fun CannsheetApp(
     viewModel: CannsheetViewModel = viewModel(),
     startDestination: String = Screen.Consumption.route,
     routeRequests: Flow<String> = emptyFlow(),
+    openCartPickerRequests: Flow<Unit> = emptyFlow(),
 ) {
     val navController = rememberNavController()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
@@ -91,7 +92,9 @@ fun CannsheetApp(
     ) { windowWidth ->
         Box(modifier = Modifier.fillMaxSize()) {
             NavHost(navController, startDestination = startDestination) {
-                composable(Screen.Consumption.route) { ConsumptionScreen(viewModel) }
+                composable(Screen.Consumption.route) {
+                    ConsumptionScreen(viewModel, openCartPickerRequests)
+                }
                 composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
                 composable(Screen.Insights.route) {
                     InsightsScreen(viewModel, windowWidth = windowWidth)

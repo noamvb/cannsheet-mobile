@@ -1322,3 +1322,36 @@ added to queue-alert notification paths.
 - `app/src/main/res/xml-v31/pen_consumption_widget_info.xml`
 - `app/src/main/res/values/strings.xml`
 - `app/src/test/java/com/example/widget/PenWidgetUiModelTest.kt`
+
+## ADR-032: Deep-link the interactive pen widget name to the cart picker
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: The interactive pen widget's product name opened the Log screen, so
+  choosing a different cart required a second tap on the screen's `Swap cart`
+  control. The app already has a shared start-route extra and a local product
+  picker with a `LOADED_PEN` mode, but an activity launch needs to work for both
+  a cold start and an existing `singleTop` activity.
+- Decision: Keep `EXTRA_START_ROUTE` and its existing string value unchanged.
+  Add the sibling `EXTRA_OPEN_CART_PICKER` and the activity-only
+  `ACTION_OPEN_CART_PICKER`, retaining the existing widget/app-widget/action URI
+  identity scheme. Consume the boolean exactly once in `MainActivity` on both
+  `onCreate` and `onNewIntent`, delivering it through a conflated channel so
+  repeated taps cannot queue repeated sheet openings. The consumption screen
+  owns the private picker mode and opens the existing picker in `LOADED_PEN`
+  mode, the same mode used by `Swap cart`. Only the interactive widget's
+  product-name target changes; message
+  states continue using `ACTION_OPEN_LOG`.
+- Consequences: A configured or unconfigured widget can reach cart selection in
+  one tap without adding a persistence, Room, offline-queue, backend, or wire
+  contract. The picker remains local UI state and uses the existing selectable
+  product filtering and logging target. The old route extra remains compatible
+  with already-issued PendingIntents.
+- Related files: `app/src/main/java/com/example/domain/AppEntryPoints.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetActions.kt`,
+  `app/src/main/java/com/example/MainActivity.kt`,
+  `app/src/main/java/com/example/ui/AppNavigation.kt`,
+  `app/src/main/java/com/example/ui/ConsumptionScreen.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`,
+  `app/src/main/res/values/strings.xml`,
+  `app/src/androidTest/java/com/example/MainActivityIntentTest.kt`

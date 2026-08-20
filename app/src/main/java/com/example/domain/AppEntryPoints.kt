@@ -7,3 +7,6 @@ package com.example.domain
  * waiting to happen.
  */
 const val EXTRA_START_ROUTE = "com.noamv.cannsheet.mobile.widget.START_ROUTE"
+
+/** Set alongside [EXTRA_START_ROUTE] to request the cart picker on arrival. */
+const val EXTRA_OPEN_CART_PICKER = "com.noamv.cannsheet.mobile.widget.OPEN_CART_PICKER"
