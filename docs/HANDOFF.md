@@ -66,7 +66,8 @@ implementation complete. `ACTION_OPEN_CART_PICKER` is a new activity
 PendingIntent action with a distinct URI and the sibling
 `EXTRA_OPEN_CART_PICKER`; `EXTRA_START_ROUTE` remains byte-for-byte unchanged.
 Cold-start and warm-start consumption use a conflated `Channel<Unit>`, and the
-existing `ConsumptionScreen` picker is opened in `LOG_TARGET` mode. The
+existing `ConsumptionScreen` picker is opened in the `LOADED_PEN` mode used by
+`Swap cart`. The
 interactive widget name now announces “Double tap to choose a different cart,”
 while message-state layouts retain `ACTION_OPEN_LOG`. The exact local Android
 gate passed with JDK 17.0.20, focused API-36 instrumentation passed

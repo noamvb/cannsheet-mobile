@@ -115,7 +115,8 @@ Last updated: 2026-08-20
   widget's product-name PendingIntent will preserve `EXTRA_START_ROUTE` and add
   a one-shot `EXTRA_OPEN_CART_PICKER` activity extra. `MainActivity` consumes it
   on both cold and warm starts through a conflated channel, while the existing
-  `ConsumptionScreen` picker opens in `LOG_TARGET` mode. The message-state
+  `ConsumptionScreen` picker opens in the existing `LOADED_PEN` mode used by
+  `Swap cart`. The message-state
   layout keeps its existing `ACTION_OPEN_LOG` path. A5's exact local Android
   gate passed with JDK 17.0.20; focused API-36 instrumentation passed
   `MainActivityIntentTest` 3/3 and `PenWidgetRendererTest` 10/10. Cold and warm

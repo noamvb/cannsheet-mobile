@@ -311,7 +311,7 @@ fun ConsumptionContent(
 
     LaunchedEffect(openCartPickerRequests) {
         openCartPickerRequests.collect {
-            pickerMode = ProductPickerMode.LOG_TARGET
+            pickerMode = ProductPickerMode.LOADED_PEN
             showProductPicker = true
         }
     }

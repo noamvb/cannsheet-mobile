@@ -1330,7 +1330,7 @@ added to queue-alert notification paths.
 - Context: The interactive pen widget's product name opened the Log screen, so
   choosing a different cart required a second tap on the screen's `Swap cart`
   control. The app already has a shared start-route extra and a local product
-  picker with a `LOG_TARGET` mode, but an activity launch needs to work for both
+  picker with a `LOADED_PEN` mode, but an activity launch needs to work for both
   a cold start and an existing `singleTop` activity.
 - Decision: Keep `EXTRA_START_ROUTE` and its existing string value unchanged.
   Add the sibling `EXTRA_OPEN_CART_PICKER` and the activity-only
@@ -1338,8 +1338,9 @@ added to queue-alert notification paths.
   identity scheme. Consume the boolean exactly once in `MainActivity` on both
   `onCreate` and `onNewIntent`, delivering it through a conflated channel so
   repeated taps cannot queue repeated sheet openings. The consumption screen
-  owns the private picker mode and opens the existing picker in `LOG_TARGET`
-  mode. Only the interactive widget's product-name target changes; message
+  owns the private picker mode and opens the existing picker in `LOADED_PEN`
+  mode, the same mode used by `Swap cart`. Only the interactive widget's
+  product-name target changes; message
   states continue using `ACTION_OPEN_LOG`.
 - Consequences: A configured or unconfigured widget can reach cart selection in
   one tap without adding a persistence, Room, offline-queue, backend, or wire
