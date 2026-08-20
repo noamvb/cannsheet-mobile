@@ -35,6 +35,16 @@ settings control a no-op on the API-36 emulator. This is the only intentional
 manifest deviation from the plan and is required for the requested feature to
 function.
 
+Correction (v1.5.1, PR #128): the export fix was necessary but not sufficient.
+Both `appwidget-provider` files also declared `android:configure` as a flattened
+`package/class` value, which Android parses as a bare class name, producing
+`ComponentName(providerPackage, "com.noamv.cannsheet.mobile/com.example.widget.PenWidgetConfigureActivity")`
+— a component that does not exist. The pen widget's configuration activity was
+therefore unreachable from the launcher in both published releases, and
+`configuration_optional` made adding the widget skip configuration silently
+rather than fail. PR #128 uses the bare class name and adds an instrumented test
+that guards the attribute format for every declared provider.
+
 Validation is emulator-only and green so far: A1/A2's exact local Gradle gate and
 focused API-36 renderer/router tests passed, and A3's exact local Gradle gate plus
 focused `PenWidgetConfigStateTest` instrumentation passed 4/4. Manual API-36
