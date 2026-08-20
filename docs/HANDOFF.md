@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B3 in progress
+## Current widget expansion: A7 release candidate; B4 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -92,7 +92,12 @@ and the exact post-merge `main` run was [32361027225](https://github.com/noamvb/
 green on all six jobs including API 24 and API 36. No physical phone or
 production data action was used.
 
-## Release B: B1 and B2 merged; B3 in progress
+A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
+The exact post-merge `main` run was `32362664715`, green on all six required
+jobs. The `v1.4.5` tag, signed APK publication, and any production installation
+remain pending explicit repository-owner approval under the release runbook.
+
+## Release B: B1-B3 merged; B4 in progress
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -114,8 +119,8 @@ UI. The two screenshots are `docs/images/pen-quick-tile-normal.png` and
 was `32373120078`, green on all six required jobs. No physical phone or
 production-data action was used.
 
-B3 (`feat: add a sync status home-screen widget`) is implemented on
-`agent/sync-status-widget` and is awaiting its PR gate. It adds a compact,
+B3 (`feat: add a sync status home-screen widget`) is squash-merged as PR #118 /
+`45affae`. It adds a compact,
 horizontal-resizable `RemoteViews` widget with aggregate pending count, a
 relative last-sync label, a stuck-queue state, and a `Sync now` tap that calls
 `SyncScheduler.enqueueImmediate` rather than `SyncEngine` directly. The shared
@@ -128,14 +133,33 @@ persistence, and the WorkManager enqueue path. Evidence images are
 `docs/images/sync-status-widget-stuck.png`. The API-31-only metadata path was
 not manually repeated on API 24; the base provider XML remains the API-24
 surface and the API-24 CI job is the compatibility check. No physical phone or
-production data action was used.
+production data action was used. The exact post-merge `main` run was
+`32379701895`, green on all six required jobs.
+
+B4 (`feat: add a multi-cart quick log widget`) is in progress on
+`agent/multi-cart-widget`. It adds a wide, fixed-button widget that orders up to
+four selectable pen carts by recent interaction, preserves the existing shared
+five-second durable undo path, converts display seconds with `secondsToUses`
+before Room/queue logging, and leaves the loaded-cart preference unchanged.
+The focused JVM model suite passed 7/7 and the exact local Android gate passed.
+API-36 emulator evidence observed two distinct product UUIDs and `0.5` uses in
+two distinct Room rows, full-width Undo, light/dark rendering, launcher restart
+persistence, and horizontal resize behavior. Screenshots are
+`docs/images/multi-cart-widget-grid.png`,
+`docs/images/multi-cart-widget-grid-light.png`, and
+`docs/images/multi-cart-widget-undo.png`. The emulator network remained
+disabled, exact fixture rows were removed afterward, and no physical phone or
+production data action was used. The temporary multi-cart host instance remains
+on that isolated emulator because its launcher shell has no deterministic
+widget-delete operation.
 
 ## Current release: v1.4.5 (release candidate; pending publication)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
-pen-widget expansion from A1 through A6. The code is merged on `main` at
-`fb6a52e`; the version-only PR is `agent/release-v1-4-5` and is not yet tagged
-or published. The release runbook must first prove the final tagged SHA with
+pen-widget expansion from A1 through A7. The version-only change is merged on
+`main` at `f32f7c0`; it is not yet tagged or published because the release
+runbook requires explicit owner approval before the tag. The release runbook
+must first prove the final tagged SHA with
 all six `Cannsheet PR checks` jobs, then independently verify the signed APK,
 checksum, package metadata, and signing-certificate continuity. A follow-up
 docs PR will record the tag, publication assets, SHA-256, and certificate

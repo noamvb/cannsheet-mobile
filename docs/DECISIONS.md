@@ -1461,3 +1461,43 @@ added to queue-alert notification paths.
   `app/src/main/res/xml/sync_status_widget_info.xml`,
   `app/src/main/res/xml-v31/sync_status_widget_info.xml`,
   `app/src/test/java/com/example/widget/sync/SyncStatusUiModelTest.kt`
+
+## ADR-036: Give each multi-cart button its own durable commit payload
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: The Release B multi-cart widget needs to log a default amount for
+  whichever active pen cart the user taps. It must remain a presentation
+  surface over the existing uses-only Room/offline/wire contract, preserve the
+  five-second undo window, and avoid changing the app's loaded-cart choice.
+  A shared `PenWidgetUpdater` callback also means a deferred commit must not
+  repaint a multi-cart instance with the single-cart layout.
+- Decision: Render up to four fixed `RemoteViews` buttons from selectable pen
+  products ordered by `ProductInteraction.lastLoggedAtEpochMillis`. Resolve
+  each entry's first effective quantity preset and seconds-per-use rate, store
+  only the temporary display seconds in that widget's draft, and convert with
+  `secondsToUses` while building the captured `PenWidgetCommitPayload`. Route
+  the payload through `PenWidgetRuntime`, `PenWidgetCommitCoordinator`, and
+  `PenWidgetScheduler` exactly as the existing pen widget does. Keep the
+  multi-cart widget's provider and updater separate, and have
+  `PenWidgetUpdater.update` delegate owned multi-cart IDs back to
+  `MultiCartUpdater` before handling the single-cart sentinel/configuration
+  path. Do not call the loaded-cart preference update from a multi-cart commit.
+- Consequences: Each button logs its own product ID, product UUID, stable event
+  ID, date/time, seconds, and uses value while retaining atomic claim/write/
+  complete arbitration, WorkManager recovery, and full Undo behavior. The
+  widget adds no Room schema, stored/transmitted unit, Apps Script contract,
+  endpoint, package, or version change. Invalid or non-integral display
+  conversions are omitted from the presentation model rather than rounded or
+  advertised through the overflow count. A pending commit suppresses the grid
+  so one widget instance cannot claim two payloads concurrently.
+- Related files: `app/src/main/java/com/example/widget/multi/MultiCartWidgetProvider.kt`,
+  `app/src/main/java/com/example/widget/multi/MultiCartUiModel.kt`,
+  `app/src/main/java/com/example/widget/multi/MultiCartRenderer.kt`,
+  `app/src/main/java/com/example/widget/multi/MultiCartUpdater.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/main/java/com/example/widget/CannsheetWidgetRefresher.kt`,
+  `app/src/main/res/layout/widget_multi_cart.xml`,
+  `app/src/main/res/xml/multi_cart_widget_info.xml`,
+  `app/src/main/res/xml-v31/multi_cart_widget_info.xml`,
+  `app/src/test/java/com/example/widget/multi/MultiCartUiModelTest.kt`
