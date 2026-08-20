@@ -44,6 +44,7 @@
     <string name="pen_widget_preview_product">Blue Dream cart</string>
     <string name="pen_widget_preview_subtitle">Active · synced 12 uses</string>
     <string name="pen_widget_preview_seconds" translatable="false">30s</string>
+    <string name="pen_widget_preset_description">Set duration to %1$d seconds</string>
     <string name="pen_widget_increase">Increase duration by 10 seconds</string>
     <string name="pen_widget_decrease">Decrease duration by 10 seconds</string>
     <plurals name="pen_widget_reset_seconds_description">

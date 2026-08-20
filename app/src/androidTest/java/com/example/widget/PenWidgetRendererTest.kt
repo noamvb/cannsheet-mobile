@@ -219,6 +219,35 @@ class PenWidgetRendererTest {
         assertEquals(View.GONE, root.findViewById<TextView>(R.id.widget_pen_subtitle).visibility)
     }
 
+    @Test
+    fun presetRowHidesUntilTheRegularLayoutHasEnoughHeight() {
+        val views = PenWidgetRenderer.buildRemoteViews(
+            context,
+            7,
+            PenWidgetUiModel.Composing(
+                productName = PenWidgetText.Literal("Loaded cart"),
+                subtitle = PenWidgetText.Resource(
+                    R.string.pen_widget_status_synced,
+                    listOf("Active", "12"),
+                ),
+                seconds = 0,
+                recentlyQueued = false,
+                canDecrement = false,
+                canIncrement = true,
+                canSubmit = false,
+                presetSeconds = listOf(5, 10, 20),
+            ),
+            spec = PenWidgetSizing.resolve(
+                widthDp = 140,
+                heightDp = 160,
+                compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
+            ),
+        )
+        val root = views.apply(context, FrameLayout(context))
+
+        assertEquals(View.GONE, root.findViewById<View>(R.id.widget_pen_preset_row).visibility)
+    }
+
     private fun layoutAt(appWidgetId: Int, widthDp: Int, heightDp: Int): View {
         val views = PenWidgetRenderer.buildRemoteViews(
             context,

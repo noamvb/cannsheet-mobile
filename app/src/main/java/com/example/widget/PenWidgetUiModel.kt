@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import com.example.R
 import com.example.data.productStatus
 import com.example.domain.PenQuickLogState
+import com.example.domain.usesToSeconds
 import java.math.BigDecimal
 import java.math.RoundingMode
 
@@ -43,6 +44,7 @@ sealed interface PenWidgetUiModel {
         val canDecrement: Boolean,
         val canIncrement: Boolean,
         val canSubmit: Boolean,
+        val presetSeconds: List<Int> = emptyList(),
     ) : PenWidgetUiModel
 
     data class AwaitingCommit(
@@ -110,10 +112,28 @@ fun buildPenWidgetUiModel(
                     canDecrement = composing.seconds > 0,
                     canIncrement = composing.seconds < MAX_SECONDS,
                     canSubmit = composing.seconds > 0,
+                    presetSeconds = penWidgetPresetSeconds(penState),
                 )
             }
         }
     }
+}
+
+internal fun penWidgetPresetSeconds(state: PenQuickLogState.Loaded): List<Int> =
+    state.secondsPerUse?.let { secondsPerUse ->
+        state.presetUses
+            .asSequence()
+            .mapNotNull { usesToSeconds(it, secondsPerUse).toWholePresetSeconds() }
+            .distinct()
+            .sorted()
+            .take(3)
+            .toList()
+    } ?: emptyList()
+
+private fun Double.toWholePresetSeconds(): Int? {
+    if (!isFinite()) return null
+    val seconds = toInt()
+    return seconds.takeIf { toDouble() == it.toDouble() && it in 1..MAX_SECONDS }
 }
 
 private fun buildSubtitle(

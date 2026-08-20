@@ -41,6 +41,29 @@ Last updated: 2026-08-19
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
+## Pen widget preset follow-up (PR #109, pending merge)
+
+- PR #109 (`feat: surface quantity presets on the pen widget`) is the first
+  implementation slice of the widget-expansion plan. Its review-fix branch is not
+  part of `main`, `v1.4.4`, or any published APK yet.
+- The full pen widget exposes up to three fixed preset buttons. Presets remain
+  stored and transmitted as uses; `usesToSeconds` supplies the display/input
+  conversion, and only durations that are exact whole seconds in `1..600` are
+  offered so a tap cannot silently change a fractional configured quantity.
+- Preset taps set the per-widget DataStore draft through the same pending-commit
+  guard as the existing step controls. The Room schema, offline queue, wire
+  payloads, Apps Script contract, endpoint, package ID, and version metadata are
+  unchanged.
+- Compact layouts and regular layouts below `200dp` hide the preset row to keep
+  the existing counter, submit, and +/- controls at their tested usable floor.
+  The default/unreported layout remains preset-capable, while the full layout
+  shows the row when its reported height is sufficient.
+- The implementation includes an API-36 emulator walkthrough and checked-in
+  default/largest-size screenshots. The remove/re-add launcher gesture was not
+  completed because this AVD opened the app drawer instead; no physical phone or
+  production data action was used. Post-review local validation is green; PR #109
+  still needs its remote gate and review-thread resolution before merge.
+
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

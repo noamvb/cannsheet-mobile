@@ -11,6 +11,7 @@ data class PenWidgetTextSizes(
     val countdownSp: Float,
     val submitSp: Float,
     val stepSp: Float,
+    val presetSp: Float,
     val messageTitleSp: Float,
     val messageHintSp: Float,
 )
@@ -19,6 +20,8 @@ data class PenWidgetTextSizes(
 data class PenWidgetLayoutSpec(
     val compact: Boolean,
     val textSizes: PenWidgetTextSizes,
+    /** Whether the full layout has enough vertical space for the preset row. */
+    val showPresets: Boolean = true,
 )
 
 /**
@@ -38,6 +41,9 @@ object PenWidgetSizing {
     const val FULL_SCALE_WIDTH_DP: Int = 280
     const val FULL_SCALE_HEIGHT_DP: Int = 320
 
+    /** The full layout must keep its 40dp counter and step controls usable too. */
+    const val PRESET_MIN_HEIGHT_DP: Int = 200
+
     private val compactSizes = PenWidgetTextSizes(
         nameSp = 13f,
         subtitleSp = 10f,
@@ -45,6 +51,7 @@ object PenWidgetSizing {
         countdownSp = 17f,
         submitSp = 15f,
         stepSp = 20f,
+        presetSp = 0f,
         messageTitleSp = 14f,
         messageHintSp = 10f,
     )
@@ -56,6 +63,7 @@ object PenWidgetSizing {
         countdownSp = 22f,
         submitSp = 20f,
         stepSp = 24f,
+        presetSp = 14f,
         messageTitleSp = 16f,
         messageHintSp = 11f,
     )
@@ -67,6 +75,7 @@ object PenWidgetSizing {
         countdownSp = 34f,
         submitSp = 40f,
         stepSp = 44f,
+        presetSp = 24f,
         messageTitleSp = 24f,
         messageHintSp = 15f,
     )
@@ -85,13 +94,25 @@ object PenWidgetSizing {
         compactBreakpointHeightDp: Int,
     ): PenWidgetLayoutSpec {
         if (heightDp in 1 until compactBreakpointHeightDp) {
-            return PenWidgetLayoutSpec(compact = true, textSizes = compactSizes)
+            return PenWidgetLayoutSpec(
+                compact = true,
+                textSizes = compactSizes,
+                showPresets = false,
+            )
         }
+        val showPresets = heightDp <= 0 || heightDp >= PRESET_MIN_HEIGHT_DP
         val fraction = growthFraction(widthDp, heightDp)
-        if (fraction <= 0f) return base
+        if (fraction <= 0f) {
+            return PenWidgetLayoutSpec(
+                compact = false,
+                textSizes = baseSizes,
+                showPresets = showPresets,
+            )
+        }
         return PenWidgetLayoutSpec(
             compact = false,
             textSizes = interpolate(baseSizes, largestSizes, fraction),
+            showPresets = showPresets,
         )
     }
 
@@ -118,6 +139,7 @@ object PenWidgetSizing {
         countdownSp = lerp(from.countdownSp, to.countdownSp, fraction),
         submitSp = lerp(from.submitSp, to.submitSp, fraction),
         stepSp = lerp(from.stepSp, to.stepSp, fraction),
+        presetSp = lerp(from.presetSp, to.presetSp, fraction),
         messageTitleSp = lerp(from.messageTitleSp, to.messageTitleSp, fraction),
         messageHintSp = lerp(from.messageHintSp, to.messageHintSp, fraction),
     )

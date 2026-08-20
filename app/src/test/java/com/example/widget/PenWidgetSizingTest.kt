@@ -41,7 +41,8 @@ class PenWidgetSizingTest {
             breakpoint,
         )
 
-        assertEquals(PenWidgetSizing.base, spec)
+        assertEquals(PenWidgetSizing.base.textSizes, spec.textSizes)
+        assertFalse(spec.showPresets)
         assertEquals(24f, spec.textSizes.counterSp, 0f)
     }
 
@@ -59,6 +60,7 @@ class PenWidgetSizingTest {
         assertEquals(34f, sizes.countdownSp, 0f)
         assertEquals(40f, sizes.submitSp, 0f)
         assertEquals(44f, sizes.stepSp, 0f)
+        assertEquals(24f, sizes.presetSp, 0f)
         assertEquals(24f, sizes.messageTitleSp, 0f)
         assertEquals(15f, sizes.messageHintSp, 0f)
     }
@@ -86,7 +88,8 @@ class PenWidgetSizingTest {
         val wideButShort = PenWidgetSizing.resolve(900, PenWidgetSizing.BASE_HEIGHT_DP, breakpoint)
 
         assertEquals(PenWidgetSizing.base, tallButNarrow)
-        assertEquals(PenWidgetSizing.base, wideButShort)
+        assertEquals(PenWidgetSizing.base.textSizes, wideButShort.textSizes)
+        assertFalse(wideButShort.showPresets)
     }
 
     @Test
@@ -95,7 +98,17 @@ class PenWidgetSizingTest {
         // the base text; the layout weights absorb the difference instead.
         val spec = PenWidgetSizing.resolve(120, 150, breakpoint)
 
-        assertEquals(PenWidgetSizing.base, spec)
+        assertFalse(spec.compact)
+        assertEquals(PenWidgetSizing.base.textSizes, spec.textSizes)
+        assertFalse(spec.showPresets)
+    }
+
+    @Test
+    fun regularLayoutsHidePresetsUntilTheControlFloorFits() {
+        assertFalse(PenWidgetSizing.resolve(140, 160, breakpoint).showPresets)
+        assertFalse(PenWidgetSizing.resolve(140, 199, breakpoint).showPresets)
+        assertTrue(PenWidgetSizing.resolve(140, 200, breakpoint).showPresets)
+        assertTrue(PenWidgetSizing.base.showPresets)
     }
 
     @Test
@@ -129,6 +142,7 @@ class PenWidgetSizingTest {
                 sizes.countdownSp,
                 sizes.submitSp,
                 sizes.stepSp,
+                sizes.presetSp,
                 sizes.messageTitleSp,
                 sizes.messageHintSp,
             ).forEach { size ->

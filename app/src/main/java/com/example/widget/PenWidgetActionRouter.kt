@@ -34,6 +34,12 @@ internal class PenWidgetActionRouter(
             ACTION_DECREMENT -> state.adjustDraftSeconds(appWidgetId, -STEP_SECONDS)
             ACTION_INCREMENT -> state.adjustDraftSeconds(appWidgetId, STEP_SECONDS)
             ACTION_RESET -> state.resetDraftSeconds(appWidgetId)
+            in PRESET_ACTIONS -> {
+                val index = PRESET_ACTIONS.indexOf(action)
+                val penState = loadPenState(context) as? PenQuickLogState.Loaded ?: return
+                val seconds = penWidgetPresetSeconds(penState).getOrNull(index) ?: return
+                state.setDraftSeconds(appWidgetId, seconds)
+            }
             ACTION_SUBMIT -> submit(context, appWidgetId, state)
             ACTION_UNDO -> {
                 val commitId = intent.getStringExtra(EXTRA_COMMIT_ID) ?: return

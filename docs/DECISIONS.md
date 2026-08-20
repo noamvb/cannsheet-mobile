@@ -1156,3 +1156,38 @@ counts as a change.
 The general shape is worth remembering: work whose cost or visible identity should outlive
 a scroll must not be owned by a composable the list is free to dispose. The same fix landed
 in `poop-schedule` as D-016; the two insight cards continue to track each other.
+
+## ADR-028: Keep pen-widget presets exact and size-gated
+
+### Context
+
+The pen home-screen widget can offer saved quantity presets, but the widget displays
+seconds while the durable product preference remains uses. A preset that converts to a
+fractional second cannot be represented by the existing integer-second draft without
+silently changing the configured quantity. The full layout also has a minimum usable
+height for its existing counter, submit, and increment/decrement controls.
+
+### Decision
+
+The full pen widget exposes up to three fixed preset slots. Presets are converted from
+uses to seconds for display and input, but only exact whole-second values in `1..600` are
+offered; fractional, invalid, and out-of-range values are omitted. Preset taps use a
+guarded per-widget DataStore draft setter and do not alter Room, the offline queue, or the
+wire contract. Compact layouts and regular layouts below `200dp` hide the preset row,
+while the unreported/default layout remains preset-capable.
+
+### Consequences
+
+- Saved preferences remain uses-only and existing persistence/synchronization contracts
+  remain unchanged.
+- A user may see fewer than three preset buttons when configured values are not exactly
+  representable as integer seconds.
+- Small regular widgets preserve the existing control floor instead of shrinking those
+  controls to make room for presets.
+
+### Related files
+
+- `app/src/main/java/com/example/widget/PenWidgetUiModel.kt`
+- `app/src/main/java/com/example/widget/PenWidgetSizing.kt`
+- `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`
+- `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`
