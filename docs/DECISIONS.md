@@ -1570,3 +1570,45 @@ added to queue-alert notification paths.
   `app/src/main/res/xml/today_widget_info.xml`,
   `app/src/main/res/xml-v31/today_widget_info.xml`,
   `app/src/test/java/com/example/widget/today/TodayUiModelTest.kt`
+
+## ADR-039: Allow labelled cached projections on widget surfaces
+
+### Context
+
+Runway and spend figures are presentation-only estimates derived from
+`InsightsResponseDto`. An in-app surface must suppress a cached, stale, changing,
+or locally incomplete snapshot because a precise-looking projection next to a
+newly queued action can be mistaken for current or confirmed data. A home-screen
+widget is different: it is glanceable, cannot refresh the snapshot on its own,
+and is never an authoritative in-app surface. Under the previous shared rule,
+that meant a projection widget would be blank whenever it read its only available
+source, the cached snapshot.
+
+### Decision
+
+Keep the existing in-app suppression rule and amend the widget boundary only. A
+home-screen widget may render a cached projection when a snapshot exists and the
+widget displays the snapshot's own as-of date beside the figure. It must render
+nothing when no snapshot has ever been cached. The exception does not permit
+persisting or transmitting projections, treating them as confirmed values, or
+showing them without the source snapshot's as-of date.
+
+### Consequences
+
+The widget may provide a useful glance at the last known projection while making
+its age visible. In-app screens remain conservative around stale or pending data,
+and widget code must keep the as-of date adjacent to every cached projection.
+No Room column, queue payload, wire field, Apps Script contract, endpoint, or
+analytics write is introduced by this documentation change.
+
+### Not verified
+
+No projection widget has been implemented or manually observed yet. B8 must
+implement the as-of-date condition and its unavailable state after this decision
+merges; this ADR does not authorize a projection without those labels.
+
+### Related files
+
+- `AGENTS.md`
+- `docs/PROJECT_STATE.md`
+- `docs/DECISIONS.md`

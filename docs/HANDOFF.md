@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B6 in progress
+## Current widget expansion: A7 release candidate; B7 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -177,19 +177,28 @@ possible; this is not production signer-continuity evidence. The app was
 stopped and the emulator was disconnected afterward. No physical phone or
 production data action was used.
 
-B6 (`feat: add a today home-screen widget`) is in progress on
-`agent/today-widget`. The pure model covers today's local-date total, the
-seven-day observed-day baseline (requiring three observed days), and the
-consecutive logged-day streak. The updater reads a roughly ten-day bounded
+B6 (`feat: add a today home-screen widget`) is squash-merged as PR #121 /
+`d76d9aa`. The pure model covers today's local-date total, the seven-day
+observed-day baseline (requiring three observed days), and the consecutive
+logged-day streak. The updater reads a roughly ten-day bounded
 `consumptionHistorySince` Flow and explicitly treats pending local history as
 what the user logged, not as server confirmation. The seven requested model
-tests passed, and the exact local unit/compile/lint/debug gate passed. An
-isolated, network-disabled API-36 AVD added the widget and visibly rendered
+tests passed, and the exact post-merge `main` run was `32408190231`, green on
+all six required jobs including API 24 and API 36. An isolated,
+network-disabled API-36 AVD added the widget and visibly rendered
 `No logs yet today`; the AVD's System UI repeatedly became unresponsive during
 the populated fixture attempt, so no populated screenshot is claimed. The
 empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
 AVD was deleted and ADB was disconnected afterward. No physical phone or
 production data action was used.
+
+B7 (`docs: allow labelled cached projections on widget surfaces`) is in
+progress on `agent/adr-widget-projections`. This is a documentation-only
+clarification: in-app projections remain suppressed for cached, stale, changing,
+or incomplete snapshots, while a home-screen widget may display a cached
+projection only beside the snapshot's own as-of date and only when a snapshot
+exists. ADR-028 was already occupied, so the new decision is recorded as
+ADR-039.
 
 ## Current release: v1.4.5 (release candidate; publication workflow blocked)
 

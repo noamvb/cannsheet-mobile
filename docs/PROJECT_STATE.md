@@ -151,7 +151,7 @@ Last updated: 2026-08-20
   (`23b7b6d`). A historical-tag release path must be resolved before creating
   the public tag; no signed APK or production installation has been performed.
 
-## Release B widget surfaces (B1-B5 merged; B6 in progress)
+## Release B widget surfaces (B1-B6 merged; B7 in progress)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -227,22 +227,30 @@ Last updated: 2026-08-20
   history row from the current app. The local test APK used the debug
   certificate as a same-signer emulator substitute; this is not production
   signing evidence. No physical phone or production data action was used.
-- B6 (`feat: add a today home-screen widget`) is in progress on
-  `agent/today-widget`. Its pure model computes today's local-date total, the
-  mean over observed prior days in a seven-day window when at least three days
-  are present, and the consecutive logged-day streak. The updater reads only a
+- B6 (`feat: add a today home-screen widget`) is squash-merged as PR #121 /
+  `d76d9aa`. Its pure model computes today's local-date total, the mean over
+  observed prior days in a seven-day window when at least three days are
+  present, and the consecutive logged-day streak. The updater reads only a
   roughly ten-day `consumptionHistorySince` Flow from the local history table;
   pending entries therefore count immediately as local activity, without
   analytics backfill or server-confirmation semantics. The device-local date
   choice is documented above the query because the table's date was written by
   `currentSubmissionDateTime`, not by an analytics snapshot timezone. The seven
-  requested model tests passed, and the exact local unit/compile/lint/debug gate
-  passed. An isolated, network-disabled API-36 AVD added the Today widget and
-  visibly rendered `No logs yet today`; its System UI became unresponsive during
-  the populated fixture attempt, so no populated screenshot is claimed. The
+  requested model tests passed, and the exact post-merge `main` run
+  `32408190231` passed all six required jobs, including API 24 and API 36. An
+  isolated, network-disabled API-36 AVD added the Today widget and visibly
+  rendered `No logs yet today`; its System UI became unresponsive during the
+  populated fixture attempt, so no populated screenshot is claimed. The
   empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
   AVD was deleted and ADB was disconnected afterward; no physical phone or
   production data action was used.
+- B7 (`docs: allow labelled cached projections on widget surfaces`) is in
+  progress on `agent/adr-widget-projections`. It is a documentation-only
+  clarification: in-app projections remain suppressed for cached, stale,
+  changing, or incomplete snapshots, while a home-screen widget may display a
+  cached projection only beside the snapshot's own as-of date and only when a
+  snapshot exists. ADR-028 was already occupied, so the new decision is
+  recorded as ADR-039.
 
 ## v1.4.5 widget expansion (release candidate)
 
@@ -392,8 +400,10 @@ does not alert by itself. Alert evaluation and presentation never mutate a
 queue row.
 
 Runway and spend pace are presentation-only estimates from the existing
-versioned Insights payload. They require a fresh live snapshot and no pending
-local actions. Capacity evidence comes from medians over the user's own
+versioned Insights payload. In-app surfaces require a fresh live snapshot and
+no pending local actions. A home-screen widget may render a cached projection
+only with the snapshot's own as-of date beside the figure, and only when a
+snapshot exists. Capacity evidence comes from medians over the user's own
 finished products; burn windows and month eligibility use the response time
 zone and range. No new backend request, Apps Script field, Room table, queue
 payload, or spreadsheet write was introduced.
