@@ -41,7 +41,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1 merged; A2 pending)
+## Pen widget expansion (A1-A2 merged; A3 in progress)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -57,18 +57,39 @@ Last updated: 2026-08-20
   the existing counter, submit, and +/- controls at their tested usable floor.
   The default/unreported layout remains preset-capable, while the full layout
   shows the row when its reported height is sufficient.
-- A2 is in progress on `agent/widget-step-scaling`. `PenWidgetLayoutSpec` now
-  resolves a 10-second step for compact/base widths and a 30-second step when
-  rendered growth reaches the large-widget threshold. The selected step travels
-  in the broadcast `PendingIntent` extras, is clamped by the router, and is used
-  in the renderer's accessibility descriptions; it is not placed in the intent
-  identity URI.
+- PR #110 (`feat: scale the pen widget step size with rendered size`) is
+  squash-merged into `main` as `e00b3bb`; it is not part of a published APK or a
+  version bump. `PenWidgetLayoutSpec` resolves a 10-second step for compact/base
+  widths and a 30-second step when rendered growth reaches the large-widget
+  threshold. The selected step travels in the broadcast `PendingIntent` extras,
+  is clamped by the router, and is used in the renderer's accessibility
+  descriptions; it is not placed in the intent identity URI.
 - A2's exact local gate and focused API-36 renderer/router tests are green. The
   emulator walkthrough observed 30-second large-widget behavior, 10-second
-  base-width behavior, dark-mode legibility, and launcher-restart persistence.
-  No physical phone or production data action was used; remove/re-add remains
-  unverified from the earlier A1 walkthrough.
-
+  base-width behavior, dark-mode legibility, and 20-second state surviving a
+  launcher restart. No physical phone or production data action was used;
+  remove/re-add remains unverified from the earlier A1 walkthrough.
+- A3 is in progress on `agent/widget-config-activity`. Each widget now has
+  optional DataStore-backed pinned product, discreet-mode, and step-override
+  settings; absent settings reproduce the pre-configuration loaded-cart
+  behavior. The Compose configuration activity filters selectable pen products,
+  supports follow-loaded versus pinned selection, discreet mode, and 5/10/30
+  second steps, then serializes the updater through `PenWidgetRuntime`.
+- Discreet presentation uses the generic `Pen cart` name and `Tap to log`
+  subtitle while retaining queued confirmation and accessibility content
+  descriptions. The activity root uses a Material `Surface` so both light and
+  dark themes remain legible.
+- The configuration activity is explicitly exported so the separate launcher
+  UID can invoke the host's `APPWIDGET_CONFIGURE` flow; the attached plan's
+  `exported="false"` value prevented the launcher from starting it on the API-36
+  emulator. This is a required Android host-boundary correction, not a data or
+  package-surface expansion.
+- A3 local validation passed with JDK 17.0.20, Gradle 9.3.1, Android Platform
+  36.1, and Build Tools 36.0.0: the exact Android gate, focused
+  `PenWidgetConfigStateTest` instrumentation (4/4), and API-36 manual evidence.
+  The old v1.4.4 debug widget (id 2) remained present after `adb install -r`;
+  configuration and discreet-mode screenshots are in `docs/images/`. No
+  physical phone or production data action was used.
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

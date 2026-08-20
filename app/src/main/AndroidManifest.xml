@@ -42,6 +42,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".widget.PenWidgetConfigureActivity"
+            android:exported="true"
+            android:label="@string/pen_widget_configure_label"
+            android:theme="@style/Theme.MyApplication">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <receiver
             android:name=".widget.PenConsumptionWidgetProvider"
             android:exported="false"

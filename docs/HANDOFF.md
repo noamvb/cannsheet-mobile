@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A2 pending
+## Current widget expansion: A3 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -12,19 +12,36 @@ presets remain uses-only, use the guarded DataStore draft setter, omit fractiona
 second conversions rather than flooring them, and hide below the `200dp` regular
 layout floor.
 
-A2 is on `agent/widget-step-scaling` and is not merged yet. Large rendered widgets
-carry a 30-second increment/decrement step through the existing broadcast intent
-extras; compact and base-width widgets carry the default 10-second step. The router
-clamps the extra, and the renderer formats the matching accessibility descriptions.
-The Room schema, offline queue, wire payloads, backend contract, endpoint, package ID,
-and version metadata are unchanged.
+A2 (`feat: scale the pen widget step size with rendered size`) is squash-merged as
+PR #110 / `e00b3bb`. Large rendered widgets carry a 30-second increment/decrement
+step through the existing broadcast intent extras; compact and base-width widgets
+carry the default 10-second step. The router clamps the extra, and the renderer
+formats the matching accessibility descriptions. The Room schema, offline queue,
+wire payloads, backend contract, endpoint, package ID, and version metadata are
+unchanged.
 
-Validation is emulator-only and green so far: the exact local Gradle gate, focused
-API-36 `PenWidgetRendererTest` (10/10), and `PenWidgetActionRouterTest` (7/7) pass.
-Manual API-36 evidence observed large-widget 30-second behavior, base-width
-10-second behavior, dark-mode legibility, and 20-second state surviving a launcher
-restart. The remove/re-add gesture remains unverified from A1 because the AVD launcher
-opened the app drawer; no physical phone or production data was used.
+A3 is on `agent/widget-config-activity`. It adds optional per-instance DataStore
+configuration for a pinned selectable pen, discreet presentation, and a 5/10/30
+second step override. Unconfigured or restored widgets read defaults and continue
+to follow `preferences.loadedPenProductId`; deleted widget IDs clear all three
+configuration keys. The Compose activity routes saving through
+`PenWidgetRuntime.withSerialized { PenWidgetUpdater.update(...) }`.
+
+The configuration activity is explicitly exported because the launcher is a
+separate Android UID and otherwise cannot invoke the `APPWIDGET_CONFIGURE` flow;
+the attached plan's `exported="false"` value was observed to make the launcher
+settings control a no-op on the API-36 emulator. This is the only intentional
+manifest deviation from the plan and is required for the requested feature to
+function.
+
+Validation is emulator-only and green so far: A1/A2's exact local Gradle gate and
+focused API-36 renderer/router tests passed, and A3's exact local Gradle gate plus
+focused `PenWidgetConfigStateTest` instrumentation passed 4/4. Manual API-36
+evidence observed the old v1.4.4 widget surviving `adb install -r`, a readable light
+configuration screen, discreet-mode output (`Pen cart` / `Tap to log`), and
+30-second accessibility actions. The remove/re-add gesture remains unverified from
+A1 because the AVD launcher opened the app drawer; no physical phone or production
+data was used.
 
 ## Current release: v1.4.4
 

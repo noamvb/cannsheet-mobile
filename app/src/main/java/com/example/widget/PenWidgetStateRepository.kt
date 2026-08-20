@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
@@ -259,12 +260,46 @@ class PenWidgetStateRepository internal constructor(
             .toList()
     }
 
+    suspend fun readConfig(appWidgetId: Int): PenWidgetInstanceConfig {
+        requireValidWidgetId(appWidgetId)
+        val preferences = dataStore.data.first()
+        return PenWidgetInstanceConfig(
+            pinnedProductId = preferences[pinnedProductKey(appWidgetId)]
+                ?.takeIf { it.isNotBlank() },
+            discreet = preferences[discreetKey(appWidgetId)] ?: false,
+            stepSecondsOverride = preferences[stepOverrideKey(appWidgetId)]
+                ?.takeIf { it in 1..MAX_SECONDS },
+        )
+    }
+
+    suspend fun writeConfig(appWidgetId: Int, config: PenWidgetInstanceConfig) {
+        requireValidWidgetId(appWidgetId)
+        dataStore.edit { preferences ->
+            val pinned = config.pinnedProductId?.trim()
+            if (pinned.isNullOrBlank()) {
+                preferences.remove(pinnedProductKey(appWidgetId))
+            } else {
+                preferences[pinnedProductKey(appWidgetId)] = pinned
+            }
+            preferences[discreetKey(appWidgetId)] = config.discreet
+            val step = config.stepSecondsOverride?.takeIf { it in 1..MAX_SECONDS }
+            if (step == null) {
+                preferences.remove(stepOverrideKey(appWidgetId))
+            } else {
+                preferences[stepOverrideKey(appWidgetId)] = step
+            }
+        }
+    }
+
     suspend fun clear(appWidgetId: Int) {
         requireValidWidgetId(appWidgetId)
         dataStore.edit { preferences ->
             preferences.remove(draftKey(appWidgetId))
             preferences.remove(pendingKey(appWidgetId))
             preferences.remove(lastQueuedKey(appWidgetId))
+            preferences.remove(pinnedProductKey(appWidgetId))
+            preferences.remove(discreetKey(appWidgetId))
+            preferences.remove(stepOverrideKey(appWidgetId))
         }
     }
 
@@ -274,11 +309,22 @@ class PenWidgetStateRepository internal constructor(
 
     private fun lastQueuedKey(appWidgetId: Int) = longPreferencesKey("$LAST_QUEUED_PREFIX$appWidgetId")
 
+    private fun pinnedProductKey(appWidgetId: Int) =
+        stringPreferencesKey("$PINNED_PRODUCT_PREFIX$appWidgetId")
+
+    private fun discreetKey(appWidgetId: Int) = booleanPreferencesKey("$DISCREET_PREFIX$appWidgetId")
+
+    private fun stepOverrideKey(appWidgetId: Int) =
+        intPreferencesKey("$STEP_OVERRIDE_PREFIX$appWidgetId")
+
     private companion object {
         val PROCESS_CLAIM_OWNER_ID: String = UUID.randomUUID().toString()
         const val DRAFT_PREFIX = "draft_seconds_"
         const val PENDING_PREFIX = "pending_commit_"
         const val LAST_QUEUED_PREFIX = "last_queued_at_"
+        const val PINNED_PRODUCT_PREFIX = "pinned_product_"
+        const val DISCREET_PREFIX = "discreet_"
+        const val STEP_OVERRIDE_PREFIX = "step_override_"
 
         fun requireValidWidgetId(appWidgetId: Int) {
             require(appWidgetId >= 0) { "Invalid AppWidget id: $appWidgetId" }

@@ -28,6 +28,8 @@ class PenWidgetActionRouterTest {
     private lateinit var repository: PenWidgetStateRepository
     private lateinit var router: PenWidgetActionRouter
     private lateinit var penState: PenQuickLogState
+    private lateinit var pinnedState: PenQuickLogState
+    private var requestedPinnedProductId: String? = null
     private val scheduledTimers = mutableListOf<String>()
     private val scheduledWork = mutableListOf<String>()
     private val cancelledTimers = mutableListOf<Int>()
@@ -46,9 +48,13 @@ class PenWidgetActionRouterTest {
             PreferenceDataStoreFactory.create { stateFile },
         )
         penState = loadedState(secondsPerUse = 10.0)
+        pinnedState = loadedState(secondsPerUse = 20.0, productId = "pen-pinned")
         router = PenWidgetActionRouter(
             stateRepository = { repository },
-            loadPenState = { penState },
+            loadPenState = { _, pinnedProductId ->
+                requestedPinnedProductId = pinnedProductId
+                if (pinnedProductId == "pen-pinned") pinnedState else penState
+            },
             scheduleTimer = { _, appWidgetId, commitId ->
                 scheduledTimers += "$appWidgetId:$commitId"
             },
@@ -142,6 +148,22 @@ class PenWidgetActionRouterTest {
     }
 
     @Test
+    fun submitUsesTheWidgetPinnedProduct() = runBlocking {
+        repository.writeConfig(
+            WIDGET_ID,
+            PenWidgetInstanceConfig(pinnedProductId = "pen-pinned"),
+        )
+
+        route(ACTION_INCREMENT)
+        route(ACTION_SUBMIT)
+
+        val payload = requireNotNull(repository.read(WIDGET_ID).pendingCommit)
+        assertEquals("pen-pinned", requestedPinnedProductId)
+        assertEquals("pen-pinned", payload.productId)
+        assertEquals(20.0, payload.secondsPerUse, 0.0)
+    }
+
+    @Test
     fun resetClearsTheDraftButNotAPendingPayload() = runBlocking {
         route(ACTION_INCREMENT)
         route(ACTION_RESET)
@@ -168,10 +190,13 @@ class PenWidgetActionRouterTest {
         router.handle(context, action, WIDGET_ID, intent)
     }
 
-    private fun loadedState(secondsPerUse: Double?): PenQuickLogState.Loaded =
+    private fun loadedState(
+        secondsPerUse: Double?,
+        productId: String = "pen-1",
+    ): PenQuickLogState.Loaded =
         PenQuickLogState.Loaded(
             product = Product(
-                id = "pen-1",
+                id = productId,
                 name = "Pen 1",
                 type = "P",
                 status = 0,

@@ -24,14 +24,17 @@ object PenWidgetUpdater {
     suspend fun update(context: Context, appWidgetId: Int) {
         if (appWidgetId < 0) return
         val appContext = context.applicationContext
-        val state = PenWidgetStateRepository(appContext).read(appWidgetId)
+        val repository = PenWidgetStateRepository(appContext)
+        val config = repository.readConfig(appWidgetId)
+        val state = repository.read(appWidgetId)
         val draft = state.pendingCommit?.let(PenWidgetDraft::AwaitingCommit)
             ?: PenWidgetDraft.Composing(state.draftSeconds)
         val model = buildPenWidgetUiModel(
-            penState = PenWidgetDataSource.loadPenState(appContext),
+            penState = PenWidgetDataSource.loadPenState(appContext, config.pinnedProductId),
             draft = draft,
             lastQueuedAtMillis = state.lastQueuedAtMillis,
             nowMillis = System.currentTimeMillis(),
+            discreet = config.discreet,
         )
         val manager = AppWidgetManager.getInstance(appContext)
         val options = manager.getAppWidgetOptions(appWidgetId)
@@ -39,11 +42,13 @@ object PenWidgetUpdater {
             appContext.resources.getDimension(R.dimen.widget_compact_breakpoint_height) /
                 appContext.resources.displayMetrics.density
         ).toInt()
-        val spec = PenWidgetSizing.resolve(
+        val resolvedSpec = PenWidgetSizing.resolve(
             widthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0),
             heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0),
             compactBreakpointHeightDp = compactBreakpointHeightDp,
         )
+        val spec = config.stepSecondsOverride?.let { resolvedSpec.copy(stepSeconds = it) }
+            ?: resolvedSpec
         manager.updateAppWidget(
             appWidgetId,
             PenWidgetRenderer.buildRemoteViews(
