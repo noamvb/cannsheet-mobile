@@ -17,8 +17,9 @@ internal class PenWidgetActionRouter(
     private val stateRepository: (Context) -> PenWidgetStateRepository = {
         PenWidgetStateRepository(it)
     },
-    private val loadPenState: suspend (Context) -> PenQuickLogState = {
-        PenWidgetDataSource.loadPenState(it)
+    private val loadPenState: suspend (Context, String?) -> PenQuickLogState = {
+        context, pinnedProductId ->
+        PenWidgetDataSource.loadPenState(context, pinnedProductId)
     },
     private val scheduleTimer: (Context, Int, String) -> Unit = PenWidgetRuntime::scheduleCommitTimer,
     private val cancelTimer: (Int) -> Unit = PenWidgetRuntime::cancelCommitTimer,
@@ -38,7 +39,9 @@ internal class PenWidgetActionRouter(
             ACTION_RESET -> state.resetDraftSeconds(appWidgetId)
             in PRESET_ACTIONS -> {
                 val index = PRESET_ACTIONS.indexOf(action)
-                val penState = loadPenState(context) as? PenQuickLogState.Loaded ?: return
+                val pinnedProductId = state.readConfig(appWidgetId).pinnedProductId
+                val penState = loadPenState(context, pinnedProductId) as? PenQuickLogState.Loaded
+                    ?: return
                 val seconds = penWidgetPresetSeconds(penState).getOrNull(index) ?: return
                 state.setDraftSeconds(appWidgetId, seconds)
             }
@@ -58,7 +61,8 @@ internal class PenWidgetActionRouter(
         appWidgetId: Int,
         state: PenWidgetStateRepository,
     ) {
-        val penState = loadPenState(context)
+        val pinnedProductId = state.readConfig(appWidgetId).pinnedProductId
+        val penState = loadPenState(context, pinnedProductId)
         val loaded = penState as? PenQuickLogState.Loaded ?: return
         val secondsPerUse = loaded.secondsPerUse ?: return
 
