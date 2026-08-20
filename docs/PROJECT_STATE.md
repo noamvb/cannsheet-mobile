@@ -5,7 +5,7 @@ Last updated: 2026-08-20
 ## Repository state
 
 - Canonical branch: `main`
-- Latest application release source commit `d2638a1` (v1.4.0, published 2026-08-18)
+- Latest published application release source commit `ee1e6ab` (v1.4.4)
 - Current release metadata in `app/build.gradle.kts`: version name `1.4.4`,
   version code `40`
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
@@ -41,7 +41,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A3 merged; A4 in progress)
+## Pen widget expansion (A1-A4 merged; A5 in progress)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -96,15 +96,32 @@ Last updated: 2026-08-20
   instrumentation passed 8/8. The refreshed PR gate [run
   32350773583](https://github.com/noamvb/cannsheet-mobile/actions/runs/32350773583)
   passed all required jobs.
-- A4 is in progress on `agent/widget-sync-indicator`. The pen widget derives a
-  count-free `sync is behind` subtitle when the aggregate durable queue has
-  remained non-empty for at least `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours),
-  using the existing sync watermark. Queued confirmation remains highest
-  priority, followed by sync-behind, discreet mode, and the existing synced or
-  pending status variants. Both provider-info XML files request the platform's
-  minimum 30-minute periodic update so the widget can cross the threshold without
-  queue-alert opt-in. A4's JVM unit-test task passes; the exact Android gate and
-  remote PR validation remain pending.
+- A4 (`feat: show sync trouble in the pen widget subtitle`) is squash-merged as
+  PR #112 / `1552aaf`; it is not part of a published APK or a version bump. The
+  pen widget derives a count-free `sync is behind` subtitle when the aggregate
+  durable queue has remained non-empty for at least
+  `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours), using the existing sync watermark.
+  Queued confirmation remains highest priority, followed by sync-behind,
+  discreet mode, and the existing synced or pending status variants. Both
+  provider-info XML files request the platform's minimum 30-minute periodic
+  update so the widget can cross the threshold without queue-alert opt-in.
+- A4's exact local Android gate passed with JDK 17.0.20, and its API-36
+  emulator-only fixture evidence observed `Active · sync is behind` in light and
+  dark mode without HTTP, production data, or a physical phone. The refreshed
+  remote PR gate [run 32354108637](https://github.com/noamvb/cannsheet-mobile/actions/runs/32354108637)
+  passed all required jobs. The emulator fixture and queue watermark were
+  cleaned afterward; remove/re-add remains unverified.
+- A5 is in progress on `agent/widget-cart-picker-deeplink`. The interactive
+  widget's product-name PendingIntent will preserve `EXTRA_START_ROUTE` and add
+  a one-shot `EXTRA_OPEN_CART_PICKER` activity extra. `MainActivity` consumes it
+  on both cold and warm starts through a conflated channel, while the existing
+  `ConsumptionScreen` picker opens in `LOG_TARGET` mode. The message-state
+  layout keeps its existing `ACTION_OPEN_LOG` path. A5's exact local Android
+  gate passed with JDK 17.0.20; focused API-36 instrumentation passed
+  `MainActivityIntentTest` 3/3 and `PenWidgetRendererTest` 10/10. Cold and warm
+  explicit deep-link launches both rendered the existing `Choose a product`
+  sheet on the API-36 emulator. The PR review, remote validation, and merge
+  remain pending.
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

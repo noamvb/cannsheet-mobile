@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A4 in progress
+## Current widget expansion: A5 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -46,9 +46,9 @@ data was used.
 
 A3's post-review focused router instrumentation passed 8/8 after adding the
 per-widget pinned-product assertion. Its refreshed remote PR gate was run
-`32350773583`, with all required jobs green. A4 is now on
-`agent/widget-sync-indicator`; its JVM unit-test task passed, while the exact
-Android gate, screenshots, review, and merge are still pending.
+`32350773583`, with all required jobs green. A4 is squash-merged as PR #112 /
+`1552aaf` after the exact local Android gate, emulator-only fixture evidence, and
+refreshed remote run `32354108637` all passed.
 
 A4's sync indicator is presentation-only. It reads the existing aggregate pending
 action count and `queueNonEmptySinceEpochMillis`, shows `%1$s · sync is behind`
@@ -57,7 +57,23 @@ queued → sync-behind → discreet → existing status/counts. It adds no queue
 notification behavior, Room schema, or wire payload changes. Both provider-info
 XML files request the platform's minimum 30-minute periodic update, independent of
 queue-alert opt-in, so an otherwise idle widget will recompute after crossing the
-threshold.
+threshold. The API-36 evidence used a temporary local fixture, cleaned its
+Room/DataStore state, and made no HTTP or production-data action; no physical
+phone was used.
+
+A5 is on `agent/widget-cart-picker-deeplink` with the plan-required serial
+implementation complete. `ACTION_OPEN_CART_PICKER` is a new activity
+PendingIntent action with a distinct URI and the sibling
+`EXTRA_OPEN_CART_PICKER`; `EXTRA_START_ROUTE` remains byte-for-byte unchanged.
+Cold-start and warm-start consumption use a conflated `Channel<Unit>`, and the
+existing `ConsumptionScreen` picker is opened in `LOG_TARGET` mode. The
+interactive widget name now announces “Double tap to choose a different cart,”
+while message-state layouts retain `ACTION_OPEN_LOG`. The exact local Android
+gate passed with JDK 17.0.20, focused API-36 instrumentation passed
+`MainActivityIntentTest` 3/3 and `PenWidgetRendererTest` 10/10, and explicit
+cold/warm emulator launches both rendered `Choose a product`. The PR, remote
+review, and merge are pending. A5 has no required screenshot because it changes
+the destination of an existing tap target rather than widget visuals.
 
 ## Current release: v1.4.4
 

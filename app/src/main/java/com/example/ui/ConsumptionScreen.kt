@@ -79,6 +79,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Product
 import com.example.data.ProductStatus
 import com.example.data.productStatus
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Calendar
@@ -215,7 +217,10 @@ internal fun PenQuickLogCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ConsumptionScreen(viewModel: CannsheetViewModel) {
+fun ConsumptionScreen(
+    viewModel: CannsheetViewModel,
+    openCartPickerRequests: Flow<Unit> = emptyFlow(),
+) {
     val allProducts by viewModel.allProducts.collectAsStateWithLifecycle()
     val recentProducts by viewModel.recentProducts.collectAsStateWithLifecycle()
     val quantityPresets by viewModel.effectiveQuantityPresets.collectAsStateWithLifecycle()
@@ -260,6 +265,7 @@ fun ConsumptionScreen(viewModel: CannsheetViewModel) {
         onQuickLogPen = viewModel::quickLogPen,
         onChooseLoadedPen = viewModel::setLoadedPenProduct,
         runwayByProductId = runwayByProductId,
+        openCartPickerRequests = openCartPickerRequests,
     )
 }
 
@@ -283,6 +289,7 @@ fun ConsumptionContent(
     onQuickLogPen: (Double) -> Unit = {},
     onChooseLoadedPen: (String) -> Unit = {},
     runwayByProductId: Map<String, ProductRunway> = emptyMap(),
+    openCartPickerRequests: Flow<Unit> = emptyFlow(),
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
     var pickerMode by rememberSaveable { mutableStateOf(ProductPickerMode.LOG_TARGET) }
@@ -301,6 +308,13 @@ fun ConsumptionContent(
     var borrowedProductValidationMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var showFinishWithoutConsumptionConfirmation by rememberSaveable { mutableStateOf(false) }
     var validationMessage by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(openCartPickerRequests) {
+        openCartPickerRequests.collect {
+            pickerMode = ProductPickerMode.LOG_TARGET
+            showProductPicker = true
+        }
+    }
 
     val selectedProduct = remember(allProducts, formState.selectedProductId) {
         allProducts.firstOrNull { it.id == formState.selectedProductId }
