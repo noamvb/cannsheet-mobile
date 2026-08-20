@@ -44,8 +44,8 @@ flowchart LR
 - `app/src/main/java/com/example/data/Repository.kt` mediates Room operations
   and coordinates product refresh.
 - `app/src/main/java/com/example/data/Database.kt` defines the Room schema, DAO,
-  transactions, and migrations. The checked-in schema version is 10, with
-  explicit migrations 2-to-3 through 9-to-10.
+  transactions, and migrations. The checked-in schema version is 11, with
+  explicit migrations 2-to-3 through 9-to-10 and 10-to-11.
 - `app/src/main/java/com/example/data/Network.kt` defines Apps Script
   request/response DTOs and Retrofit endpoints.
 - `app/src/main/java/com/example/data/SyncQueueLogic.kt` decides which immutable
@@ -60,10 +60,13 @@ flowchart LR
   the optional Purchase-screen defaults in a separate version-1 JSON
   Preferences DataStore. `CannsheetGraph` creates the one process-wide
   instance used by the view model.
-- `app/src/main/java/com/example/widget` contains the classic
-  `AppWidgetProvider`/`RemoteViews` pen quick-log widget. It reuses the loaded
-  cart, rate, date, and consumption logging boundaries rather than introducing
-  a second Room or network contract.
+- `app/src/main/java/com/example/widget` contains the API-24-compatible
+  `AppWidgetProvider`/`RemoteViews` surfaces: the pen quick-log, multi-cart,
+  sync-status, Today, and cache-only projection widgets. They reuse the loaded
+  cart, rate, date, queue, local-history, and analytics-cache boundaries rather
+  than introducing duplicate network contracts. The same package contains the
+  `PenQuickTileService` Quick Settings entry point, which delegates to the
+  existing pen draft, undo, durable queue, and sync path.
 - `app/src/main/java/com/example/notifications` contains the Android channel,
   permission/availability, stable-card, and Settings-route intent details for
   queue alerts. It implements `QueueAlertPresenter`; queue-health and sync code
@@ -309,6 +312,35 @@ The widget's local state remains usable when background sync
 is disabled; the existing queue and acknowledgement rules continue to govern
 delivery to Apps Script.
 
+### Launcher, Quick Settings, and additional widget surfaces
+
+Static launcher shortcuts for Log, Purchase, and Insights carry the existing
+`EXTRA_START_ROUTE` contract into `MainActivity`; they do not create a second
+navigation graph. `PenQuickTileService` uses the reserved tile key
+`PEN_TILE_WIDGET_ID = Int.MAX_VALUE`, selects the first configured pen preset,
+and reuses the same five-second undo, stable-event-ID, claim/write/complete, and
+WorkManager backstop path as the pen widget. Tile labels and states are
+presentation-only.
+
+`SyncStatusWidgetProvider` reads only the aggregate pending-action count and
+sync preference timestamps; its `Sync now` action enqueues the existing
+`SyncScheduler` work and never receives queue rows or entry details.
+`MultiCartWidgetProvider` presents up to four configured cart actions and
+passes each selected quantity through the existing seconds-to-uses and deferred
+queue path. `TodayWidgetProvider` reads the append-only local consumption
+history table and derives its local-day total, average, comparison, and streak
+without treating those figures as server-confirmed analytics.
+
+`ProjectionWidgetProvider` is cache-only. It reads the cached
+`InsightsResponseDto`, reuses the pure runway/spend presentation builders, and
+renders the source snapshot's own as-of date next to every figure. It never
+refreshes analytics, persists a projection, transmits a derived estimate, or
+renders a figure when no snapshot exists. In-app projection suppression rules
+remain stricter around stale, changing, or locally incomplete snapshots. A
+durable Insights cache upsert requests a best-effort widget refresh afterward.
+All five AppWidgetProvider surfaces use supported `RemoteViews` classes and
+remain covered by the API 24 compatibility boundary.
+
 ### Insights and History
 
 1. `AnalyticsCoordinator` requests versioned Insights or paginated History data.
@@ -363,6 +395,12 @@ invalid unreferenced purchase rows, or an inconsistent month bucket. Copy names
 the recorded evidence, labels the value as an estimate, and does not advise or
 judge consumption.
 
+The projection home-screen widget is a separate presentation boundary over the
+same cached response. It may show a cached runway or spend estimate only when a
+snapshot exists and the snapshot's own as-of date is displayed beside the
+figure. It does not weaken the in-app suppression rule and does not turn an
+estimate into a persisted, transmitted, or confirmed value.
+
 ### Consumption history corrections
 
 The correction protocol keeps the canonical `ConsumptionEvents` rows immutable.
@@ -404,20 +442,27 @@ detail contract is introduced.
 
 ## Persistence and models
 
-Room contains tables for products, purchase actions, consumption actions, finish
-actions, consumption corrections, product interactions, sync request state, and
+Room contains tables for products, purchase actions, consumption actions, the
+append-only `consumption_history` convenience table, finish actions,
+consumption corrections, product interactions, sync request state, and
 analytics cache entries. `products.totalUses` was added by the forward 9-to-10
-migration and is nullable. The `consumption_actions` aggregate is a live view of
-the pending queue only, not a replacement for server history. DataStore holds
-user preferences that do not require relational transactions. Purchase defaults
-are an independent full-map JSON value in the `purchase_defaults` DataStore;
-they do not enter the Room schema or Apps Script synchronization payload.
+migration and is nullable; `consumption_history` was added by 10-to-11 and is
+keyed by the stable consumption event ID. Its DAO insert ignores duplicate
+event IDs, supports bounded timestamp reads, and exposes a separate prune
+method that is not called automatically. A history-write failure is
+best-effort and cannot roll back the existing queued consumption write; there
+is no analytics backfill.
+
+The `consumption_actions` aggregate is a live view of the pending queue only,
+not a replacement for server history. DataStore holds user preferences that do
+not require relational transactions. Purchase defaults are an independent
+full-map JSON value in the `purchase_defaults` DataStore; they do not enter the
+Room schema or Apps Script synchronization payload.
 The pen widget's draft and deferred-submit payload live in a separate
-`pen_widget_state` DataStore and are excluded from backup because they are
-short-lived UI state. Payload version 2 stores displayed seconds, derived uses,
-the stable event ID, timing, and claim metadata. It is removed only after the
-Room write is durable; only uses cross the `ConsumptionLogger` boundary into
-Room, the offline queue, and the wire.
+`pen_widget_state` DataStore. Payload version 2 stores displayed seconds,
+derived uses, the stable event ID, timing, and claim metadata. It is removed
+only after the Room write is durable; only uses cross the `ConsumptionLogger`
+boundary into Room, the offline queue, and the wire.
 
 The `sync_preferences` DataStore also holds five queue-alert fields:
 `queue_alerts_enabled`, `queue_non_empty_since_epoch_millis`,
@@ -428,10 +473,13 @@ delivery attempt exact ownership for completion or release.
 
 Backup and device-transfer policy is explicit on both API 24–30 and API 31+.
 User-only `consumption_preferences` and `purchase_defaults` may be restored.
-Room databases, `sync_preferences`, and `pen_widget_state` are excluded: they
-contain queue/request identity, point-in-time server cache state, queue-alert
-episode state, or an in-flight deferred widget payload that must not be replayed
-on another installation. The two XML policies must remain aligned.
+The `pen_widget_state` DataStore is also included so per-widget configuration,
+stable pending event IDs, and deferred payloads survive a launcher restore;
+restore handling remaps widget IDs and keeps retries duplicate-safe. Room
+databases and `sync_preferences` remain excluded because they contain
+queue/request identity, point-in-time server cache state, or queue-alert episode
+state that must not be replayed blindly on another installation. The two XML
+policies must remain aligned.
 
 Room and the pending queues are user-data boundaries. Migrations must be
 forward-only and tested; destructive fallback is not an acceptable shortcut.
@@ -483,7 +531,8 @@ awareness.
   evidence/date arithmetic, width classification, and status handling.
 - `app/src/androidTest`: Room migration/queue tests and Compose UI tests that
   require a device or emulator, including pending-usage aggregation, the 9-to-10
-  migration, selected/recent usage-total rendering, and Purchase type-filtered
+  and 10-to-11 migrations, selected/recent usage-total rendering, local
+  consumption-history DAO/model behavior, and Purchase type-filtered
   suggestion/autofill behavior. Widget renderer tests cover API-safe
   `RemoteViews` actions, and widget state tests cover seconds-to-uses
   conversion, payload migration, claim/complete retry behavior, timer/grace
@@ -507,10 +556,13 @@ values from `app/build.gradle.kts`; the sandbox variant uses an application ID
 suffix and an untracked `sandbox.properties` endpoint. Release signing is
 configured only when all required signing environment variables are present.
 
-Pull requests target `main`. Tag pushes matching `v*` trigger the release
-workflow, which validates the tag/version match, runs tests/lint, builds and
-verifies a signed APK, creates a checksum, and publishes to a separate release
-repository. That workflow is an explicit release operation, not ordinary
+Pull requests target `main`. Tag pushes matching `v*` trigger the ordinary
+release workflow, which validates the tag/version match, runs tests/lint, builds
+and verifies a signed APK, creates a checksum, and publishes to a separate
+release repository. Historical tags use the explicit
+`.github/workflows/release-historical-apk.yml` dispatch path, which checks an
+explicit target SHA and rebuilds from that source while taking workflow logic
+from current `main`. Both are explicit release operations, not ordinary
 validation.
 
 ## Architectural boundaries
