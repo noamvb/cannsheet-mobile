@@ -82,9 +82,13 @@ remapping snapshots and rewrites draft, pending commit, queue watermark, pinned
 product, discreet, and step-override keys before flushing overdue commits and
 rendering new IDs. API 31+ maps compact/base/large specs at `110x110`, `140x160`,
 and `280x320`, preserving the per-widget step override; API 24–30 retain the
-existing live-size fallback. The first JVM and Android-test compile pass is
-green; the exact gate, API-24 emulator run, PR, review, and merge remain
-pending. No version metadata or release work is included.
+existing live-size fallback, while API 31+ skips resize-triggered rebuilds so
+the host can select a prepared variant. The widget DataStore is included in
+cloud backup and device transfer, and a restored pending payload retains its
+stable event ID for duplicate-safe Room/server retry. The first JVM and
+Android-test compile pass is green; the exact gate, API-24 emulator run, PR,
+review, and merge remain pending. No version metadata or release work is
+included.
 
 ## Current release: v1.4.4
 

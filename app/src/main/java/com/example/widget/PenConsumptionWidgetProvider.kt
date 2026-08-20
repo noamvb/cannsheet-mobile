@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 
 class PenConsumptionWidgetProvider : AppWidgetProvider() {
     private val router = PenWidgetActionRouter()
@@ -40,6 +41,9 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         newOptions: android.os.Bundle,
     ) {
         super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        // Android 12+ selects among the size-mapped RemoteViews installed by update(). A resize
+        // callback must not rebuild every variant and reread Room/DataStore just to change size.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
         launchForWidget(context, appWidgetId) {
             PenWidgetUpdater.update(it, appWidgetId)
         }

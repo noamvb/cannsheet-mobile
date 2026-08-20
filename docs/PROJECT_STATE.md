@@ -130,9 +130,13 @@ Last updated: 2026-08-20
   widget's WorkManager commit name on disable. API 31+ updater calls construct
   three size-mapped `RemoteViews` entries (`110x110`, `140x160`, `280x320`) with
   the A3 step override applied to each; API 24–30 retain the current live-size
-  fallback. The five requested pure-JVM restore tests are present and the first
-  JVM/Android-test compile pass is green; the exact gate, API-24 run, emulator
-  check, PR review, and merge remain pending.
+  fallback, while API 31+ skips resize-triggered rebuilds so the host can select
+  a prepared variant. The widget DataStore is included in cloud backup and
+  device transfer; pending payloads retain their stable event IDs for
+  duplicate-safe Room/server retry after restore. The five requested pure-JVM
+  restore tests are present and the first JVM/Android-test compile pass is
+  green; the exact gate, API-24 run, emulator check, PR review, and merge
+  remain pending.
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:
