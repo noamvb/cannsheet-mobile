@@ -11,6 +11,7 @@ data class PenWidgetTextSizes(
     val countdownSp: Float,
     val submitSp: Float,
     val stepSp: Float,
+    val presetSp: Float,
     val messageTitleSp: Float,
     val messageHintSp: Float,
 )
@@ -45,6 +46,7 @@ object PenWidgetSizing {
         countdownSp = 17f,
         submitSp = 15f,
         stepSp = 20f,
+        presetSp = 0f,
         messageTitleSp = 14f,
         messageHintSp = 10f,
     )
@@ -56,6 +58,7 @@ object PenWidgetSizing {
         countdownSp = 22f,
         submitSp = 20f,
         stepSp = 24f,
+        presetSp = 14f,
         messageTitleSp = 16f,
         messageHintSp = 11f,
     )
@@ -67,6 +70,7 @@ object PenWidgetSizing {
         countdownSp = 34f,
         submitSp = 40f,
         stepSp = 44f,
+        presetSp = 24f,
         messageTitleSp = 24f,
         messageHintSp = 15f,
     )
@@ -118,6 +122,7 @@ object PenWidgetSizing {
         countdownSp = lerp(from.countdownSp, to.countdownSp, fraction),
         submitSp = lerp(from.submitSp, to.submitSp, fraction),
         stepSp = lerp(from.stepSp, to.stepSp, fraction),
+        presetSp = lerp(from.presetSp, to.presetSp, fraction),
         messageTitleSp = lerp(from.messageTitleSp, to.messageTitleSp, fraction),
         messageHintSp = lerp(from.messageHintSp, to.messageHintSp, fraction),
     )

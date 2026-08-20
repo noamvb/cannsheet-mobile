@@ -12,6 +12,9 @@ const val ACTION_INCREMENT = "com.noamv.cannsheet.mobile.widget.INCREMENT"
 const val ACTION_RESET = "com.noamv.cannsheet.mobile.widget.RESET"
 const val ACTION_SUBMIT = "com.noamv.cannsheet.mobile.widget.SUBMIT"
 const val ACTION_UNDO = "com.noamv.cannsheet.mobile.widget.UNDO"
+const val ACTION_PRESET_1 = "com.noamv.cannsheet.mobile.widget.PRESET_1"
+const val ACTION_PRESET_2 = "com.noamv.cannsheet.mobile.widget.PRESET_2"
+const val ACTION_PRESET_3 = "com.noamv.cannsheet.mobile.widget.PRESET_3"
 const val ACTION_OPEN_LOG = "com.noamv.cannsheet.mobile.widget.OPEN_LOG"
 const val ACTION_OPEN_SETTINGS = "com.noamv.cannsheet.mobile.widget.OPEN_SETTINGS"
 const val EXTRA_APP_WIDGET_ID = "com.noamv.cannsheet.mobile.widget.APP_WIDGET_ID"
@@ -19,12 +22,17 @@ const val EXTRA_COMMIT_ID = "com.noamv.cannsheet.mobile.widget.COMMIT_ID"
 const val INPUT_APP_WIDGET_ID = "app_widget_id"
 const val INPUT_COMMIT_ID = "commit_id"
 
+val PRESET_ACTIONS: List<String> = listOf(ACTION_PRESET_1, ACTION_PRESET_2, ACTION_PRESET_3)
+
 val HANDLED_ACTIONS: Set<String> = setOf(
     ACTION_DECREMENT,
     ACTION_INCREMENT,
     ACTION_RESET,
     ACTION_SUBMIT,
     ACTION_UNDO,
+    ACTION_PRESET_1,
+    ACTION_PRESET_2,
+    ACTION_PRESET_3,
 )
 
 fun pendingIntent(

@@ -79,6 +79,20 @@ class PenWidgetStateRepository internal constructor(
         return result
     }
 
+    suspend fun setDraftSeconds(appWidgetId: Int, seconds: Int): Int {
+        requireValidWidgetId(appWidgetId)
+        var result = 0
+        dataStore.edit { preferences ->
+            if (PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]) != null) {
+                result = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0
+            } else {
+                result = seconds.coerceIn(0, MAX_SECONDS)
+                preferences[draftKey(appWidgetId)] = result
+            }
+        }
+        return result
+    }
+
     /**
      * Test-only. Production must use the [submitCommit] overload that builds the payload inside
      * the edit, so a concurrent increment cannot be applied and then discarded.
