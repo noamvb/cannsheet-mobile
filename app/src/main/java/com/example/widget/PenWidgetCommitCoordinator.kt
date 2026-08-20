@@ -85,6 +85,9 @@ class PenWidgetCommitCoordinator(
     }
 
     private suspend fun logPayload(payload: PenWidgetCommitPayload) {
+        // The payload is durable before this call and carries its original eventId. A restored
+        // or retried payload therefore reuses the same Room-unique/server-idempotent identity;
+        // it is never regenerated from the new AppWidget id.
         consumptionLogger.log(
             date = payload.date,
             time = payload.time,

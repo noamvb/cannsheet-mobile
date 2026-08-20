@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A5 in progress
+## Current widget expansion: A6 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -61,20 +61,34 @@ threshold. The API-36 evidence used a temporary local fixture, cleaned its
 Room/DataStore state, and made no HTTP or production-data action; no physical
 phone was used.
 
-A5 is on `agent/widget-cart-picker-deeplink` with the plan-required serial
-implementation complete. `ACTION_OPEN_CART_PICKER` is a new activity
-PendingIntent action with a distinct URI and the sibling
-`EXTRA_OPEN_CART_PICKER`; `EXTRA_START_ROUTE` remains byte-for-byte unchanged.
-Cold-start and warm-start consumption use a conflated `Channel<Unit>`, and the
-existing `ConsumptionScreen` picker is opened in the `LOADED_PEN` mode used by
-`Swap cart`. The
-interactive widget name now announces “Double tap to choose a different cart,”
-while message-state layouts retain `ACTION_OPEN_LOG`. The exact local Android
-gate passed with JDK 17.0.20, focused API-36 instrumentation passed
-`MainActivityIntentTest` 3/3 and `PenWidgetRendererTest` 10/10, and explicit
-cold/warm emulator launches both rendered `Choose a product`. The PR, remote
-review, and merge are pending. A5 has no required screenshot because it changes
-the destination of an existing tap target rather than widget visuals.
+A5 (`feat: open the cart picker directly from the pen widget`) is squash-merged
+as PR #113 / `7ca6804`. `ACTION_OPEN_CART_PICKER` is a new activity PendingIntent
+action with a distinct URI and the sibling `EXTRA_OPEN_CART_PICKER`;
+`EXTRA_START_ROUTE` remains byte-for-byte unchanged. Cold-start and warm-start
+consumption use a conflated `Channel<Unit>`, and the existing
+`ConsumptionScreen` picker is opened in the `LOADED_PEN` mode used by `Swap
+cart`. The interactive widget name announces “Double tap to choose a different
+cart,” while message-state layouts retain `ACTION_OPEN_LOG`. Its refreshed
+remote PR gate was `32357272273`, all green. The API-36 emulator showed the
+pen-only `P` category on both explicit cold and warm launches. A5 had no
+required screenshot because it changed the destination of an existing tap
+target rather than widget visuals.
+
+A6 is on `agent/widget-restore-and-resize`. The plan-required test subagent
+added `PenWidgetRestoreTest` with the five remapping cases, while the separate
+read-only size-map subagent supplied the guarded API-31 `RemoteViews` block;
+the production/provider integration remains serial in this branch. Restore
+remapping snapshots and rewrites draft, pending commit, queue watermark, pinned
+product, discreet, and step-override keys before flushing overdue commits and
+rendering new IDs. API 31+ maps compact/base/large specs at `110x110`, `140x160`,
+and `280x320`, preserving the per-widget step override; API 24–30 retain the
+existing live-size fallback, while API 31+ skips resize-triggered rebuilds so
+the host can select a prepared variant. The widget DataStore is included in
+cloud backup and device transfer, and a restored pending payload retains its
+stable event ID for duplicate-safe Room/server retry. The first JVM and
+Android-test compile pass is green; the exact gate, API-24 emulator run, PR,
+review, and merge remain pending. No version metadata or release work is
+included.
 
 ## Current release: v1.4.4
 

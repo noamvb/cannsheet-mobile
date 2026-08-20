@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 
 class PenConsumptionWidgetProvider : AppWidgetProvider() {
     private val router = PenWidgetActionRouter()
@@ -22,6 +23,17 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onRestored(context: Context, oldWidgetIds: IntArray, newWidgetIds: IntArray) {
+        super.onRestored(context, oldWidgetIds, newWidgetIds)
+        val pendingResult = goAsync()
+        val appContext = context.applicationContext
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetStateRepository(appContext).remapWidgetIds(oldWidgetIds, newWidgetIds)
+            PenWidgetCommitCoordinator.flushOverdue(appContext, System.currentTimeMillis())
+            newWidgetIds.forEach { PenWidgetUpdater.update(appContext, it) }
+        }
+    }
+
     override fun onAppWidgetOptionsChanged(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -29,6 +41,9 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
         newOptions: android.os.Bundle,
     ) {
         super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
+        // Android 12+ selects among the size-mapped RemoteViews installed by update(). A resize
+        // callback must not rebuild every variant and reread Room/DataStore just to change size.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
         launchForWidget(context, appWidgetId) {
             PenWidgetUpdater.update(it, appWidgetId)
         }
@@ -64,6 +79,19 @@ class PenConsumptionWidgetProvider : AppWidgetProvider() {
                 }
             }
             firstFailure?.let { throw it }
+        }
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        // Last instance removed. onDeleted already cleared per-id keys; nothing to do here beyond
+        // cancelling any timer that outlived them.
+        val pendingResult = goAsync()
+        PenWidgetRuntime.launchReceiver(pendingResult) {
+            PenWidgetScheduler.cancelCommit(
+                context.applicationContext,
+                AppWidgetManager.INVALID_APPWIDGET_ID,
+            )
         }
     }
 

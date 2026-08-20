@@ -41,7 +41,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A4 merged; A5 in progress)
+## Pen widget expansion (A1-A5 merged; A6 in progress)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -111,17 +111,31 @@ Last updated: 2026-08-20
   remote PR gate [run 32354108637](https://github.com/noamvb/cannsheet-mobile/actions/runs/32354108637)
   passed all required jobs. The emulator fixture and queue watermark were
   cleaned afterward; remove/re-add remains unverified.
-- A5 is in progress on `agent/widget-cart-picker-deeplink`. The interactive
-  widget's product-name PendingIntent will preserve `EXTRA_START_ROUTE` and add
-  a one-shot `EXTRA_OPEN_CART_PICKER` activity extra. `MainActivity` consumes it
-  on both cold and warm starts through a conflated channel, while the existing
-  `ConsumptionScreen` picker opens in the existing `LOADED_PEN` mode used by
-  `Swap cart`. The message-state
-  layout keeps its existing `ACTION_OPEN_LOG` path. A5's exact local Android
-  gate passed with JDK 17.0.20; focused API-36 instrumentation passed
-  `MainActivityIntentTest` 3/3 and `PenWidgetRendererTest` 10/10. Cold and warm
-  explicit deep-link launches both rendered the existing `Choose a product`
-  sheet on the API-36 emulator. The PR review, remote validation, and merge
+- A5 (`feat: open the cart picker directly from the pen widget`) is squash-merged
+  as PR #113 / `7ca6804`; it is not part of a published APK or a version bump.
+  The interactive widget's product-name PendingIntent preserves
+  `EXTRA_START_ROUTE` and adds a one-shot `EXTRA_OPEN_CART_PICKER` activity
+  extra. `MainActivity` consumes it on both cold and warm starts through a
+  conflated channel, while the existing `ConsumptionScreen` picker uses the
+  `LOADED_PEN` mode shared with `Swap cart`. Message-state layouts keep their
+  existing `ACTION_OPEN_LOG` path.
+- A5's exact local Android gate and focused API-36 instrumentation were green;
+  the refreshed remote PR gate [run 32357272273](https://github.com/noamvb/cannsheet-mobile/actions/runs/32357272273)
+  passed all required jobs. Emulator readback showed the pen-only `P` category
+  on both cold and warm picker launches. No physical phone, production package,
+  HTTP request, Room mutation, or synthetic consumption action was used.
+- A6 is in progress on `agent/widget-restore-and-resize`. The provider now
+  remaps all six per-widget DataStore key families atomically on restore, then
+  flushes overdue commits before rendering the new IDs, and cancels the final
+  widget's WorkManager commit name on disable. API 31+ updater calls construct
+  three size-mapped `RemoteViews` entries (`110x110`, `140x160`, `280x320`) with
+  the A3 step override applied to each; API 24–30 retain the current live-size
+  fallback, while API 31+ skips resize-triggered rebuilds so the host can select
+  a prepared variant. The widget DataStore is included in cloud backup and
+  device transfer; pending payloads retain their stable event IDs for
+  duplicate-safe Room/server retry after restore. The five requested pure-JVM
+  restore tests are present and the first JVM/Android-test compile pass is
+  green; the exact gate, API-24 run, emulator check, PR review, and merge
   remain pending.
 ## v1.3.2 performance work (released in v1.3.2)
 
