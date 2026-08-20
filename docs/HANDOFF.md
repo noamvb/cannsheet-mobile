@@ -54,7 +54,10 @@ A4's sync indicator is presentation-only. It reads the existing aggregate pendin
 action count and `queueNonEmptySinceEpochMillis`, shows `%1$s · sync is behind`
 after the existing 24-hour threshold, and preserves the precedence
 queued → sync-behind → discreet → existing status/counts. It adds no queue fields,
-notification behavior, Room schema, or wire payload changes.
+notification behavior, Room schema, or wire payload changes. Both provider-info
+XML files request the platform's minimum 30-minute periodic update, independent of
+queue-alert opt-in, so an otherwise idle widget will recompute after crossing the
+threshold.
 
 ## Current release: v1.4.4
 

@@ -101,8 +101,10 @@ Last updated: 2026-08-20
   remained non-empty for at least `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours),
   using the existing sync watermark. Queued confirmation remains highest
   priority, followed by sync-behind, discreet mode, and the existing synced or
-  pending status variants. A4's JVM unit-test task passes; the exact Android
-  gate and remote PR validation remain pending.
+  pending status variants. Both provider-info XML files request the platform's
+  minimum 30-minute periodic update so the widget can cross the threshold without
+  queue-alert opt-in. A4's JVM unit-test task passes; the exact Android gate and
+  remote PR validation remain pending.
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

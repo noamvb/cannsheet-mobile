@@ -1293,10 +1293,13 @@ When the aggregate durable queue count is positive and its existing
 `queueNonEmptySinceEpochMillis` watermark is at least
 `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours) old, the widget receives a boolean
 `queueStuck` presentation signal and shows `%1$s · sync is behind`, using only the
-product status label as its argument. The subtitle precedence is explicit:
-recently queued confirmation, sync-behind, discreet mode, then the existing
-synced or pending variants. The signal is read during the widget update and is
-not persisted, transmitted, or added to queue-alert notification paths.
+product status label as its argument. Both provider-info XML files request the
+platform's minimum 30-minute periodic `onUpdate` callback so the presentation
+reaches the threshold without depending on queue-alert opt-in or another widget
+tap. The subtitle precedence is explicit: recently queued confirmation,
+sync-behind, discreet mode, then the existing synced or pending variants. The
+signal is read during the widget update and is not persisted, transmitted, or
+added to queue-alert notification paths.
 
 ### Consequences
 
@@ -1304,6 +1307,9 @@ not persisted, transmitted, or added to queue-alert notification paths.
   aggregate action count, product quantities, dates, or queue rows.
 - Immediate queued feedback remains visible for its existing window, and discreet
   mode remains effective unless the queue needs the higher-priority sync warning.
+- The host may refresh the widget at its normal periodic-update cadence (at least
+  30 minutes), which bounds how long the widget can remain unaware of a newly
+  stuck queue without scheduling notification work.
 - The Room schema, offline payloads, Apps Script contract, and notification alert
   behavior remain unchanged.
 
@@ -1312,5 +1318,7 @@ not persisted, transmitted, or added to queue-alert notification paths.
 - `app/src/main/java/com/example/widget/PenWidgetDataSource.kt`
 - `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`
 - `app/src/main/java/com/example/widget/PenWidgetUiModel.kt`
+- `app/src/main/res/xml/pen_consumption_widget_info.xml`
+- `app/src/main/res/xml-v31/pen_consumption_widget_info.xml`
 - `app/src/main/res/values/strings.xml`
 - `app/src/test/java/com/example/widget/PenWidgetUiModelTest.kt`
