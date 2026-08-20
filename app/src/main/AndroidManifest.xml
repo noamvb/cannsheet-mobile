@@ -54,6 +54,15 @@
                 <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".widget.projection.ProjectionWidgetConfigureActivity"
+            android:exported="true"
+            android:label="@string/projection_widget_configure_label"
+            android:theme="@style/Theme.MyApplication">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
         <receiver
             android:name=".widget.PenConsumptionWidgetProvider"
             android:exported="false"
@@ -86,6 +95,17 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/today_widget_info" />
+        </receiver>
+        <receiver
+            android:name=".widget.projection.ProjectionWidgetProvider"
+            android:exported="false"
+            android:label="@string/projection_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/projection_widget_info" />
         </receiver>
         <receiver
             android:name=".widget.multi.MultiCartWidgetProvider"

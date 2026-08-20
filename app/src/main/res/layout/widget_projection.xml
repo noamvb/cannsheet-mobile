@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Fixed RemoteViews surface for the cached projection widget. The renderer
+    replaces the primary and supporting text for runway or spend mode and
+    attaches the same open/refresh action to the surface.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_projection_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/widget_projection_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="Projection"
+        android:textColor="@color/widget_on_background"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_projection_primary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:maxLines="2"
+        android:text="Projection unavailable"
+        android:textColor="@color/widget_on_background"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_projection_supporting"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="2"
+        android:text="Runway or spend projection"
+        android:textColor="@color/widget_on_background_muted"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_projection_as_of"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="as of —"
+        android:textColor="@color/widget_on_background_muted"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_projection_action"
+        android:layout_width="match_parent"
+        android:layout_height="28dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/widget_step_button"
+        android:clickable="true"
+        android:ellipsize="end"
+        android:focusable="true"
+        android:gravity="center"
+        android:maxLines="1"
+        android:padding="4dp"
+        android:text="Tap to open Cannsheet Mobile"
+        android:textColor="@color/widget_on_step"
+        android:textSize="10sp"
+        android:textStyle="bold" />
+</LinearLayout>

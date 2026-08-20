@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B7 in progress
+## Current widget expansion: A7 release candidate; B8 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -101,7 +101,7 @@ since advanced to Release B at `23b7b6d`. A historical-tag release path must be
 resolved before creating the public tag. No signed APK or production installation
 has been performed.
 
-## Release B: B1-B5 merged; B6 in progress
+## Release B: B1-B7 merged; B8 in progress
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -192,13 +192,34 @@ empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
 AVD was deleted and ADB was disconnected afterward. No physical phone or
 production data action was used.
 
-B7 (`docs: allow labelled cached projections on widget surfaces`) is in
-progress on `agent/adr-widget-projections`. This is a documentation-only
-clarification: in-app projections remain suppressed for cached, stale, changing,
-or incomplete snapshots, while a home-screen widget may display a cached
-projection only beside the snapshot's own as-of date and only when a snapshot
-exists. ADR-028 was already occupied, so the new decision is recorded as
-ADR-039.
+B7 (`docs: allow labelled cached projections on widget surfaces`) is squash-merged
+as PR #122 / `1230cda`; its exact post-merge `main` run was `32409174518`, green
+on all six required jobs. It clarifies that in-app projections remain suppressed
+for cached, stale, changing, or incomplete snapshots, while a home-screen widget
+may display a cached projection only beside the snapshot's own as-of date and
+only when a snapshot exists. ADR-028 was already occupied, so the new decision
+is recorded as ADR-039.
+
+B8 (`feat: add runway and spend projection widgets`) is in progress on
+`agent/projection-widgets`. It adds one cache-only provider with per-instance
+Runway or Spend mode, a launcher configuration activity, and API-24-safe
+`TextView` RemoteViews. It reads only the cached `InsightsResponseDto`, reuses
+the existing presentation builders, and displays the source snapshot's own
+as-of date beside every figure. No cached snapshot renders an explicit
+unavailable state; in-app suppression and the existing Insights refresh
+boundaries are unchanged.
+
+The focused projection unit tests and exact local Android gate passed. On the
+existing isolated API-36 AVD, the launcher picker showed the provider and its
+preview, both configuration modes saved, the no-snapshot state rendered in
+light and dark mode, the widget survived launcher restart, a large resize did
+not clip the fixed RemoteViews content, and the action opened Insights. The
+emulator had no cached Insights snapshot, so no populated projection is claimed.
+The launcher shell's automated remove gesture opened the app drawer rather than
+the removal target; removal/re-add remains unverified. Evidence images are
+`docs/images/projection-widget-preview.png`,
+`docs/images/projection-widget-configure-spend.png`, and
+`docs/images/projection-widget-empty-light.png`.
 
 ## Current release: v1.4.5 (release candidate; publication workflow blocked)
 

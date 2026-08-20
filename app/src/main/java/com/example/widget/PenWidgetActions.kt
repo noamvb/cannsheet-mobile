@@ -17,6 +17,7 @@ const val ACTION_PRESET_1 = "com.noamv.cannsheet.mobile.widget.PRESET_1"
 const val ACTION_PRESET_2 = "com.noamv.cannsheet.mobile.widget.PRESET_2"
 const val ACTION_PRESET_3 = "com.noamv.cannsheet.mobile.widget.PRESET_3"
 const val ACTION_OPEN_LOG = "com.noamv.cannsheet.mobile.widget.OPEN_LOG"
+const val ACTION_OPEN_INSIGHTS = "com.noamv.cannsheet.mobile.widget.OPEN_INSIGHTS"
 const val ACTION_OPEN_CART_PICKER = "com.noamv.cannsheet.mobile.widget.OPEN_CART_PICKER"
 const val ACTION_OPEN_SETTINGS = "com.noamv.cannsheet.mobile.widget.OPEN_SETTINGS"
 const val EXTRA_APP_WIDGET_ID = "com.noamv.cannsheet.mobile.widget.APP_WIDGET_ID"
@@ -46,8 +47,17 @@ fun pendingIntent(
     stepSeconds: Int? = null,
 ): PendingIntent {
     val requestCode = 31 * appWidgetId + action.hashCode()
-    if (action == ACTION_OPEN_LOG || action == ACTION_OPEN_CART_PICKER || action == ACTION_OPEN_SETTINGS) {
-        val startRoute = if (action == ACTION_OPEN_SETTINGS) "settings" else "consumption"
+    if (
+        action == ACTION_OPEN_LOG ||
+        action == ACTION_OPEN_INSIGHTS ||
+        action == ACTION_OPEN_CART_PICKER ||
+        action == ACTION_OPEN_SETTINGS
+    ) {
+        val startRoute = when (action) {
+            ACTION_OPEN_INSIGHTS -> "insights"
+            ACTION_OPEN_SETTINGS -> "settings"
+            else -> "consumption"
+        }
         val activityIntent = Intent(context, MainActivity::class.java).apply {
             this.action = action
             putExtra(EXTRA_START_ROUTE, startRoute)
