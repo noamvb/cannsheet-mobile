@@ -209,10 +209,18 @@ object PenWidgetRenderer {
             context.getString(R.string.pen_widget_open_app_description, productName),
         )
 
-        setContentDescription(R.id.widget_pen_minus, context.getString(R.string.pen_widget_decrease))
+        setContentDescription(
+            R.id.widget_pen_minus,
+            context.getString(R.string.pen_widget_decrease, spec.stepSeconds),
+        )
         setOnClickPendingIntent(
             R.id.widget_pen_minus,
-            pendingIntent(context, appWidgetId, ACTION_DECREMENT),
+            pendingIntent(
+                context = context,
+                appWidgetId = appWidgetId,
+                action = ACTION_DECREMENT,
+                stepSeconds = spec.stepSeconds,
+            ),
         )
         setStepButtonEnabled(
             remoteViews = this,
@@ -220,10 +228,18 @@ object PenWidgetRenderer {
             enabled = canDecrement && awaitingCommit == null,
         )
 
-        setContentDescription(R.id.widget_pen_plus, context.getString(R.string.pen_widget_increase))
+        setContentDescription(
+            R.id.widget_pen_plus,
+            context.getString(R.string.pen_widget_increase, spec.stepSeconds),
+        )
         setOnClickPendingIntent(
             R.id.widget_pen_plus,
-            pendingIntent(context, appWidgetId, ACTION_INCREMENT),
+            pendingIntent(
+                context = context,
+                appWidgetId = appWidgetId,
+                action = ACTION_INCREMENT,
+                stepSeconds = spec.stepSeconds,
+            ),
         )
         setStepButtonEnabled(
             remoteViews = this,

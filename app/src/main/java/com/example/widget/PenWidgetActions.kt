@@ -19,6 +19,7 @@ const val ACTION_OPEN_LOG = "com.noamv.cannsheet.mobile.widget.OPEN_LOG"
 const val ACTION_OPEN_SETTINGS = "com.noamv.cannsheet.mobile.widget.OPEN_SETTINGS"
 const val EXTRA_APP_WIDGET_ID = "com.noamv.cannsheet.mobile.widget.APP_WIDGET_ID"
 const val EXTRA_COMMIT_ID = "com.noamv.cannsheet.mobile.widget.COMMIT_ID"
+const val EXTRA_STEP_SECONDS = "com.noamv.cannsheet.mobile.widget.STEP_SECONDS"
 const val INPUT_APP_WIDGET_ID = "app_widget_id"
 const val INPUT_COMMIT_ID = "commit_id"
 
@@ -40,6 +41,7 @@ fun pendingIntent(
     appWidgetId: Int,
     action: String,
     commitId: String? = null,
+    stepSeconds: Int? = null,
 ): PendingIntent {
     val requestCode = 31 * appWidgetId + action.hashCode()
     if (action == ACTION_OPEN_LOG || action == ACTION_OPEN_SETTINGS) {
@@ -66,6 +68,7 @@ fun pendingIntent(
         this.action = action
         putExtra(EXTRA_APP_WIDGET_ID, appWidgetId)
         commitId?.let { putExtra(EXTRA_COMMIT_ID, it) }
+        stepSeconds?.let { putExtra(EXTRA_STEP_SECONDS, it) }
         // PendingIntent equality ignores extras, so every widget/action pair needs unique data.
         data = Uri.parse("cannsheet://pen-widget/$appWidgetId/$action")
     }

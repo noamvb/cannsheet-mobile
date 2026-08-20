@@ -48,7 +48,46 @@ class PenWidgetRendererTest {
         assertEquals("30s", root.findViewById<TextView>(R.id.widget_pen_counter).text)
         assertEquals("Active · synced 12 uses", root.findViewById<TextView>(R.id.widget_pen_subtitle).text)
         assertTrue(root.findViewById<Button>(R.id.widget_pen_plus).isEnabled)
+        assertEquals(
+            "Increase duration by 10 seconds",
+            root.findViewById<Button>(R.id.widget_pen_plus).contentDescription,
+        )
         assertEquals(View.GONE, root.findViewById<Chronometer>(R.id.widget_pen_countdown).visibility)
+    }
+
+    @Test
+    fun largeWidgetDescriptionsUseTheLargerStep() {
+        val views = PenWidgetRenderer.buildRemoteViews(
+            context,
+            8,
+            PenWidgetUiModel.Composing(
+                productName = PenWidgetText.Literal("Loaded pen"),
+                subtitle = PenWidgetText.Resource(
+                    R.string.pen_widget_status_synced,
+                    listOf("Active", "12"),
+                ),
+                seconds = 30,
+                recentlyQueued = false,
+                canDecrement = true,
+                canIncrement = true,
+                canSubmit = true,
+            ),
+            spec = PenWidgetSizing.resolve(
+                widthDp = 210,
+                heightDp = 240,
+                compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
+            ),
+        )
+        val root = views.apply(context, FrameLayout(context))
+
+        assertEquals(
+            "Increase duration by 30 seconds",
+            root.findViewById<Button>(R.id.widget_pen_plus).contentDescription,
+        )
+        assertEquals(
+            "Decrease duration by 30 seconds",
+            root.findViewById<Button>(R.id.widget_pen_minus).contentDescription,
+        )
     }
 
     @Test

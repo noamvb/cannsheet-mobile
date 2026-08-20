@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 ## Repository state
 
@@ -41,11 +41,10 @@ Last updated: 2026-08-19
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget preset follow-up (PR #109, pending merge)
+## Pen widget expansion (A1 merged; A2 pending)
 
-- PR #109 (`feat: surface quantity presets on the pen widget`) is the first
-  implementation slice of the widget-expansion plan. Its review-fix branch is not
-  part of `main`, `v1.4.4`, or any published APK yet.
+- PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
+  into `main` as `847b184`; it is not part of a published APK or a version bump.
 - The full pen widget exposes up to three fixed preset buttons. Presets remain
   stored and transmitted as uses; `usesToSeconds` supplies the display/input
   conversion, and only durations that are exact whole seconds in `1..600` are
@@ -58,11 +57,17 @@ Last updated: 2026-08-19
   the existing counter, submit, and +/- controls at their tested usable floor.
   The default/unreported layout remains preset-capable, while the full layout
   shows the row when its reported height is sufficient.
-- The implementation includes an API-36 emulator walkthrough and checked-in
-  default/largest-size screenshots. The remove/re-add launcher gesture was not
-  completed because this AVD opened the app drawer instead; no physical phone or
-  production data action was used. Post-review local validation is green; PR #109
-  still needs its remote gate and review-thread resolution before merge.
+- A2 is in progress on `agent/widget-step-scaling`. `PenWidgetLayoutSpec` now
+  resolves a 10-second step for compact/base widths and a 30-second step when
+  rendered growth reaches the large-widget threshold. The selected step travels
+  in the broadcast `PendingIntent` extras, is clamped by the router, and is used
+  in the renderer's accessibility descriptions; it is not placed in the intent
+  identity URI.
+- A2's exact local gate and focused API-36 renderer/router tests are green. The
+  emulator walkthrough observed 30-second large-widget behavior, 10-second
+  base-width behavior, dark-mode legibility, and launcher-restart persistence.
+  No physical phone or production data action was used; remove/re-add remains
+  unverified from the earlier A1 walkthrough.
 
 ## v1.3.2 performance work (released in v1.3.2)
 
