@@ -4,23 +4,27 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Pending widget work: PR #109
+## Current widget expansion: A2 pending
 
-PR #109 (`feat: surface quantity presets on the pen widget`) is open from
-`agent/widget-preset-row` at its current review-fix head; it has not been merged and no release
-metadata or published APK has changed. The current implementation adds three fixed
-slots to the full pen widget, keeps uses as the only stored/transmitted unit, and
-uses a guarded DataStore draft setter so preset taps cannot overwrite an undo-window
-payload.
+PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
+`main` as `847b184`; no version metadata or published APK changed. Its full-widget
+presets remain uses-only, use the guarded DataStore draft setter, omit fractional
+second conversions rather than flooring them, and hide below the `200dp` regular
+layout floor.
 
-The final code also omits presets whose converted duration is fractional rather than
-flooring them, and hides the preset row in compact or regular layouts below `200dp` so
-the existing controls keep their tested usable floor. Post-review local validation
-passes the exact Gradle gate and the API-36 `PenWidgetRendererTest` class (9/9); the
-branch still needs its remote PR gate and review-thread resolution.
-Manual evidence is emulator-only: default/largest screenshots and light/dark/restart
-checks were completed, while remove/re-add was not completed because the AVD launcher
-opened the app drawer. No physical phone or production data was used.
+A2 is on `agent/widget-step-scaling` and is not merged yet. Large rendered widgets
+carry a 30-second increment/decrement step through the existing broadcast intent
+extras; compact and base-width widgets carry the default 10-second step. The router
+clamps the extra, and the renderer formats the matching accessibility descriptions.
+The Room schema, offline queue, wire payloads, backend contract, endpoint, package ID,
+and version metadata are unchanged.
+
+Validation is emulator-only and green so far: the exact local Gradle gate, focused
+API-36 `PenWidgetRendererTest` (10/10), and `PenWidgetActionRouterTest` (7/7) pass.
+Manual API-36 evidence observed large-widget 30-second behavior, base-width
+10-second behavior, dark-mode legibility, and 20-second state surviving a launcher
+restart. The remove/re-add gesture remains unverified from A1 because the AVD launcher
+opened the app drawer; no physical phone or production data was used.
 
 ## Current release: v1.4.4
 

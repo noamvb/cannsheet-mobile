@@ -1191,3 +1191,38 @@ while the unreported/default layout remains preset-capable.
 - `app/src/main/java/com/example/widget/PenWidgetSizing.kt`
 - `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`
 - `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`
+
+## ADR-029: Scale pen-widget steps with rendered size
+
+### Context
+
+The pen widget's fixed ten-second step is useful at its base size but makes a large
+widget slow to operate: reaching the 600-second ceiling takes sixty taps. The router
+handles broadcasts without access to launcher-reported dimensions, while Android
+`PendingIntent` identity ignores extras and the existing data URI is deliberately stable.
+
+### Decision
+
+`PenWidgetSizing.resolve` keeps the ten-second default for compact and base-width
+layouts, and selects a thirty-second step once the rendered growth fraction reaches
+`0.5`. The renderer carries that value in an optional `STEP_SECONDS` broadcast extra
+for the increment/decrement intents; the router defaults missing extras to ten seconds
+and clamps received values to `1..600`. The step is not added to the data URI, so resize
+updates reuse the existing widget/action `PendingIntent` identity. Accessibility text is
+set by the renderer from the same resolved step because formatted string resources are
+not safe as static XML content descriptions.
+
+### Consequences
+
+- Large widgets reach the ceiling in twenty increments instead of sixty.
+- Existing and stale intents remain compatible because a missing or invalid extra uses
+  the safe ten-second default and bounded router value.
+- The step remains a presentation/input detail; uses-only persistence and wire contracts
+  are unchanged.
+
+### Related files
+
+- `app/src/main/java/com/example/widget/PenWidgetSizing.kt`
+- `app/src/main/java/com/example/widget/PenWidgetActions.kt`
+- `app/src/main/java/com/example/widget/PenWidgetActionRouter.kt`
+- `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`

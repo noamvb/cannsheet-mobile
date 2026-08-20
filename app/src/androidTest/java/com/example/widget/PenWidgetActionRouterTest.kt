@@ -81,6 +81,14 @@ class PenWidgetActionRouterTest {
     }
 
     @Test
+    fun incrementAndDecrementUseTheRenderedStep() = runBlocking {
+        route(ACTION_INCREMENT, stepSeconds = 30)
+        route(ACTION_DECREMENT, stepSeconds = 30)
+
+        assertEquals(0, repository.read(WIDGET_ID).draftSeconds)
+    }
+
+    @Test
     fun undoDuringAClaimDoesNotRestoreTheDraft() = runBlocking {
         route(ACTION_INCREMENT)
         route(ACTION_SUBMIT)
@@ -148,9 +156,14 @@ class PenWidgetActionRouterTest {
         assertEquals(0, repository.read(WIDGET_ID).draftSeconds)
     }
 
-    private suspend fun route(action: String, commitId: String? = null) {
+    private suspend fun route(
+        action: String,
+        commitId: String? = null,
+        stepSeconds: Int? = null,
+    ) {
         val intent = Intent().apply {
             putExtra(EXTRA_COMMIT_ID, commitId)
+            stepSeconds?.let { putExtra(EXTRA_STEP_SECONDS, it) }
         }
         router.handle(context, action, WIDGET_ID, intent)
     }
