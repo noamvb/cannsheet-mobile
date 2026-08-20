@@ -1532,3 +1532,41 @@ added to queue-alert notification paths.
   `app/src/main/java/com/example/data/Repository.kt`,
   `app/src/androidTest/java/com/example/data/DatabaseMigrationTest.kt`,
   `app/src/androidTest/java/com/example/data/ConsumptionHistoryDaoTest.kt`
+
+## ADR-038: Base the Today widget on local consumption history dates
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: The Today home-screen widget needs a durable, glanceable answer to
+  “what did I do today?” after B5 adds local consumption history. Analytics
+  responses carry their own timezone and range semantics, but the local
+  `consumption_history.date` value is written by the device-local
+  `currentSubmissionDateTime` at log time. Mixing an analytics timezone into
+  this local table would make the displayed day disagree with the date the app
+  recorded.
+- Decision: Define Today as the local `yyyy-MM-dd` date passed to a pure model.
+  Sum `uses` for that date; compute the baseline as the mean of daily totals in
+  the previous seven complete local dates that have entries, returning no
+  baseline until at least three days are observed; and compute the streak as
+  consecutive logged dates ending today when today has an entry, otherwise
+  ending yesterday. The updater reads only a bounded, roughly ten-day
+  `consumptionHistorySince` Flow. History rows count as soon as the local log is
+  recorded, including pending sync rows, because this surface describes local
+  activity rather than server acknowledgement. Do not backfill from analytics,
+  persist projections, or transmit any new widget data.
+- Consequences: The widget has no new Room schema, queue payload, wire field,
+  Apps Script contract, endpoint, or analytics refresh path. A first install or
+  a history window with too few observed days renders an explicit empty or
+  unavailable state. The local-date rationale is kept as a comment above the
+  history query and in the PR description. Physical-device and production
+  behavior remain unverified by the emulator-only manual check.
+- Related files: `app/src/main/java/com/example/widget/today/TodayUiModel.kt`,
+  `app/src/main/java/com/example/widget/today/TodayWidgetProvider.kt`,
+  `app/src/main/java/com/example/widget/today/TodayRenderer.kt`,
+  `app/src/main/java/com/example/widget/today/TodayUpdater.kt`,
+  `app/src/main/java/com/example/data/Repository.kt`,
+  `app/src/main/java/com/example/widget/CannsheetWidgetRefresher.kt`,
+  `app/src/main/res/layout/widget_today.xml`,
+  `app/src/main/res/xml/today_widget_info.xml`,
+  `app/src/main/res/xml-v31/today_widget_info.xml`,
+  `app/src/test/java/com/example/widget/today/TodayUiModelTest.kt`

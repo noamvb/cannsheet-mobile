@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.data.WidgetRefresher
 import com.example.widget.multi.MultiCartUpdater
 import com.example.widget.sync.SyncStatusUpdater
+import com.example.widget.today.TodayUpdater
 
 class CannsheetWidgetRefresher(context: Context) : WidgetRefresher {
     private val appContext = context.applicationContext
@@ -12,5 +13,6 @@ class CannsheetWidgetRefresher(context: Context) : WidgetRefresher {
         runCatching { PenWidgetUpdater.updateAll(appContext) }
         runCatching { SyncStatusUpdater.updateAll(appContext) }
         runCatching { MultiCartUpdater.updateAll(appContext) }
+        runCatching { TodayUpdater.updateAll(appContext) }
     }
 }
