@@ -73,4 +73,7 @@
     <string name="pen_widget_submit_seconds">Submit %1$d-second pen log</string>
     <string name="pen_widget_undo_seconds">Undo %1$d-second pen log</string>
     <string name="pen_widget_saving_seconds_description">Saving %1$d-second pen log</string>
+    <string name="pen_tile_label">Log pen</string>
+    <string name="pen_tile_no_cart">No cart loaded</string>
+    <string name="pen_tile_undo">Undo</string>
 </resources>

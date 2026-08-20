@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 version-only PR in progress
+## Current widget expansion: A7 release candidate; B2 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -91,6 +91,27 @@ Room/server retry. Its refreshed PR gate was [run
 and the exact post-merge `main` run was [32361027225](https://github.com/noamvb/cannsheet-mobile/actions/runs/32361027225),
 green on all six jobs including API 24 and API 36. No physical phone or
 production data action was used.
+
+## Release B: B1 merged; B2 in progress
+
+B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
+squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
+static shortcuts and verified Log, Purchase, and Insights routing. The exact
+post-merge `main` run was `32366164663`, green on all six required jobs. Its
+menu screenshot is `docs/images/launcher-shortcuts-menu.png`.
+
+B2 (`feat: add a quick settings tile for one-tap pen logging`) is implemented
+on `agent/quick-settings-tile` and is awaiting the PR gate. It reserves
+`Int.MAX_VALUE` as the non-AppWidget tile key, writes the first preset into the
+existing draft before calling the shared `submitPenLog` helper, and retains the
+existing durable five-second undo/claim/write/complete behavior plus the
+WorkManager recovery path. The API-36 emulator showed the tile on the shade's
+third page, `Undo` immediately after tapping, automatic return to the product
+label after the window, and the corresponding product usage in the normal app
+UI. The two screenshots are `docs/images/pen-quick-tile-normal.png` and
+`docs/images/pen-quick-tile-undo.png`. The full connected API-36 suite passed
+144/144, and the final exact local gate passed. No physical phone or
+production-data action was used.
 
 ## Current release: v1.4.5 (release candidate; pending publication)
 

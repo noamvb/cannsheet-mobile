@@ -123,6 +123,34 @@ class PenWidgetStateRepositoryTest {
         assertEquals(null, state.lastQueuedAtMillis)
     }
 
+    @Test
+    fun tileIdRoundTripsThroughTheSameStateMachinery() = runBlocking {
+        repository.setDraftSeconds(PEN_TILE_WIDGET_ID, 30)
+        val submitted = requireNotNull(
+            repository.submitCommit(PEN_TILE_WIDGET_ID) { seconds ->
+                payload().copy(seconds = seconds, uses = seconds / 10.0)
+            },
+        )
+
+        assertEquals(PEN_TILE_WIDGET_ID, repository.pendingCommits().single().appWidgetId)
+        val claim = requireNotNull(
+            repository.claimCommit(
+                appWidgetId = PEN_TILE_WIDGET_ID,
+                commitId = submitted.commitId,
+                nowMillis = submitted.commitAtEpochMillis,
+            ),
+        )
+        assertTrue(
+            repository.completeCommit(
+                appWidgetId = PEN_TILE_WIDGET_ID,
+                commitId = submitted.commitId,
+                claimId = claim.claimId,
+                nowMillis = submitted.commitAtEpochMillis,
+            ),
+        )
+        assertEquals(null, repository.read(PEN_TILE_WIDGET_ID).pendingCommit)
+    }
+
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",

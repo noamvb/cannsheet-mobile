@@ -62,35 +62,69 @@ internal class PenWidgetActionRouter(
         state: PenWidgetStateRepository,
     ) {
         val pinnedProductId = state.readConfig(appWidgetId).pinnedProductId
-        val penState = loadPenState(context, pinnedProductId)
-        val loaded = penState as? PenQuickLogState.Loaded ?: return
-        val secondsPerUse = loaded.secondsPerUse ?: return
+        val loaded = loadPenState(context, pinnedProductId) as? PenQuickLogState.Loaded ?: return
+        val seconds = state.read(appWidgetId).draftSeconds
+        val payload = submitPenLog(
+            context = context,
+            appWidgetId = appWidgetId,
+            seconds = seconds,
+            penState = loaded,
+            now = now,
+            newId = newId,
+            stateRepository = state,
+            submissionDateTime = submissionDateTime,
+        )
+        if (payload != null) {
+            scheduleTimer(context, appWidgetId, payload.commitId)
+            // The timer is the primary path. Failure to enqueue its durable backstop must not
+            // suppress in-process delivery; lazy overdue flushing remains the final recovery tier.
+            runCatching { scheduleWork(context, appWidgetId, payload.commitId) }
+        }
+    }
+}
 
-        val submittedAt = now()
-        val at = submissionDateTime(submittedAt)
-        val commitId = newId()
-        val eventId = newId()
-        val payload = state.submitCommit(appWidgetId) { seconds ->
+/**
+ * Captures the draft through the same atomic DataStore edit used by the widget submit action and
+ * builds the immutable deferred payload for either a widget or the Quick Settings tile.
+ *
+ * [seconds] is the requested value already placed in the draft by the caller. The edit still
+ * supplies the authoritative captured value to the payload builder; if another caller changed it
+ * between the read and this call, returning null preserves the single-source-of-truth guarantee
+ * instead of silently logging a different duration.
+ */
+internal suspend fun submitPenLog(
+    context: Context,
+    appWidgetId: Int,
+    seconds: Int,
+    penState: PenQuickLogState.Loaded,
+    now: () -> Long = System::currentTimeMillis,
+    newId: () -> String = { UUID.randomUUID().toString() },
+    stateRepository: PenWidgetStateRepository = PenWidgetStateRepository(context),
+    submissionDateTime: (Long) -> SubmissionDateTime = ::currentSubmissionDateTime,
+): PenWidgetCommitPayload? {
+    val secondsPerUse = penState.secondsPerUse ?: return null
+    val submittedAt = now()
+    val at = submissionDateTime(submittedAt)
+    val commitId = newId()
+    val eventId = newId()
+    return stateRepository.submitCommit(appWidgetId) { capturedSeconds ->
+        if (capturedSeconds != seconds) {
+            null
+        } else {
             PenWidgetCommitPayload(
                 version = PEN_WIDGET_PAYLOAD_VERSION,
                 commitId = commitId,
                 eventId = eventId,
                 submittedAtEpochMillis = submittedAt,
                 commitAtEpochMillis = submittedAt + COMMIT_DELAY_MILLIS,
-                productId = loaded.product.id,
-                productUuid = loaded.product.productUuid,
-                seconds = seconds,
+                productId = penState.product.id,
+                productUuid = penState.product.productUuid,
+                seconds = capturedSeconds,
                 secondsPerUse = secondsPerUse,
-                uses = secondsToUses(seconds.toDouble(), secondsPerUse),
+                uses = secondsToUses(capturedSeconds.toDouble(), secondsPerUse),
                 date = at.date,
                 time = at.time,
             )
-        }
-        if (payload != null) {
-            scheduleTimer(context, appWidgetId, payload.commitId)
-            // The timer is the primary path. Failure to enqueue its durable backstop must not
-            // suppress in-process delivery; lazy overdue flushing remains the final recovery tier.
-            runCatching { scheduleWork(context, appWidgetId, payload.commitId) }
         }
     }
 }
