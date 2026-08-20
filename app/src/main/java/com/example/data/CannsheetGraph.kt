@@ -48,11 +48,12 @@ class CannsheetGraph private constructor(context: Context) {
         AppDatabase.MIGRATION_7_8,
         AppDatabase.MIGRATION_8_9,
         AppDatabase.MIGRATION_9_10,
+        AppDatabase.MIGRATION_10_11,
     ).build()
 
     val repository = CannsheetRepository(database)
     val consumptionPreferences = ConsumptionPreferencesRepository(context.applicationContext)
-    val consumptionLogger = ConsumptionLogger(repository, consumptionPreferences)
+    val consumptionLogger = ConsumptionLogger(repository, consumptionPreferences, repository)
     val purchaseDefaultsRepository = PurchaseDefaultsRepository(context.applicationContext)
     val syncPreferences = SyncPreferencesRepository(context.applicationContext)
 

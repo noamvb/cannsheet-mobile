@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B4 in progress
+## Current widget expansion: A7 release candidate; B5 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -97,7 +97,7 @@ The exact post-merge `main` run was `32362664715`, green on all six required
 jobs. The `v1.4.5` tag, signed APK publication, and any production installation
 remain pending explicit repository-owner approval under the release runbook.
 
-## Release B: B1-B3 merged; B4 in progress
+## Release B: B1-B4 merged; B5 in progress
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -136,12 +136,12 @@ surface and the API-24 CI job is the compatibility check. No physical phone or
 production data action was used. The exact post-merge `main` run was
 `32379701895`, green on all six required jobs.
 
-B4 (`feat: add a multi-cart quick log widget`) is in progress on
-`agent/multi-cart-widget`. It adds a wide, fixed-button widget that orders up to
-four selectable pen carts by recent interaction, preserves the existing shared
-five-second durable undo path, converts display seconds with `secondsToUses`
-before Room/queue logging, and leaves the loaded-cart preference unchanged.
-The focused JVM model suite passed 7/7 and the exact local Android gate passed.
+B4 (`feat: add a multi-cart quick log widget`) is squash-merged as PR #119 /
+`f5109b7`. It adds a wide, fixed-button widget that orders up to four selectable
+pen carts by recent interaction, preserves the existing shared five-second
+durable undo path, converts display seconds with `secondsToUses` before
+Room/queue logging, and leaves the loaded-cart preference unchanged. The
+focused JVM model suite passed 7/7 and the exact local Android gate passed.
 API-36 emulator evidence observed two distinct product UUIDs and `0.5` uses in
 two distinct Room rows, full-width Undo, light/dark rendering, launcher restart
 persistence, and horizontal resize behavior. Screenshots are
@@ -151,7 +151,26 @@ persistence, and horizontal resize behavior. Screenshots are
 disabled, exact fixture rows were removed afterward, and no physical phone or
 production data action was used. The temporary multi-cart host instance remains
 on that isolated emulator because its launcher shell has no deterministic
-widget-delete operation.
+widget-delete operation. The exact post-merge `main` run was `32386087534`,
+green on all six required jobs after the hosted API-24 installation timeout was
+rerun.
+
+B5 (`feat: record consumption history locally`) is in progress on
+`agent/local-consumption-history`. Room schema version 11 adds an append-only
+`consumption_history` table keyed by the stable event ID, an idempotent DAO
+insert, a bounded timestamp query, and an explicit prune method that is not
+called automatically. The history write is wired after the existing queue write
+through a narrow repository interface and is deliberately best-effort so a
+history failure cannot roll back a queue entry. Focused API-36 instrumentation
+passed 4/4 DAO tests and 10/10 migration tests. On the isolated, network-disabled
+API-36 emulator, the previous local v1.4.4 build logged three queued entries;
+the current v1.4.5 debug build upgraded the database from version 10 to 11,
+preserved all three legacy queue rows, left history empty during migration, and
+then recorded one new post-upgrade history row. The old APK was re-signed with
+the local debug certificate solely to make an in-place emulator upgrade
+possible; this is not production signer-continuity evidence. The app was
+stopped and the emulator was disconnected afterward. No physical phone or
+production data action was used.
 
 ## Current release: v1.4.5 (release candidate; pending publication)
 

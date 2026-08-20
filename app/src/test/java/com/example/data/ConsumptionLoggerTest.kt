@@ -109,6 +109,32 @@ class ConsumptionLoggerTest {
         assertEquals(0, preferences.mutationCount)
     }
 
+    @Test
+    fun historyFailureDoesNotRollBackQueuedConsumption() = runBlocking {
+        val repository = RecordingRepository()
+        val failingHistoryRecorder = object : ConsumptionHistoryRecorder {
+            override suspend fun record(entry: ConsumptionHistoryEntry) {
+                error("history unavailable")
+            }
+        }
+
+        ConsumptionLogger(
+            repository = repository,
+            consumptionPreferences = RecordingLoadedPenStore(),
+            historyRecorder = failingHistoryRecorder,
+        ).log(
+            date = "2026-08-12",
+            time = "12:00",
+            productId = "flower-1",
+            productUuid = null,
+            productType = "F",
+            uses = 1.0,
+            isFinished = false,
+        )
+
+        assertEquals(1, repository.actions.size)
+    }
+
     private class RecordingRepository : ConsumptionLogRepository {
         val actions = mutableListOf<ConsumptionAction>()
 
