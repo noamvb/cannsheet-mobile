@@ -26,6 +26,10 @@ object PenWidgetUpdater {
 
     suspend fun update(context: Context, appWidgetId: Int) {
         if (appWidgetId < 0) return
+        if (appWidgetId == PEN_TILE_WIDGET_ID) {
+            PenQuickTileService.requestRefresh(context)
+            return
+        }
         val appContext = context.applicationContext
         val repository = PenWidgetStateRepository(appContext)
         val config = repository.readConfig(appWidgetId)

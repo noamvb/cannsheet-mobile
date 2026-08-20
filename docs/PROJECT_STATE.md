@@ -141,6 +141,28 @@ Last updated: 2026-08-20
   passed all six jobs, including API 24 and API 36. No physical phone or
   production data action was used.
 
+## Release B widget surfaces (B1 merged; B2 in progress)
+
+- B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
+  squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
+  existing Log, Purchase, and Insights destinations without changing the
+  activity start-route contract. The API-36 emulator showed all three
+  shortcuts and verified each destination; the screenshot is
+  `docs/images/launcher-shortcuts-menu.png`. The exact post-merge `main` run
+  `32366164663` passed all six required jobs. No physical phone or production
+  data action was used.
+- B2 (`feat: add a quick settings tile for one-tap pen logging`) is implemented
+  on `agent/quick-settings-tile` and is awaiting its PR gate. The tile reserves
+  `PEN_TILE_WIDGET_ID = Int.MAX_VALUE`, sets the first configured preset into
+  the existing DataStore draft, and reuses the shared claim/write/complete path
+  with the same five-second undo window and WorkManager backstop. The tile
+  never writes a new Room, queue, backend, or wire contract. API-36 emulator
+  evidence observed the tile, `Undo`, automatic return to the product label,
+  and the resulting product usage in the normal app UI. Screenshots are
+  `docs/images/pen-quick-tile-normal.png` and
+  `docs/images/pen-quick-tile-undo.png`; no physical phone or production data
+  action was used.
+
 ## v1.4.5 widget expansion (release candidate)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed

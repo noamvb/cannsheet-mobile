@@ -65,6 +65,16 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/pen_consumption_widget_info" />
         </receiver>
+        <service
+            android:name=".widget.PenQuickTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_pen"
+            android:label="@string/pen_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

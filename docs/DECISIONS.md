@@ -1397,3 +1397,35 @@ added to queue-alert notification paths.
   `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`,
   `app/src/main/res/values/strings.xml`,
   `app/src/androidTest/java/com/example/MainActivityIntentTest.kt`
+
+## ADR-034: Reuse the pen-widget commit machinery for the Quick Settings tile
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: Android's `TileService` has no app-widget ID, but one-tap pen
+  logging must retain the existing five-second undo window, durable payload
+  identity, claim/write/complete arbitration, and WorkManager process-death
+  recovery. A second logging path would risk diverging from the home-screen
+  widget's uses-only and retry behavior.
+- Decision: Reserve `PEN_TILE_WIDGET_ID = Int.MAX_VALUE` as a non-negative
+  pseudo ID that `AppWidgetManager` will never allocate. Store the tile draft
+  and pending payload under the existing ID-suffixed DataStore namespace, set
+  the first configured preset before submission, and route both widget and tile
+  submissions through the shared `submitPenLog` helper. The updater skips the
+  pseudo ID instead of calling `AppWidgetManager.updateAppWidget`; when a
+  deferred tile commit completes it refreshes the active `TileService` without
+  creating a repeating refresh loop. Provider restore/delete paths continue to
+  operate only on launcher-issued app-widget IDs.
+- Consequences: The tile inherits the existing atomic draft capture, stable
+  event ID, undo arbitration, durable Room queue, and sync scheduling behavior.
+  Tile labels and unavailable/undo states remain presentation-only. No Room
+  schema, offline payload, Apps Script contract, endpoint, package, or stored
+  unit changes are introduced.
+- Related files: `app/src/main/java/com/example/widget/PenQuickTileService.kt`,
+  `app/src/main/java/com/example/widget/PenTileState.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetActionRouter.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetCommitCoordinator.kt`,
+  `app/src/test/java/com/example/widget/PenTileStateTest.kt`,
+  `app/src/androidTest/java/com/example/widget/PenWidgetStateRepositoryTest.kt`
