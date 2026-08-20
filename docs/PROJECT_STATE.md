@@ -6,8 +6,9 @@ Last updated: 2026-08-20
 
 - Canonical branch: `main`
 - Latest published application release source commit `ee1e6ab` (v1.4.4)
-- Current release metadata in `app/build.gradle.kts`: version name `1.4.4`,
-  version code `40`
+- Current release metadata in `app/build.gradle.kts`: version name `1.4.5`,
+  version code `41` (release candidate; v1.4.4 remains the latest published
+  release until the release runbook completes).
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -41,7 +42,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A5 merged; A6 in progress)
+## Pen widget expansion (A1-A6 merged; A7 in progress)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -124,19 +125,45 @@ Last updated: 2026-08-20
   passed all required jobs. Emulator readback showed the pen-only `P` category
   on both cold and warm picker launches. No physical phone, production package,
   HTTP request, Room mutation, or synthetic consumption action was used.
-- A6 is in progress on `agent/widget-restore-and-resize`. The provider now
-  remaps all six per-widget DataStore key families atomically on restore, then
-  flushes overdue commits before rendering the new IDs, and cancels the final
-  widget's WorkManager commit name on disable. API 31+ updater calls construct
-  three size-mapped `RemoteViews` entries (`110x110`, `140x160`, `280x320`) with
-  the A3 step override applied to each; API 24–30 retain the current live-size
-  fallback, while API 31+ skips resize-triggered rebuilds so the host can select
-  a prepared variant. The widget DataStore is included in cloud backup and
-  device transfer; pending payloads retain their stable event IDs for
-  duplicate-safe Room/server retry after restore. The five requested pure-JVM
-  restore tests are present and the first JVM/Android-test compile pass is
-  green; the exact gate, API-24 run, emulator check, PR review, and merge
-  remain pending.
+  A6 (`fix: preserve pen widget state across restore and cut resize reload
+  churn`) is squash-merged as PR #114 / `fb6a52e`. The provider remaps all six
+  per-widget DataStore key families atomically on restore, then flushes overdue
+  commits before rendering the new IDs, and cancels the final widget's
+  WorkManager commit name on disable. API 31+ updater calls construct three
+  size-mapped `RemoteViews` entries (`110x110`, `140x160`, `280x320`) with the
+  A3 step override applied to each; API 24–30 retain the live-size fallback,
+  while API 31+ skips resize-triggered rebuilds so the host can select a
+  prepared variant. The widget DataStore is included in cloud backup and
+  device transfer; pending payloads retain stable event IDs for duplicate-safe
+  Room/server retry after restore. Its refreshed PR gate [run
+  32360621693](https://github.com/noamvb/cannsheet-mobile/actions/runs/32360621693)
+  passed all required PR jobs, and the exact post-merge `main` run [32361027225](https://github.com/noamvb/cannsheet-mobile/actions/runs/32361027225)
+  passed all six jobs, including API 24 and API 36. No physical phone or
+  production data action was used.
+
+## v1.4.5 widget expansion (release candidate)
+
+`v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
+pen-widget expansion from A1 through A6. It remains a release candidate until
+the exact validated `main` SHA is tagged and the signed APK is independently
+verified.
+
+### Shipped changes
+
+1. **Per-widget pen logging surfaces and controls** (PRs #109–#113)
+   - Added uses-safe quantity presets, size-scaled step controls, per-instance
+     pinned-cart/discreet/step configuration, a count-free sync-behind state,
+     and a one-tap cart-picker destination while preserving the Room, offline
+     queue, Apps Script, endpoint, package, and wire contracts.
+2. **Restore-safe state and size-mapped rendering** (PR #114, squash-merged
+   `fb6a52e`)
+   - Preserves draft, pending, queue-watermark, and configuration state across
+     widget ID remapping; retains stable pending event IDs for duplicate-safe
+     retry; and supplies guarded API 31+ compact/base/large `RemoteViews`
+     variants without resize-triggered data reloads.
+3. **Version bump to 1.4.5 (versionCode 41)**
+   - `versionCode` 40 → 41, `versionName` 1.4.4 → 1.4.5.
+
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

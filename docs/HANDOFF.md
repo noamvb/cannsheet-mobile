@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A6 in progress
+## Current widget expansion: A7 version-only PR in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -74,23 +74,52 @@ pen-only `P` category on both explicit cold and warm launches. A5 had no
 required screenshot because it changed the destination of an existing tap
 target rather than widget visuals.
 
-A6 is on `agent/widget-restore-and-resize`. The plan-required test subagent
-added `PenWidgetRestoreTest` with the five remapping cases, while the separate
-read-only size-map subagent supplied the guarded API-31 `RemoteViews` block;
-the production/provider integration remains serial in this branch. Restore
-remapping snapshots and rewrites draft, pending commit, queue watermark, pinned
-product, discreet, and step-override keys before flushing overdue commits and
-rendering new IDs. API 31+ maps compact/base/large specs at `110x110`, `140x160`,
-and `280x320`, preserving the per-widget step override; API 24–30 retain the
-existing live-size fallback, while API 31+ skips resize-triggered rebuilds so
-the host can select a prepared variant. The widget DataStore is included in
-cloud backup and device transfer, and a restored pending payload retains its
-stable event ID for duplicate-safe Room/server retry. The first JVM and
-Android-test compile pass is green; the exact gate, API-24 emulator run, PR,
-review, and merge remain pending. No version metadata or release work is
-included.
+A6 (`fix: preserve pen widget state across restore and cut resize reload
+churn`) is squash-merged as PR #114 / `fb6a52e`. The plan-required test
+subagent added `PenWidgetRestoreTest` with the five remapping cases, while the
+separate read-only size-map subagent supplied the guarded API-31
+`RemoteViews` block. Restore remapping snapshots and rewrites draft, pending
+commit, queue watermark, pinned product, discreet, and step-override keys
+before flushing overdue commits and rendering new IDs. API 31+ maps
+compact/base/large specs at `110x110`, `140x160`, and `280x320`, preserving the
+per-widget step override; API 24–30 retain the existing live-size fallback,
+while API 31+ skips resize-triggered rebuilds so the host can select a prepared
+variant. The widget DataStore is included in cloud backup and device transfer,
+and a restored pending payload retains its stable event ID for duplicate-safe
+Room/server retry. Its refreshed PR gate was [run
+32360621693](https://github.com/noamvb/cannsheet-mobile/actions/runs/32360621693),
+and the exact post-merge `main` run was [32361027225](https://github.com/noamvb/cannsheet-mobile/actions/runs/32361027225),
+green on all six jobs including API 24 and API 36. No physical phone or
+production data action was used.
 
-## Current release: v1.4.4
+## Current release: v1.4.5 (release candidate; pending publication)
+
+`v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
+pen-widget expansion from A1 through A6. The code is merged on `main` at
+`fb6a52e`; the version-only PR is `agent/release-v1-4-5` and is not yet tagged
+or published. The release runbook must first prove the final tagged SHA with
+all six `Cannsheet PR checks` jobs, then independently verify the signed APK,
+checksum, package metadata, and signing-certificate continuity. A follow-up
+docs PR will record the tag, publication assets, SHA-256, and certificate
+comparison after publication.
+
+### Shipped changes
+
+1. **Per-widget pen logging surfaces and controls** (PRs #109–#113)
+   - Added uses-safe quantity presets, size-scaled step controls, per-instance
+     pinned-cart/discreet/step configuration, a count-free sync-behind state,
+     and a one-tap cart-picker destination while preserving the Room, offline
+     queue, Apps Script, endpoint, package, and wire contracts.
+2. **Restore-safe state and size-mapped rendering** (PR #114, squash-merged
+   `fb6a52e`)
+   - Preserves draft, pending, queue-watermark, and configuration state across
+     widget ID remapping; retains stable pending event IDs for duplicate-safe
+     retry; and supplies guarded API 31+ compact/base/large `RemoteViews`
+     variants without resize-triggered data reloads.
+3. **Version bump to 1.4.5 (versionCode 41)**
+   - `versionCode` 40 → 41, `versionName` 1.4.4 → 1.4.5.
+
+## v1.4.4
 
 `v1.4.4` (`versionCode 40`, `versionName 1.4.4`) is a patch release with two follow-up
 refinements to the LocalLLM prewarm work.
