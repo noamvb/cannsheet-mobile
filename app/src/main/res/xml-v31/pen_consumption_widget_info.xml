@@ -14,6 +14,6 @@
     android:previewImage="@drawable/pen_widget_preview"
     android:previewLayout="@layout/widget_pen_consumption_preview"
     android:resizeMode="horizontal|vertical"
-    android:updatePeriodMillis="0"
+    android:updatePeriodMillis="1800000"
     android:widgetFeatures="reconfigurable|configuration_optional"
     android:widgetCategory="home_screen" />

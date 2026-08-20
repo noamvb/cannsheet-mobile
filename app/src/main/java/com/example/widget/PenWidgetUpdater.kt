@@ -29,12 +29,14 @@ object PenWidgetUpdater {
         val state = repository.read(appWidgetId)
         val draft = state.pendingCommit?.let(PenWidgetDraft::AwaitingCommit)
             ?: PenWidgetDraft.Composing(state.draftSeconds)
+        val widgetData = PenWidgetDataSource.loadWidgetData(appContext, config.pinnedProductId)
         val model = buildPenWidgetUiModel(
-            penState = PenWidgetDataSource.loadPenState(appContext, config.pinnedProductId),
+            penState = widgetData.penState,
             draft = draft,
             lastQueuedAtMillis = state.lastQueuedAtMillis,
             nowMillis = System.currentTimeMillis(),
             discreet = config.discreet,
+            queueStuck = widgetData.queueStuck,
         )
         val manager = AppWidgetManager.getInstance(appContext)
         val options = manager.getAppWidgetOptions(appWidgetId)

@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A3 in progress
+## Current widget expansion: A4 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -20,10 +20,11 @@ formats the matching accessibility descriptions. The Room schema, offline queue,
 wire payloads, backend contract, endpoint, package ID, and version metadata are
 unchanged.
 
-A3 is on `agent/widget-config-activity`. It adds optional per-instance DataStore
-configuration for a pinned selectable pen, discreet presentation, and a 5/10/30
-second step override. Unconfigured or restored widgets read defaults and continue
-to follow `preferences.loadedPenProductId`; deleted widget IDs clear all three
+PR #111 (`feat: add a pen widget configuration activity`) is squash-merged as
+`9749f44`. It adds optional per-instance DataStore configuration for a pinned
+selectable pen, discreet presentation, and a 5/10/30 second step override.
+Unconfigured or restored widgets read defaults and continue to follow
+`preferences.loadedPenProductId`; deleted widget IDs clear all three
 configuration keys. The Compose activity routes saving through
 `PenWidgetRuntime.withSerialized { PenWidgetUpdater.update(...) }`.
 
@@ -42,6 +43,21 @@ configuration screen, discreet-mode output (`Pen cart` / `Tap to log`), and
 30-second accessibility actions. The remove/re-add gesture remains unverified from
 A1 because the AVD launcher opened the app drawer; no physical phone or production
 data was used.
+
+A3's post-review focused router instrumentation passed 8/8 after adding the
+per-widget pinned-product assertion. Its refreshed remote PR gate was run
+`32350773583`, with all required jobs green. A4 is now on
+`agent/widget-sync-indicator`; its JVM unit-test task passed, while the exact
+Android gate, screenshots, review, and merge are still pending.
+
+A4's sync indicator is presentation-only. It reads the existing aggregate pending
+action count and `queueNonEmptySinceEpochMillis`, shows `%1$s · sync is behind`
+after the existing 24-hour threshold, and preserves the precedence
+queued → sync-behind → discreet → existing status/counts. It adds no queue fields,
+notification behavior, Room schema, or wire payload changes. Both provider-info
+XML files request the platform's minimum 30-minute periodic update, independent of
+queue-alert opt-in, so an otherwise idle widget will recompute after crossing the
+threshold.
 
 ## Current release: v1.4.4
 
