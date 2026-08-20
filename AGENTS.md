@@ -59,9 +59,12 @@ documents, not in this file.
   quantities, or dates.
 - Runway and spend projections are presentation-only estimates derived from
   `InsightsResponseDto`. They must not be persisted, transmitted, or treated as
-  confirmed values, and must degrade to showing nothing when the Insights
-  snapshot is cached, stale, changing range, or incomplete because a local
-  action is pending.
+  confirmed values. In-app surfaces must degrade to showing nothing when the
+  Insights snapshot is cached, stale, changing range, or incomplete because a
+  local action is pending. A home-screen widget may instead render a cached
+  projection, but only when it displays the snapshot's own as-of date alongside
+  the figure, and it must still show nothing when no snapshot has ever been
+  cached.
 - The Log screen may consume the Insights snapshot but must not drive
   unbounded analytics refreshes; runway-only refreshes are floored.
 - Month and day arithmetic on analytics data uses the response's own `timeZone`
