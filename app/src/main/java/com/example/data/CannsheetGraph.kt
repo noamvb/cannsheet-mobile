@@ -95,6 +95,7 @@ class CannsheetGraph private constructor(context: Context) {
         moshi = moshi,
         endpoint = BuildConfig.GAS_URL,
         environment = BuildConfig.APP_ENVIRONMENT,
+        onInsightsCacheSaved = { widgetRefresher.refreshAll() },
     )
 
     val syncMutex = Mutex()

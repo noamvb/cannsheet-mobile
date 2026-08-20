@@ -393,6 +393,32 @@ class AnalyticsDataTest {
     }
 
     @Test
+    fun testInsightsCacheWriteNotifiesAfterDurableSave() = runBlocking {
+        val dao = FakeCannsheetDao()
+        var notificationCount = 0
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                return sampleInsightsJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            api = fakeApi,
+            dao = dao,
+            moshi = moshi,
+            endpoint = endpoint,
+            environment = "PRODUCTION",
+            onInsightsCacheSaved = {
+                assertNotNull(dao.getAnalyticsCache("PRODUCTION", "insights"))
+                notificationCount++
+            },
+        )
+
+        repo.fetchInsights(InsightsRange.Default)
+
+        assertEquals(1, notificationCount)
+    }
+
+    @Test
     fun testAnalyticsCacheEvictionOnVersionMismatch() = runBlocking {
         val dao = FakeCannsheetDao()
         dao.upsertAnalyticsCache(

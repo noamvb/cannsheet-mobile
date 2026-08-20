@@ -1601,14 +1601,71 @@ and widget code must keep the as-of date adjacent to every cached projection.
 No Room column, queue payload, wire field, Apps Script contract, endpoint, or
 analytics write is introduced by this documentation change.
 
-### Not verified
+### Verification status
 
-No projection widget has been implemented or manually observed yet. B8 must
-implement the as-of-date condition and its unavailable state after this decision
-merges; this ADR does not authorize a projection without those labels.
+B8 now implements and manually observes the provider's unavailable state,
+configuration flow, light/dark rendering, launcher restart, resize behavior,
+and Insights deep link on an isolated API-36 emulator. No populated projection
+was claimed because the emulator had no cached Insights snapshot, and the
+launcher shell's automated remove gesture opened the app drawer;
+removal/re-add remains unverified.
 
 ### Related files
 
 - `AGENTS.md`
 - `docs/PROJECT_STATE.md`
 - `docs/DECISIONS.md`
+
+## ADR-040: Use one cache-only provider with a per-instance projection mode
+
+### Context
+
+Runway and Spend are two presentation views over the same cached
+`InsightsResponseDto`. Adding separate providers would duplicate the launcher
+surface and refresh fan-out while making the cache-only and as-of-date rules
+harder to audit. App widgets also require a stable host boundary across API 24
+and newer Android versions.
+
+### Decision
+
+Expose one `ProjectionWidgetProvider` with a per-instance DataStore mode key,
+defaulting to Runway and allowing the configuration activity to select Spend.
+The updater reads the existing cached Insights snapshot and passes it to the
+existing pure runway/spend builders; it never refreshes analytics, writes a
+snapshot, persists a projection, or transmits a derived figure. The renderer
+uses only API-24-safe `TextView` RemoteViews, places the source snapshot's
+as-of date beside every ready figure, and renders an explicit reason when no
+figure can be shown. Every instance's action opens the existing Insights route.
+The analytics repository invokes the installed widget refresher only after an
+Insights cache upsert completes; the callback is suspend-aware and best-effort
+so a refresh failure cannot turn a successful analytics fetch into a retry.
+The provider remaps mode keys atomically in `onRestored` before updating the new
+IDs, including overlapping old/new ID mappings.
+
+### Consequences
+
+The widget adds no Room schema, queue payload, wire field, Apps Script contract,
+endpoint, or analytics refresh path. A single refresher fan-out can update the
+Today and projection surfaces independently. Deleting a widget instance removes
+only its mode key. The widget may show the last cached estimate with its age
+visible, while the in-app suppression rules remain unchanged. API-24
+compatibility is protected by the supported `TextView` RemoteViews surface;
+populated projections and launcher removal/re-add still require separate
+evidence when a suitable snapshot and deterministic host control are available.
+
+### Related files
+
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetProvider.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetConfigureActivity.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetUpdater.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetStateRepository.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionWidgetRenderer.kt`
+- `app/src/main/java/com/example/widget/projection/ProjectionUiModel.kt`
+- `app/src/main/java/com/example/data/AnalyticsData.kt`
+- `app/src/main/java/com/example/data/CannsheetGraph.kt`
+- `app/src/main/res/layout/widget_projection.xml`
+- `app/src/main/res/xml/projection_widget_info.xml`
+- `app/src/main/res/xml-v31/projection_widget_info.xml`
+- `app/src/test/java/com/example/widget/projection/ProjectionUiModelTest.kt`
+- `app/src/test/java/com/example/widget/projection/ProjectionWidgetStateRepositoryTest.kt`
+- `app/src/test/java/com/example/data/AnalyticsDataTest.kt`

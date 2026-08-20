@@ -341,6 +341,7 @@ class AnalyticsRepository(
     private val moshi: Moshi,
     private val endpoint: String,
     private val environment: String,
+    private val onInsightsCacheSaved: suspend () -> Unit = {},
 ) : AnalyticsDataSource {
     private val envelopeAdapter = moshi.adapter(AnalyticsEnvelope::class.java)
     private val insightsAdapter = moshi.adapter(InsightsResponseDto::class.java)
@@ -361,6 +362,15 @@ class AnalyticsRepository(
                     response.sourceRevision,
                     response.generatedAtEpochMillis,
                 )
+                // The cache write is durable before the callback. Widget refresh is advisory:
+                // it must not turn a successful analytics fetch into a failed one.
+                try {
+                    onInsightsCacheSaved()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Throwable) {
+                    // The next widget lifecycle or analytics write can refresh again.
+                }
                 response
             }
         }
