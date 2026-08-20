@@ -6,10 +6,9 @@ Last updated: 2026-08-20
 
 - Canonical branch: `main`
 - Latest published application release source commit
-  `f32f7c0c96690c74288bf0428b946d74716a7e81` (v1.4.5)
+  `024aed09ebd941d0ab26fedb11ec3e16a4822758` (v1.5.0)
 - Current release metadata in `app/build.gradle.kts`: version name `1.5.0`,
-  version code `42` (release candidate; v1.4.5 remains the latest published
-  release until the B9 runbook completes).
+  version code `42` (published; B1-B9 are complete).
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -154,7 +153,7 @@ Last updated: 2026-08-20
   correctly stopped at its obsolete current-tip guard before building or
   publishing. No physical phone or production data action was used.
 
-## Release B widget surfaces (B1-B8 merged; B9 release candidate)
+## Release B widget surfaces (B1-B9 merged; published)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -277,15 +276,18 @@ Last updated: 2026-08-20
   `docs/images/projection-widget-preview.png`,
   `docs/images/projection-widget-configure-spend.png`, and
   `docs/images/projection-widget-empty-light.png`. Its exact post-merge `main`
-  validation run `32418762081` passed all six required jobs; the B9 version-only
-  candidate is recorded below.
+  validation run `32418762081` passed all six required jobs; the published B9
+  provenance is recorded below.
 
-- B9 (`chore: bump version to 1.5.0`) is the version-only release candidate
-  following B1-B8. It changes `versionCode 41` → `42` and `versionName 1.4.5`
-  → `1.5.0`; the four widget providers, launcher shortcuts, Quick Settings
-  tile, Room schema, and service boundaries are documented above and in
-  `docs/ARCHITECTURE.md`. The B9 PR and exact post-merge `main` validation are
-  still pending; no `v1.5.0` tag or public release exists.
+- B9 (`chore: bump version to 1.5.0`) is squash-merged as PR #126 /
+  `024aed0`. The PR gate `32423394786` and exact post-merge `main` run
+  `32423802205` passed their required jobs, including API 24 and API 36. The
+  annotated tag `v1.5.0` resolves to this exact main SHA, and ordinary signed
+  publication workflow `32424355873` passed exact-main confirmation, signed
+  build, publication, and post-publication verification. The public release
+  contains exactly the APK and `.sha256` assets; independent verification is
+  recorded in the v1.5.0 section below. No physical phone or production data
+  action was used.
 
 ## v1.4.5 widget expansion (published)
 
@@ -314,10 +316,10 @@ Signature Scheme v2 and certificate SHA-256
 the independently downloaded `v1.4.4` APK. No phone installation was
 performed; the owner should update through Obtainium.
 
-## v1.5.0 widget surfaces (release candidate)
+## v1.5.0 widget surfaces (published)
 
 `v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only release
-candidate after all Release B implementation PRs have merged. It packages:
+after all Release B implementation PRs merged. It packages:
 
 1. **Launcher and Quick Settings entry points** (PRs #116–#117)
    - Static Log, Purchase, and Insights shortcuts preserve the existing route
@@ -335,7 +337,22 @@ candidate after all Release B implementation PRs have merged. It packages:
 4. **Version metadata**
    - `versionCode` 41 → 42 and `versionName` 1.4.5 → 1.5.0.
 
-The latest published release remains [v1.4.5](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.4.5); the `v1.5.0` tag and signed public release will be created only after the exact B9 `main` validation gate succeeds.
+The public release is [Cannsheet Mobile v1.5.0](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.0)
+in `noamvb/cannsheet-mobile-releases`. It contains exactly:
+
+- `Cannsheet-Mobile-1.5.0.apk`
+- `Cannsheet-Mobile-1.5.0.apk.sha256`
+
+The annotated tag resolves to `024aed09ebd941d0ab26fedb11ec3e16a4822758`.
+Independent download verification passed with SHA-256
+`7dbc71fd3d5bc02d834133e4404312b5d22d32d33d186967c718d62699317178`.
+Independent `aapt` readback confirmed package
+`com.noamv.cannsheet.mobile`, version code `42`, version name `1.5.0`, min SDK
+`24`, and target SDK `36`. Independent `apksigner` readback confirmed APK
+Signature Scheme v2 and certificate SHA-256
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, matching
+the public `v1.4.5` APK and the prior release certificate. No phone
+installation was performed; the owner should update through Obtainium.
 
 ### Shipped changes
 

@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 published; B8 merged; B9 release candidate
+## Current widget expansion: A7 and B9 published; implementation plan complete
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -102,7 +102,7 @@ stopped before building because its historical current-tip guard correctly
 rejected `main` at `4f7ca511`. No phone installation or production data action
 was used.
 
-## Release B: B1-B8 merged; B9 release candidate
+## Release B: B1-B9 merged and published
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -226,24 +226,35 @@ overlapping restore IDs. Evidence images are
 `docs/images/projection-widget-preview.png`,
 `docs/images/projection-widget-configure-spend.png`, and
 `docs/images/projection-widget-empty-light.png`. The exact post-merge `main`
-validation run `32418762081` passed all six required jobs; the B9 version-only
-candidate is recorded below.
+validation run `32418762081` passed all six required jobs; the published B9
+provenance is recorded below.
 
-B9 (`chore: bump version to 1.5.0`) is the version-only release candidate after
-B1-B8. It changes `versionCode 41` to `42` and `versionName 1.4.5` to `1.5.0`;
-the exact PR and post-merge `main` gates are still pending. No `v1.5.0` tag or
-public release exists. The implementation boundaries for the shortcuts, tile,
-four widget providers, local history table, and historical projection cache are
-documented in `docs/ARCHITECTURE.md`.
+B9 (`chore: bump version to 1.5.0`) is squash-merged as PR #126 /
+`024aed0`. Its PR gate `32423394786` and exact post-merge `main` run
+`32423802205` were green on all required jobs. The annotated `v1.5.0` tag
+resolves to `024aed09ebd941d0ab26fedb11ec3e16a4822758`, and ordinary signed
+publication workflow `32424355873` passed exact-main confirmation, signed build,
+publication, and post-publication verification. The implementation boundaries
+for the shortcuts, tile, four widget providers, local history table, and
+historical projection cache are documented in `docs/ARCHITECTURE.md`.
 
-## Current release: v1.5.0 (release candidate; v1.4.5 latest published)
+## Current release: v1.5.0 (published and independently verified)
 
-`v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only candidate
+`v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only release
 after all Release B implementation PRs merged. It packages the launcher
 shortcuts, Quick Settings pen tile, sync-status, multi-cart, Today, and
 runway/spend projection widgets, plus the local `consumption_history` table.
-The candidate has not been tagged or published; the exact B9 `main` validation
-gate must pass before the release runbook is run.
+The public release is [Cannsheet Mobile v1.5.0](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.0)
+and contains exactly the APK and `.sha256` assets.
+
+Independent download verification passed: APK SHA-256
+`7dbc71fd3d5bc02d834133e4404312b5d22d32d33d186967c718d62699317178`;
+package `com.noamv.cannsheet.mobile`; version code `42`; version name `1.5.0`;
+min SDK `24`; target SDK `36`; APK Signature Scheme v2 true; and certificate
+SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`,
+matching the public `v1.4.5` APK. No production installation was performed.
+The owner should open Obtainium, refresh or tap **Check for updates**, and
+install Cannsheet Mobile 1.5.0.
 
 ## v1.4.5 (published and independently verified)
 
