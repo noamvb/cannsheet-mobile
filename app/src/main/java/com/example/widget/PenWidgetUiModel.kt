@@ -62,6 +62,7 @@ fun buildPenWidgetUiModel(
     lastQueuedAtMillis: Long?,
     nowMillis: Long,
     discreet: Boolean = false,
+    queueStuck: Boolean = false,
 ): PenWidgetUiModel {
     if (draft is PenWidgetDraft.AwaitingCommit) {
         val product = (penState as? PenQuickLogState.Loaded)?.product
@@ -116,11 +117,13 @@ fun buildPenWidgetUiModel(
                     } else {
                         PenWidgetText.Literal(penState.product.name)
                     },
-                    subtitle = if (discreet && !recentlyQueued) {
-                        PenWidgetText.Resource(R.string.pen_widget_discreet_subtitle)
-                    } else {
-                        buildSubtitle(penState, lastQueuedAtMillis, nowMillis)
-                    },
+                    subtitle = buildSubtitle(
+                        state = penState,
+                        lastQueuedAtMillis = lastQueuedAtMillis,
+                        nowMillis = nowMillis,
+                        discreet = discreet,
+                        queueStuck = queueStuck,
+                    ),
                     seconds = composing.seconds,
                     recentlyQueued = recentlyQueued,
                     canDecrement = composing.seconds > 0,
@@ -154,12 +157,22 @@ private fun buildSubtitle(
     state: PenQuickLogState.Loaded,
     lastQueuedAtMillis: Long?,
     nowMillis: Long,
+    discreet: Boolean,
+    queueStuck: Boolean,
 ): PenWidgetText {
     if (wasRecentlyQueued(lastQueuedAtMillis, nowMillis)) {
         return PenWidgetText.Resource(R.string.pen_widget_queued)
     }
 
     val status = state.product.productStatus.label
+    if (queueStuck) {
+        return PenWidgetText.Resource(R.string.pen_widget_sync_stuck, listOf(status))
+    }
+
+    if (discreet) {
+        return PenWidgetText.Resource(R.string.pen_widget_discreet_subtitle)
+    }
+
     return if (state.pendingUses > 0.0) {
         if (state.syncedUses == null) {
             PenWidgetText.Resource(

@@ -41,7 +41,7 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A2 merged; A3 in progress)
+## Pen widget expansion (A1-A3 merged; A4 in progress)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
   into `main` as `847b184`; it is not part of a published APK or a version bump.
@@ -69,12 +69,13 @@ Last updated: 2026-08-20
   base-width behavior, dark-mode legibility, and 20-second state surviving a
   launcher restart. No physical phone or production data action was used;
   remove/re-add remains unverified from the earlier A1 walkthrough.
-- A3 is in progress on `agent/widget-config-activity`. Each widget now has
-  optional DataStore-backed pinned product, discreet-mode, and step-override
-  settings; absent settings reproduce the pre-configuration loaded-cart
-  behavior. The Compose configuration activity filters selectable pen products,
-  supports follow-loaded versus pinned selection, discreet mode, and 5/10/30
-  second steps, then serializes the updater through `PenWidgetRuntime`.
+- PR #111 (`feat: add a pen widget configuration activity`) is squash-merged
+  into `main` as `9749f44`; it is not part of a published APK or a version bump.
+  Each widget now has optional DataStore-backed pinned product, discreet-mode,
+  and step-override settings; absent settings reproduce the pre-configuration
+  loaded-cart behavior. The Compose configuration activity filters selectable pen
+  products, supports follow-loaded versus pinned selection, discreet mode, and
+  5/10/30 second steps, then serializes the updater through `PenWidgetRuntime`.
 - Discreet presentation uses the generic `Pen cart` name and `Tap to log`
   subtitle while retaining queued confirmation and accessibility content
   descriptions. The activity root uses a Material `Surface` so both light and
@@ -90,6 +91,18 @@ Last updated: 2026-08-20
   The old v1.4.4 debug widget (id 2) remained present after `adb install -r`;
   configuration and discreet-mode screenshots are in `docs/images/`. No
   physical phone or production data action was used.
+- A3's post-review fix also routes preset and submit actions through the same
+  per-widget pinned product configuration; focused `PenWidgetActionRouterTest`
+  instrumentation passed 8/8. The refreshed PR gate [run
+  32350773583](https://github.com/noamvb/cannsheet-mobile/actions/runs/32350773583)
+  passed all required jobs.
+- A4 is in progress on `agent/widget-sync-indicator`. The pen widget derives a
+  count-free `sync is behind` subtitle when the aggregate durable queue has
+  remained non-empty for at least `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours),
+  using the existing sync watermark. Queued confirmation remains highest
+  priority, followed by sync-behind, discreet mode, and the existing synced or
+  pending status variants. A4's JVM unit-test task passes; the exact Android
+  gate and remote PR validation remain pending.
 ## v1.3.2 performance work (released in v1.3.2)
 
 The v1.3.2 release addressed multi-minute analytics and history refresh latencies across backend and client:

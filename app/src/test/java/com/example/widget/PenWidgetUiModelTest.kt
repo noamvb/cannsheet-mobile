@@ -76,6 +76,60 @@ class PenWidgetUiModelTest {
         assertEquals(R.string.pen_widget_undo_window, awaiting.subtitle.resourceId)
     }
 
+    @Test
+    fun stuckQueueShowsTheSyncBehindSubtitle() {
+        val model = buildPenWidgetUiModel(
+            penState = loaded(),
+            draft = PenWidgetDraft.Composing(20),
+            lastQueuedAtMillis = null,
+            nowMillis = 0L,
+            queueStuck = true,
+        ) as PenWidgetUiModel.Composing
+
+        assertEquals(
+            PenWidgetText.Resource(R.string.pen_widget_sync_stuck, listOf("Active")),
+            model.subtitle,
+        )
+    }
+
+    @Test
+    fun recentlyQueuedOutranksStuckQueue() {
+        val model = buildPenWidgetUiModel(
+            penState = loaded(),
+            draft = PenWidgetDraft.Composing(20),
+            lastQueuedAtMillis = 1_000L,
+            nowMillis = 2_000L,
+            queueStuck = true,
+        ) as PenWidgetUiModel.Composing
+
+        assertEquals(PenWidgetText.Resource(R.string.pen_widget_queued), model.subtitle)
+    }
+
+    @Test
+    fun discreetModeOutranksTheSyncedCountsButNotQueued() {
+        val discreet = buildPenWidgetUiModel(
+            penState = loaded(),
+            draft = PenWidgetDraft.Composing(20),
+            lastQueuedAtMillis = null,
+            nowMillis = 0L,
+            discreet = true,
+        ) as PenWidgetUiModel.Composing
+        val queued = buildPenWidgetUiModel(
+            penState = loaded(),
+            draft = PenWidgetDraft.Composing(20),
+            lastQueuedAtMillis = 1_000L,
+            nowMillis = 2_000L,
+            discreet = true,
+            queueStuck = true,
+        ) as PenWidgetUiModel.Composing
+
+        assertEquals(
+            PenWidgetText.Resource(R.string.pen_widget_discreet_subtitle),
+            discreet.subtitle,
+        )
+        assertEquals(PenWidgetText.Resource(R.string.pen_widget_queued), queued.subtitle)
+    }
+
     private fun composing() = PenWidgetDraft.Composing(0)
 
     private fun loaded(rate: Double? = 10.0) = PenQuickLogState.Loaded(

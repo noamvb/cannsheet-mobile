@@ -28,6 +28,7 @@
     <string name="pen_widget_rate_off_hint">Tap to set it in Settings.</string>
     <string name="pen_widget_submit">Submit pen log</string>
     <string name="pen_widget_queued">Queued ✓</string>
+    <string name="pen_widget_sync_stuck">%1$s · sync is behind</string>
     <string name="pen_widget_queued_symbol" translatable="false">✓</string>
     <string name="pen_widget_submit_symbol" translatable="false">✓</string>
     <string name="pen_widget_undo_symbol">UNDO</string>
