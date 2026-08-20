@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Fixed RemoteViews surface for the today summary widget. The renderer
+    replaces the placeholder values while keeping the five-row structure
+    stable across launcher sizes and API levels.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_today_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clickable="true"
+    android:focusable="true"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <TextView
+        android:id="@+id/widget_today_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="Today"
+        android:textColor="@color/widget_on_background"
+        android:textSize="11sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_today_total"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:ellipsize="end"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:maxLines="2"
+        android:text="No logs yet today"
+        android:textColor="@color/widget_on_background"
+        android:textSize="18sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/widget_today_average"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="Average: —"
+        android:textColor="@color/widget_on_background_muted"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_today_comparison"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="vs 7-day average"
+        android:textColor="@color/widget_on_background_muted"
+        android:textSize="10sp" />
+
+    <TextView
+        android:id="@+id/widget_today_streak"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="3dp"
+        android:ellipsize="end"
+        android:includeFontPadding="false"
+        android:maxLines="1"
+        android:text="Streak: 0 days"
+        android:textColor="@color/widget_on_background_muted"
+        android:textSize="10sp" />
+</LinearLayout>

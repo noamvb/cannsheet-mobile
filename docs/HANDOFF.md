@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B5 in progress
+## Current widget expansion: A7 release candidate; B6 in progress
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -94,10 +94,14 @@ production data action was used.
 
 A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
 The exact post-merge `main` run was `32362664715`, green on all six required
-jobs. The `v1.4.5` tag, signed APK publication, and any production installation
-remain pending explicit repository-owner approval under the release runbook.
+jobs. Repository-owner authorization for publication was received on 2026-08-20,
+but no tag has been pushed: the release workflow present at the validated commit
+requires the tagged SHA to equal the current `origin/main` tip, while `main` has
+since advanced to Release B at `23b7b6d`. A historical-tag release path must be
+resolved before creating the public tag. No signed APK or production installation
+has been performed.
 
-## Release B: B1-B4 merged; B5 in progress
+## Release B: B1-B5 merged; B6 in progress
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -155,11 +159,12 @@ widget-delete operation. The exact post-merge `main` run was `32386087534`,
 green on all six required jobs after the hosted API-24 installation timeout was
 rerun.
 
-B5 (`feat: record consumption history locally`) is in progress on
-`agent/local-consumption-history`. Room schema version 11 adds an append-only
+B5 (`feat: record consumption history locally`) is squash-merged as PR #120 /
+`23b7b6d`. Room schema version 11 adds an append-only
 `consumption_history` table keyed by the stable event ID, an idempotent DAO
 insert, a bounded timestamp query, and an explicit prune method that is not
-called automatically. The history write is wired after the existing queue write
+called automatically. The exact post-merge `main` run was `32392860812`, green
+on all six required jobs. The history write is wired after the existing queue write
 through a narrow repository interface and is deliberately best-effort so a
 history failure cannot roll back a queue entry. Focused API-36 instrumentation
 passed 4/4 DAO tests and 10/10 migration tests. On the isolated, network-disabled
@@ -172,17 +177,34 @@ possible; this is not production signer-continuity evidence. The app was
 stopped and the emulator was disconnected afterward. No physical phone or
 production data action was used.
 
-## Current release: v1.4.5 (release candidate; pending publication)
+B6 (`feat: add a today home-screen widget`) is in progress on
+`agent/today-widget`. The pure model covers today's local-date total, the
+seven-day observed-day baseline (requiring three observed days), and the
+consecutive logged-day streak. The updater reads a roughly ten-day bounded
+`consumptionHistorySince` Flow and explicitly treats pending local history as
+what the user logged, not as server confirmation. The seven requested model
+tests passed, and the exact local unit/compile/lint/debug gate passed. An
+isolated, network-disabled API-36 AVD added the widget and visibly rendered
+`No logs yet today`; the AVD's System UI repeatedly became unresponsive during
+the populated fixture attempt, so no populated screenshot is claimed. The
+empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
+AVD was deleted and ADB was disconnected afterward. No physical phone or
+production data action was used.
+
+## Current release: v1.4.5 (release candidate; publication workflow blocked)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
 pen-widget expansion from A1 through A7. The version-only change is merged on
-`main` at `f32f7c0`; it is not yet tagged or published because the release
-runbook requires explicit owner approval before the tag. The release runbook
-must first prove the final tagged SHA with
-all six `Cannsheet PR checks` jobs, then independently verify the signed APK,
-checksum, package metadata, and signing-certificate continuity. A follow-up
-docs PR will record the tag, publication assets, SHA-256, and certificate
-comparison after publication.
+`main` at the exact requested Release A commit
+`f32f7c0c96690c74288bf0428b946d74716a7e81`, and owner authorization for
+publication was received on 2026-08-20. It is not tagged because the
+tag-triggered workflow at that commit requires the tagged SHA to equal the
+current `origin/main`, which has since advanced into Release B at `23b7b6d`.
+Do not push a known-failing historical tag. After the workflow owner resolves
+that historical-tag path, the release runbook must prove the exact tag with all
+six `Cannsheet PR checks` jobs, then independently verify the signed APK,
+checksum, package metadata, and signing-certificate continuity. No production
+installation has been performed.
 
 ### Shipped changes
 

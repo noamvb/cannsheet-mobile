@@ -13,6 +13,8 @@ class CannsheetRepository(
 
     val allProducts: Flow<List<Product>> = dao.getAllProducts()
     val productInteractions: Flow<List<ProductInteraction>> = dao.getAllProductInteractions()
+    fun consumptionHistorySince(fromEpochMillis: Long): Flow<List<ConsumptionHistoryEntry>> =
+        dao.consumptionHistorySince(fromEpochMillis)
     val pendingProductUses: Flow<List<PendingProductUses>> = dao.getPendingProductUses()
     val pendingConsumptionCorrections: Flow<List<PendingConsumptionCorrection>> =
         dao.getPendingConsumptionCorrectionsFlow()

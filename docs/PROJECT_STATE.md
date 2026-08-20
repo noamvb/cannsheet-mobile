@@ -144,11 +144,14 @@ Last updated: 2026-08-20
 - A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
   It is the version-only change for `versionCode 41` and `versionName 1.4.5`;
   the exact post-merge `main` run [32362664715](https://github.com/noamvb/cannsheet-mobile/actions/runs/32362664715)
-  passed all six required jobs. The `v1.4.5` tag and signed publication remain
-  pending explicit repository-owner approval under the release runbook; no tag,
-  signed APK, or production installation has been performed.
+  passed all six required jobs. Repository-owner authorization for publication
+  was received on 2026-08-20, but no tag has been pushed: the release workflow
+  present at this validated commit requires the tagged SHA to equal the current
+  `origin/main` tip, while `origin/main` has since advanced to Release B
+  (`23b7b6d`). A historical-tag release path must be resolved before creating
+  the public tag; no signed APK or production installation has been performed.
 
-## Release B widget surfaces (B1-B4 merged; B5 in progress)
+## Release B widget surfaces (B1-B5 merged; B6 in progress)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -208,28 +211,49 @@ Last updated: 2026-08-20
   deterministic widget-delete operation; no physical phone or production data
   action was used. The exact post-merge `main` run `32386087534` passed all six
   required jobs after the hosted API-24 installation timeout was rerun.
-- B5 (`feat: record consumption history locally`) is in progress on
-  `agent/local-consumption-history`. It adds Room schema version 11 with an
-  append-only `consumption_history` table keyed by the stable event ID, an
-  idempotent DAO insert plus bounded query and explicit future-prune method, and
-  a narrow repository boundary wired after the existing queue write. History is
-  derived convenience data: a history failure is ignored so it cannot roll back
-  a queued consumption, automatic pruning is intentionally absent, and no
-  backfill is performed. The exact local unit/compile/lint/debug gate passed;
-  focused API-36 instrumentation passed 4/4 DAO tests and 10/10 migration tests.
-  The isolated emulator upgrade readback moved v1.4.4-local version 10 to
-  version 11, preserved three legacy queued rows, created no history rows during
-  migration, and then recorded one post-upgrade history row from the current
-  app. The local test APK used the debug certificate as a same-signer emulator
-  substitute; this is not production signing evidence. No physical phone or
+- B5 (`feat: record consumption history locally`) is squash-merged as PR #120 /
+  `23b7b6d`. It adds Room schema version 11 with an append-only
+  `consumption_history` table keyed by the stable event ID, an idempotent DAO
+  insert plus bounded query and explicit future-prune method, and a narrow
+  repository boundary wired after the existing queue write. History is derived
+  convenience data: a history failure is ignored so it cannot roll back a
+  queued consumption, automatic pruning is intentionally absent, and no
+  backfill is performed. The exact post-merge `main` run
+  `32392860812` passed all six required jobs. The exact local unit/compile/lint/
+  debug gate passed; focused API-36 instrumentation passed 4/4 DAO tests and
+  10/10 migration tests. The isolated emulator upgrade readback moved
+  v1.4.4-local version 10 to version 11, preserved three legacy queued rows,
+  created no history rows during migration, and then recorded one post-upgrade
+  history row from the current app. The local test APK used the debug
+  certificate as a same-signer emulator substitute; this is not production
+  signing evidence. No physical phone or production data action was used.
+- B6 (`feat: add a today home-screen widget`) is in progress on
+  `agent/today-widget`. Its pure model computes today's local-date total, the
+  mean over observed prior days in a seven-day window when at least three days
+  are present, and the consecutive logged-day streak. The updater reads only a
+  roughly ten-day `consumptionHistorySince` Flow from the local history table;
+  pending entries therefore count immediately as local activity, without
+  analytics backfill or server-confirmation semantics. The device-local date
+  choice is documented above the query because the table's date was written by
+  `currentSubmissionDateTime`, not by an analytics snapshot timezone. The seven
+  requested model tests passed, and the exact local unit/compile/lint/debug gate
+  passed. An isolated, network-disabled API-36 AVD added the Today widget and
+  visibly rendered `No logs yet today`; its System UI became unresponsive during
+  the populated fixture attempt, so no populated screenshot is claimed. The
+  empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
+  AVD was deleted and ADB was disconnected afterward; no physical phone or
   production data action was used.
 
 ## v1.4.5 widget expansion (release candidate)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
-pen-widget expansion from A1 through A7. It remains a release candidate until
-the exact validated `main` SHA is tagged and the signed APK is independently
-verified.
+pen-widget expansion from A1 through A7. The owner authorized publication on
+2026-08-20, but the tag remains absent because the tag-triggered workflow at
+the validated commit `f32f7c0c96690c74288bf0428b946d74716a7e81` rejects a tag
+whose SHA is not the current `origin/main`; Release B currently makes that
+tip `23b7b6d9a0733193f8910d6280bfda213befcb01`. The exact historical Release A
+main run is `32362664715`; no signed APK or production installation has been
+performed.
 
 ### Shipped changes
 
