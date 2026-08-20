@@ -1,6 +1,6 @@
 # Latest handoff
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
@@ -24,6 +24,31 @@ refinements to the LocalLLM prewarm work.
      of loading the 2 GB model.
 3. **Version bump to 1.4.4 (versionCode 40)**
    - `versionCode` 39 → 40, `versionName` 1.4.3 → 1.4.4.
+
+### Release provenance
+
+- Merged pull requests: **#106** (`a8125a5`), **#107** (`ee1e6ab`).
+- Tagged commit **`ee1e6ab075ce056fff84cf226df6a51baaa21689`**, the tip of `main`.
+- Proven by push-to-main run **`32303352218`**, event `push`, conclusion `success`, with all
+  six required jobs individually `success`: `Classify changes and scan repository`,
+  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
+  `Cannsheet Android PR validation`.
+- `v1.4.4` is an **annotated** tag pointing at exactly that commit.
+- Release workflow **`32327408818`**: all three jobs (`Confirm tested main commit`,
+  `Verify and build signed APK`, `Publish verified Cannsheet APK`) succeeded.
+- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.4.apk`
+  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.4.apk.sha256`.
+- Published APK SHA-256:
+  `c8b8365ebbe7d38c0e587e0447d3e01e65731b0905c28806197317ec50a8e14a`, independently
+  downloaded and checked with `shasum -a 256 -c` against the published asset.
+- Signing certificate SHA-256:
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted directly
+  from the APK's v2 signing block (parsed by hand — no `apksigner` available in this
+  session's environment) and **identical to v1.4.1 through v1.4.3**, so Obtainium updates
+  in place.
+- Package, `versionCode`, and `versionName` were asserted by the release workflow's own
+  `Verify signed APK` step, not independently re-extracted here (no `aapt`/`apksigner` in
+  this session's environment).
 
 ## v1.4.3
 
@@ -167,6 +192,12 @@ feature visible while it works, without changing what the feature does.
 - The v1.4.2 scroll fix has not been observed on a device either. The defect it corrects
   *was* reported from the phone by the owner, so the bug is confirmed on hardware even
   though the fix is verified only by unit tests and CI.
+- **v1.4.3's warmup-binding adoption and v1.4.4's follow-up fixes are unverified on device.**
+  Holding the `warmup()` binding across the Insights screen lifecycle (v1.4.3), always
+  unbinding on close (v1.4.4), and gating the warmup on `shouldSummarise` (v1.4.4) are all
+  timing/lifecycle changes with no visible UI difference — verified only by unit tests, CI,
+  and (for v1.4.4) an independent re-download and signature check of the published
+  artefact. None has been observed running against LocalLLM on a physical phone.
 - No Apps Script deployment or live spreadsheet change was made in this cycle.
 
 ## Companion app
