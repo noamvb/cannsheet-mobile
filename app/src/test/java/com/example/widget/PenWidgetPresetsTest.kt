@@ -28,6 +28,14 @@ class PenWidgetPresetsTest {
     }
 
     @Test
+    fun fractionalSecondPresetsAreDroppedRatherThanFloored() {
+        assertEquals(
+            emptyList<Int>(),
+            penWidgetPresetSeconds(loaded(presetUses = listOf(0.19), rate = 10.0)),
+        )
+    }
+
+    @Test
     fun presetsAboveTheMaximumAreDropped() {
         assertEquals(
             listOf(MAX_SECONDS),

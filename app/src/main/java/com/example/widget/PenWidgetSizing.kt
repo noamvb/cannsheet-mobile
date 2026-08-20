@@ -20,6 +20,8 @@ data class PenWidgetTextSizes(
 data class PenWidgetLayoutSpec(
     val compact: Boolean,
     val textSizes: PenWidgetTextSizes,
+    /** Whether the full layout has enough vertical space for the preset row. */
+    val showPresets: Boolean = true,
 )
 
 /**
@@ -38,6 +40,9 @@ object PenWidgetSizing {
     /** Size at which text reaches its largest values; it does not grow past this. */
     const val FULL_SCALE_WIDTH_DP: Int = 280
     const val FULL_SCALE_HEIGHT_DP: Int = 320
+
+    /** The full layout must keep its 40dp counter and step controls usable too. */
+    const val PRESET_MIN_HEIGHT_DP: Int = 200
 
     private val compactSizes = PenWidgetTextSizes(
         nameSp = 13f,
@@ -89,13 +94,25 @@ object PenWidgetSizing {
         compactBreakpointHeightDp: Int,
     ): PenWidgetLayoutSpec {
         if (heightDp in 1 until compactBreakpointHeightDp) {
-            return PenWidgetLayoutSpec(compact = true, textSizes = compactSizes)
+            return PenWidgetLayoutSpec(
+                compact = true,
+                textSizes = compactSizes,
+                showPresets = false,
+            )
         }
+        val showPresets = heightDp <= 0 || heightDp >= PRESET_MIN_HEIGHT_DP
         val fraction = growthFraction(widthDp, heightDp)
-        if (fraction <= 0f) return base
+        if (fraction <= 0f) {
+            return PenWidgetLayoutSpec(
+                compact = false,
+                textSizes = baseSizes,
+                showPresets = showPresets,
+            )
+        }
         return PenWidgetLayoutSpec(
             compact = false,
             textSizes = interpolate(baseSizes, largestSizes, fraction),
+            showPresets = showPresets,
         )
     }
 

@@ -123,13 +123,18 @@ internal fun penWidgetPresetSeconds(state: PenQuickLogState.Loaded): List<Int> =
     state.secondsPerUse?.let { secondsPerUse ->
         state.presetUses
             .asSequence()
-            .map { usesToSeconds(it, secondsPerUse).toInt() }
-            .filter { it in 1..MAX_SECONDS }
+            .mapNotNull { usesToSeconds(it, secondsPerUse).toWholePresetSeconds() }
             .distinct()
             .sorted()
             .take(3)
             .toList()
     } ?: emptyList()
+
+private fun Double.toWholePresetSeconds(): Int? {
+    if (!isFinite()) return null
+    val seconds = toInt()
+    return seconds.takeIf { toDouble() == it.toDouble() && it in 1..MAX_SECONDS }
+}
 
 private fun buildSubtitle(
     state: PenQuickLogState.Loaded,

@@ -235,7 +235,7 @@ object PenWidgetRenderer {
         if (!compact) {
             setViewVisibility(
                 R.id.widget_pen_preset_row,
-                if (presetSeconds.isEmpty()) View.GONE else View.VISIBLE,
+                if (spec.showPresets && presetSeconds.isNotEmpty()) View.VISIBLE else View.GONE,
             )
         }
 
@@ -246,7 +246,7 @@ object PenWidgetRenderer {
         )
         presetIds.forEachIndexed { index, viewId ->
             val value = presetSeconds.getOrNull(index)
-            if (value == null || spec.compact) {
+            if (value == null || spec.compact || !spec.showPresets) {
                 setViewVisibility(viewId, View.GONE)
             } else {
                 setViewVisibility(viewId, View.VISIBLE)
