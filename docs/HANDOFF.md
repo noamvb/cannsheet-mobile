@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B8 in progress
+## Current widget expansion: A7 release candidate; B8 merged; B9 pending
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -95,13 +95,14 @@ production data action was used.
 A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
 The exact post-merge `main` run was `32362664715`, green on all six required
 jobs. Repository-owner authorization for publication was received on 2026-08-20,
-but no tag has been pushed: the release workflow present at the validated commit
-requires the tagged SHA to equal the current `origin/main` tip, while `main` has
-since advanced to Release B at `23b7b6d`. A historical-tag release path must be
-resolved before creating the public tag. No signed APK or production installation
-has been performed.
+but no tag has been pushed yet: the release workflow present at the validated
+commit requires the tagged SHA to equal the current `origin/main` tip, while
+`main` has since advanced to Release B at `a3e0ed2`. A dispatch-only historical
+release workflow is being added so the public tag can remain anchored to the
+exact Release A SHA. No signed APK or production installation has been
+performed.
 
-## Release B: B1-B7 merged; B8 in progress
+## Release B: B1-B8 merged; B9 pending
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -200,8 +201,8 @@ may display a cached projection only beside the snapshot's own as-of date and
 only when a snapshot exists. ADR-028 was already occupied, so the new decision
 is recorded as ADR-039.
 
-B8 (`feat: add runway and spend projection widgets`) is in progress on
-`agent/projection-widgets`. It adds one cache-only provider with per-instance
+B8 (`feat: add runway and spend projection widgets`) is squash-merged as PR #123 /
+`a3e0ed2`. It adds one cache-only provider with per-instance
 Runway or Spend mode, a launcher configuration activity, and API-24-safe
 `TextView` RemoteViews. It reads only the cached `InsightsResponseDto`, reuses
 the existing presentation builders, and displays the source snapshot's own
@@ -224,9 +225,10 @@ restored instances render; focused tests cover the cache-write callback and
 overlapping restore IDs. Evidence images are
 `docs/images/projection-widget-preview.png`,
 `docs/images/projection-widget-configure-spend.png`, and
-`docs/images/projection-widget-empty-light.png`.
+`docs/images/projection-widget-empty-light.png`. The exact post-merge `main`
+validation run `32418762081` passed all six required jobs; B9 has not started.
 
-## Current release: v1.4.5 (release candidate; publication workflow blocked)
+## Current release: v1.4.5 (release candidate; historical publication path in review)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
 pen-widget expansion from A1 through A7. The version-only change is merged on
@@ -234,10 +236,11 @@ pen-widget expansion from A1 through A7. The version-only change is merged on
 `f32f7c0c96690c74288bf0428b946d74716a7e81`, and owner authorization for
 publication was received on 2026-08-20. It is not tagged because the
 tag-triggered workflow at that commit requires the tagged SHA to equal the
-current `origin/main`, which has since advanced into Release B at `23b7b6d`.
-Do not push a known-failing historical tag. After the workflow owner resolves
-that historical-tag path, the release runbook must prove the exact tag with all
-six `Cannsheet PR checks` jobs, then independently verify the signed APK,
+current `origin/main`, which has since advanced into Release B at `a3e0ed2`.
+The new `.github/workflows/release-historical-apk.yml` path accepts the exact
+tag and target SHA, proves the target's six `Cannsheet PR checks` jobs, and
+builds from the historical source before publication. After that workflow PR
+merges, the release runbook must still independently verify the signed APK,
 checksum, package metadata, and signing-certificate continuity. No production
 installation has been performed.
 

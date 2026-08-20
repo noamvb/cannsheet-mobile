@@ -1669,3 +1669,41 @@ evidence when a suitable snapshot and deterministic host control are available.
 - `app/src/test/java/com/example/widget/projection/ProjectionUiModelTest.kt`
 - `app/src/test/java/com/example/widget/projection/ProjectionWidgetStateRepositoryTest.kt`
 - `app/src/test/java/com/example/data/AnalyticsDataTest.kt`
+
+## ADR-041: Publish historical release tags through an explicit target workflow
+
+### Context
+
+Release A version `v1.4.5` was validated at commit
+`f32f7c0c96690c74288bf0428b946d74716a7e81`, but `main` advanced into Release B
+before the owner authorized publication. The tag-triggered release workflow
+checked that its tagged commit was the current `origin/main` tip, so running it
+against the historical Release A tag would reject an otherwise correctly
+anchored release.
+
+### Decision
+
+Keep ordinary tag-triggered releases protected by the current-tip and exact-SHA
+validation gates. Add a separate manual workflow that accepts an immutable
+release tag and an explicit target commit, verifies that the tag resolves to
+that commit, proves the target's six successful `main` validation jobs, checks
+version monotonicity and signing secrets, builds from the target source, and
+performs the same two-asset publication and post-publication checks. The
+workflow source is taken from the current branch, while the application source
+is checked out at the requested historical commit.
+
+### Consequences
+
+Release A can be published without moving `v1.4.5` to a later Release B commit.
+The tag-triggered workflow from the historical commit may still start and
+reject the current-tip comparison; the manual target workflow is the authorized
+publication path and its successful post-publication verification is the
+release evidence. No application data, endpoint, package identity, or signing
+configuration is changed by the path.
+
+### Related files
+
+- `.github/workflows/release-apk.yml`
+- `.github/workflows/release-historical-apk.yml`
+- `docs/PROJECT_STATE.md`
+- `docs/HANDOFF.md`
