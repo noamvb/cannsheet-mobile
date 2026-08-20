@@ -7,8 +7,9 @@ Last updated: 2026-08-20
 - Canonical branch: `main`
 - Latest published application release source commit
   `f32f7c0c96690c74288bf0428b946d74716a7e81` (v1.4.5)
-- Current release metadata in `app/build.gradle.kts`: version name `1.4.5`,
-  version code `41` (published; B9 is the next version-only change).
+- Current release metadata in `app/build.gradle.kts`: version name `1.5.0`,
+  version code `42` (release candidate; v1.4.5 remains the latest published
+  release until the B9 runbook completes).
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -153,7 +154,7 @@ Last updated: 2026-08-20
   correctly stopped at its obsolete current-tip guard before building or
   publishing. No physical phone or production data action was used.
 
-## Release B widget surfaces (B1-B8 merged; B9 pending)
+## Release B widget surfaces (B1-B8 merged; B9 release candidate)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -276,8 +277,15 @@ Last updated: 2026-08-20
   `docs/images/projection-widget-preview.png`,
   `docs/images/projection-widget-configure-spend.png`, and
   `docs/images/projection-widget-empty-light.png`. Its exact post-merge `main`
-  validation run `32418762081` passed all six required jobs; no B9 version bump
-  has started.
+  validation run `32418762081` passed all six required jobs; the B9 version-only
+  candidate is recorded below.
+
+- B9 (`chore: bump version to 1.5.0`) is the version-only release candidate
+  following B1-B8. It changes `versionCode 41` → `42` and `versionName 1.4.5`
+  → `1.5.0`; the four widget providers, launcher shortcuts, Quick Settings
+  tile, Room schema, and service boundaries are documented above and in
+  `docs/ARCHITECTURE.md`. The B9 PR and exact post-merge `main` validation are
+  still pending; no `v1.5.0` tag or public release exists.
 
 ## v1.4.5 widget expansion (published)
 
@@ -305,6 +313,29 @@ Signature Scheme v2 and certificate SHA-256
 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, matching
 the independently downloaded `v1.4.4` APK. No phone installation was
 performed; the owner should update through Obtainium.
+
+## v1.5.0 widget surfaces (release candidate)
+
+`v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only release
+candidate after all Release B implementation PRs have merged. It packages:
+
+1. **Launcher and Quick Settings entry points** (PRs #116–#117)
+   - Static Log, Purchase, and Insights shortcuts preserve the existing route
+     extra; the pen tile reuses the shared preset, undo, durable queue, and
+     sync path without changing the wire contract.
+2. **Four new home-screen widget providers** (PRs #118–#119, #121, #123)
+   - Sync status reads aggregate queue health; multi-cart presents up to four
+     configured cart actions; Today reads local consumption history; and the
+     projection widget reads only a cached Insights snapshot with an adjacent
+     as-of date.
+3. **Local history durability** (PR #120)
+   - Room schema version 11 adds the append-only `consumption_history` table
+     keyed by stable event ID, with idempotent insert and bounded reads. It does
+     not alter queue acknowledgement, backend, or spreadsheet contracts.
+4. **Version metadata**
+   - `versionCode` 41 → 42 and `versionName` 1.4.5 → 1.5.0.
+
+The latest published release remains [v1.4.5](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.4.5); the `v1.5.0` tag and signed public release will be created only after the exact B9 `main` validation gate succeeds.
 
 ### Shipped changes
 

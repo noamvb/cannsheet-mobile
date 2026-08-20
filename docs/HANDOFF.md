@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 published; B8 merged; B9 pending
+## Current widget expansion: A7 published; B8 merged; B9 release candidate
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -102,7 +102,7 @@ stopped before building because its historical current-tip guard correctly
 rejected `main` at `4f7ca511`. No phone installation or production data action
 was used.
 
-## Release B: B1-B8 merged; B9 pending
+## Release B: B1-B8 merged; B9 release candidate
 
 B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
 squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
@@ -226,9 +226,26 @@ overlapping restore IDs. Evidence images are
 `docs/images/projection-widget-preview.png`,
 `docs/images/projection-widget-configure-spend.png`, and
 `docs/images/projection-widget-empty-light.png`. The exact post-merge `main`
-validation run `32418762081` passed all six required jobs; B9 has not started.
+validation run `32418762081` passed all six required jobs; the B9 version-only
+candidate is recorded below.
 
-## Current release: v1.4.5 (published and independently verified)
+B9 (`chore: bump version to 1.5.0`) is the version-only release candidate after
+B1-B8. It changes `versionCode 41` to `42` and `versionName 1.4.5` to `1.5.0`;
+the exact PR and post-merge `main` gates are still pending. No `v1.5.0` tag or
+public release exists. The implementation boundaries for the shortcuts, tile,
+four widget providers, local history table, and historical projection cache are
+documented in `docs/ARCHITECTURE.md`.
+
+## Current release: v1.5.0 (release candidate; v1.4.5 latest published)
+
+`v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only candidate
+after all Release B implementation PRs merged. It packages the launcher
+shortcuts, Quick Settings pen tile, sync-status, multi-cart, Today, and
+runway/spend projection widgets, plus the local `consumption_history` table.
+The candidate has not been tagged or published; the exact B9 `main` validation
+gate must pass before the release runbook is run.
+
+## v1.4.5 (published and independently verified)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
 pen-widget expansion from A1 through A7. The version-only change is merged on
