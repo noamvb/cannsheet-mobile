@@ -145,13 +145,14 @@ Last updated: 2026-08-20
   It is the version-only change for `versionCode 41` and `versionName 1.4.5`;
   the exact post-merge `main` run [32362664715](https://github.com/noamvb/cannsheet-mobile/actions/runs/32362664715)
   passed all six required jobs. Repository-owner authorization for publication
-  was received on 2026-08-20, but no tag has been pushed: the release workflow
-  present at this validated commit requires the tagged SHA to equal the current
-  `origin/main` tip, while `origin/main` has since advanced to Release B
-  (`23b7b6d`). A historical-tag release path must be resolved before creating
-  the public tag; no signed APK or production installation has been performed.
+  was received on 2026-08-20, but no tag has been pushed yet: the release
+  workflow present at this validated commit requires the tagged SHA to equal the
+  current `origin/main` tip, while `origin/main` has since advanced to Release B
+  (`a3e0ed2`). A separate dispatch-only historical release workflow is being
+  added so this exact tag can be published without moving it to Release B; no
+  signed APK or production installation has been performed.
 
-## Release B widget surfaces (B1-B7 merged; B8 in progress)
+## Release B widget surfaces (B1-B8 merged; B9 pending)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -251,8 +252,8 @@ Last updated: 2026-08-20
   snapshot's own as-of date and only when a snapshot exists. ADR-028 was
   already occupied, so the new decision is recorded as ADR-039. The exact
   post-merge `main` run `32409174518` passed all six required jobs.
-- B8 (`feat: add runway and spend projection widgets`) is in progress on
-  `agent/projection-widgets`. It adds one cache-only projection provider with
+- B8 (`feat: add runway and spend projection widgets`) is squash-merged as PR
+  #123 / `a3e0ed2`. It adds one cache-only projection provider with
   per-instance Runway or Spend mode, a launcher configuration activity, and
   API-24-safe `TextView` RemoteViews. The provider reads only the cached
   `InsightsResponseDto`, uses the existing presentation builders, and places
@@ -273,7 +274,9 @@ Last updated: 2026-08-20
   restore IDs. Evidence images are
   `docs/images/projection-widget-preview.png`,
   `docs/images/projection-widget-configure-spend.png`, and
-  `docs/images/projection-widget-empty-light.png`.
+  `docs/images/projection-widget-empty-light.png`. Its exact post-merge `main`
+  validation run `32418762081` passed all six required jobs; no B9 version bump
+  has started.
 
 ## v1.4.5 widget expansion (release candidate)
 
@@ -282,9 +285,11 @@ pen-widget expansion from A1 through A7. The owner authorized publication on
 2026-08-20, but the tag remains absent because the tag-triggered workflow at
 the validated commit `f32f7c0c96690c74288bf0428b946d74716a7e81` rejects a tag
 whose SHA is not the current `origin/main`; Release B currently makes that
-tip `23b7b6d9a0733193f8910d6280bfda213befcb01`. The exact historical Release A
-main run is `32362664715`; no signed APK or production installation has been
-performed.
+tip `a3e0ed27b2ccc8fd30dca6ada0d040dc9cacd7da`. The new
+`.github/workflows/release-historical-apk.yml` dispatch path will validate and
+publish the historical tag from the current workflow source while rebuilding
+from the exact Release A SHA. The exact historical Release A main run is
+`32362664715`; no signed APK or production installation has been performed.
 
 ### Shipped changes
 
