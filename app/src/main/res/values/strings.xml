@@ -1,5 +1,11 @@
 <resources>
     <string name="app_name">Cannsheet Mobile</string>
+    <string name="shortcut_log_short">Log</string>
+    <string name="shortcut_log_long">Log pen consumption</string>
+    <string name="shortcut_purchase_short">Purchase</string>
+    <string name="shortcut_purchase_long">Record a purchase</string>
+    <string name="shortcut_insights_short">Insights</string>
+    <string name="shortcut_insights_long">Open insights</string>
     <string name="queue_alert_channel_name">Sync alerts</string>
     <string name="queue_alert_channel_description">Tells you when logged entries stop reaching the sheet.</string>
     <string name="queue_alert_stuck_title">Entries are waiting to sync</string>

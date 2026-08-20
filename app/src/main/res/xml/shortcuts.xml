@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="log_pen"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_log"
+        android:shortcutShortLabel="@string/shortcut_log_short"
+        android:shortcutLongLabel="@string/shortcut_log_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noamv.cannsheet.mobile"
+            android:targetClass="com.example.MainActivity">
+            <extra
+                android:name="com.noamv.cannsheet.mobile.widget.START_ROUTE"
+                android:value="consumption" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="new_purchase"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_purchase"
+        android:shortcutShortLabel="@string/shortcut_purchase_short"
+        android:shortcutLongLabel="@string/shortcut_purchase_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noamv.cannsheet.mobile"
+            android:targetClass="com.example.MainActivity">
+            <extra
+                android:name="com.noamv.cannsheet.mobile.widget.START_ROUTE"
+                android:value="purchase" />
+        </intent>
+    </shortcut>
+    <shortcut
+        android:shortcutId="insights"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_insights"
+        android:shortcutShortLabel="@string/shortcut_insights_short"
+        android:shortcutLongLabel="@string/shortcut_insights_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.noamv.cannsheet.mobile"
+            android:targetClass="com.example.MainActivity">
+            <extra
+                android:name="com.noamv.cannsheet.mobile.widget.START_ROUTE"
+                android:value="insights" />
+        </intent>
+    </shortcut>
+</shortcuts>
