@@ -4,7 +4,7 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Current widget expansion: A7 release candidate; B8 merged; B9 pending
+## Current widget expansion: A7 published; B8 merged; B9 pending
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
 `main` as `847b184`; no version metadata or published APK changed. Its full-widget
@@ -94,13 +94,13 @@ production data action was used.
 
 A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
 The exact post-merge `main` run was `32362664715`, green on all six required
-jobs. Repository-owner authorization for publication was received on 2026-08-20,
-but no tag has been pushed yet: the release workflow present at the validated
-commit requires the tagged SHA to equal the current `origin/main` tip, while
-`main` has since advanced to Release B at `a3e0ed2`. A dispatch-only historical
-release workflow is being added so the public tag can remain anchored to the
-exact Release A SHA. No signed APK or production installation has been
-performed.
+jobs. The annotated tag `v1.4.5` resolves to the exact Release A SHA
+`f32f7c0c96690c74288bf0428b946d74716a7e81`. Historical publication workflow
+run `32420347803` passed exact-target validation, signed build, publication,
+and post-publication verification. The legacy tag-triggered run `32420325645`
+stopped before building because its historical current-tip guard correctly
+rejected `main` at `4f7ca511`. No phone installation or production data action
+was used.
 
 ## Release B: B1-B8 merged; B9 pending
 
@@ -228,21 +228,27 @@ overlapping restore IDs. Evidence images are
 `docs/images/projection-widget-empty-light.png`. The exact post-merge `main`
 validation run `32418762081` passed all six required jobs; B9 has not started.
 
-## Current release: v1.4.5 (release candidate; historical publication path in review)
+## Current release: v1.4.5 (published and independently verified)
 
 `v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
 pen-widget expansion from A1 through A7. The version-only change is merged on
 `main` at the exact requested Release A commit
 `f32f7c0c96690c74288bf0428b946d74716a7e81`, and owner authorization for
-publication was received on 2026-08-20. It is not tagged because the
-tag-triggered workflow at that commit requires the tagged SHA to equal the
-current `origin/main`, which has since advanced into Release B at `a3e0ed2`.
-The new `.github/workflows/release-historical-apk.yml` path accepts the exact
-tag and target SHA, proves the target's six `Cannsheet PR checks` jobs, and
-builds from the historical source before publication. After that workflow PR
-merges, the release runbook must still independently verify the signed APK,
-checksum, package metadata, and signing-certificate continuity. No production
-installation has been performed.
+publication was received on 2026-08-20. The annotated tag remains anchored to
+the exact Release A commit
+`f32f7c0c96690c74288bf0428b946d74716a7e81`, rather than the later Release B
+tip. The public release is [Cannsheet Mobile v1.4.5](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.4.5)
+and contains exactly the APK and `.sha256` assets. Historical workflow
+`32420347803` completed the signed build and post-publication checks.
+
+Independent download verification passed: APK SHA-256
+`c368876603a2b0ed4d92da60e51157c15e23248f47fca9e399fd90815c669d16`;
+package `com.noamv.cannsheet.mobile`; version code `41`; version name `1.4.5`;
+min SDK `24`; target SDK `36`; APK Signature Scheme v2 true; and certificate
+SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`,
+matching `v1.4.4`. No production installation was performed. The owner should
+open Obtainium, refresh or tap **Check for updates**, and install Cannsheet
+Mobile 1.4.5.
 
 ### Shipped changes
 
