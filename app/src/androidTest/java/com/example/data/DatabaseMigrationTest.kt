@@ -1,11 +1,13 @@
 package com.example.data
 
 import android.content.Context
+import androidx.room.Room
 import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.sqlite.db.SupportSQLiteOpenHelper
 import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -590,6 +592,296 @@ class DatabaseMigrationTest {
             assertEquals(0.5, cursor.getDouble(0), 0.0)
         }
         version10.close()
+    }
+
+    @Test
+    fun migrationFrom10To11ProducesASchemaRoomAccepts() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version10 = factory.create(
+            configuration(10, object : SupportSQLiteOpenHelper.Callback(10) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    this@DatabaseMigrationTest.createVersion10Schema(db)
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+            }),
+        )
+        version10.writableDatabase
+        version10.close()
+
+        val sampleEntry = ConsumptionHistoryEntry(
+            eventId = "history-event-1",
+            date = "2026-08-20",
+            time = "10:00",
+            productId = "p1",
+            productUuid = "uuid-p1",
+            uses = 0.5,
+            isFinished = false,
+            loggedAtEpochMillis = 123456L,
+        )
+        val database = Room.databaseBuilder(
+            context,
+            AppDatabase::class.java,
+            databaseName,
+        ).addMigrations(AppDatabase.MIGRATION_10_11).build()
+
+        try {
+            runBlocking {
+                database.cannsheetDao().insertConsumptionHistory(sampleEntry)
+            }
+        } finally {
+            database.close()
+        }
+    }
+
+    @Test
+    fun migrationFrom10To11PreservesProductsAndQueuedActions() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version10 = factory.create(
+            configuration(10, object : SupportSQLiteOpenHelper.Callback(10) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    this@DatabaseMigrationTest.createVersion10Schema(db)
+                    db.execSQL(
+                        "INSERT INTO products VALUES " +
+                            "('p1', 'Keep me', 'F', 0, 10.0, 0.2, 3.5, 'uuid-p1', NULL)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO purchase_actions VALUES " +
+                            "('temp-1', 'purchase-1', '2026-08-20', 'F', 'Keep me', " +
+                            "12.5, 0.2, 3.5, 0, 0, 'uuid-p1')",
+                    )
+                    db.execSQL(
+                        "INSERT INTO consumption_actions " +
+                            "(eventId, date, time, productId, uses, isFinished, productUuid) VALUES " +
+                            "('event-1', '2026-08-20', '12:00', 'p1', 0.5, 0, 'uuid-p1')",
+                    )
+                    db.execSQL(
+                        "INSERT INTO finish_actions VALUES " +
+                            "('finish-1', '2026-08-20', '13:00', 'p1', 'uuid-p1')",
+                    )
+                    db.execSQL(
+                        """
+                        INSERT INTO pending_consumption_corrections (
+                            targetEventId,
+                            actionId,
+                            expectedCorrectionHeadId,
+                            operation,
+                            reopenProduct,
+                            reason,
+                            replacementDate,
+                            replacementTime,
+                            replacementProductUuid,
+                            replacementProductId,
+                            replacementUses,
+                            replacementWeightCode,
+                            replacementFinished
+                        ) VALUES (
+                            'target-1',
+                            'correction-1',
+                            '',
+                            'REPLACE',
+                            0,
+                            'Migration test',
+                            '2026-08-20',
+                            '12:30',
+                            'uuid-p1',
+                            'p1',
+                            0.5,
+                            '',
+                            0
+                        )
+                        """.trimIndent(),
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+            }),
+        )
+        version10.writableDatabase
+        version10.close()
+
+        val version11 = factory.create(
+            configuration(11, object : SupportSQLiteOpenHelper.Callback(11) {
+                override fun onCreate(db: SupportSQLiteDatabase) = Unit
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {
+                    AppDatabase.MIGRATION_10_11.migrate(db)
+                }
+            }),
+        )
+        val migrated = version11.writableDatabase
+
+        migrated.query("SELECT name, totalUses FROM products WHERE id = 'p1'").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("Keep me", cursor.getString(0))
+            assertNull(cursor.getString(1))
+        }
+        migrated.query(
+            "SELECT actionId, name FROM purchase_actions WHERE tempId = 'temp-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("purchase-1", cursor.getString(0))
+            assertEquals("Keep me", cursor.getString(1))
+        }
+        migrated.query(
+            "SELECT eventId, uses FROM consumption_actions WHERE eventId = 'event-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("event-1", cursor.getString(0))
+            assertEquals(0.5, cursor.getDouble(1), 0.0)
+        }
+        migrated.query(
+            "SELECT actionId, productId FROM finish_actions WHERE actionId = 'finish-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("finish-1", cursor.getString(0))
+            assertEquals("p1", cursor.getString(1))
+        }
+        migrated.query(
+            "SELECT actionId, operation " +
+                "FROM pending_consumption_corrections " +
+                "WHERE targetEventId = 'target-1'",
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("correction-1", cursor.getString(0))
+            assertEquals("REPLACE", cursor.getString(1))
+        }
+        migrated.query("SELECT COUNT(*) FROM consumption_history").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals(0, cursor.getInt(0))
+        }
+        version11.close()
+    }
+
+    private fun createVersion10Schema(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE products (
+                id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                type TEXT NOT NULL,
+                status INTEGER NOT NULL,
+                cost REAL NOT NULL,
+                thc REAL NOT NULL,
+                grams REAL NOT NULL,
+                productUuid TEXT,
+                totalUses REAL,
+                PRIMARY KEY(id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE purchase_actions (
+                tempId TEXT NOT NULL,
+                actionId TEXT NOT NULL,
+                date TEXT NOT NULL,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                cost REAL,
+                thc REAL,
+                grams REAL,
+                borrowed INTEGER NOT NULL,
+                postTax INTEGER NOT NULL,
+                productUuid TEXT,
+                PRIMARY KEY(tempId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE consumption_actions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                eventId TEXT NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                productId TEXT NOT NULL,
+                uses REAL NOT NULL,
+                isFinished INTEGER NOT NULL,
+                productUuid TEXT
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE finish_actions (
+                actionId TEXT NOT NULL,
+                date TEXT NOT NULL,
+                time TEXT NOT NULL,
+                productId TEXT NOT NULL,
+                productUuid TEXT,
+                PRIMARY KEY(actionId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE pending_consumption_corrections (
+                targetEventId TEXT NOT NULL,
+                actionId TEXT NOT NULL,
+                expectedCorrectionHeadId TEXT NOT NULL,
+                operation TEXT NOT NULL,
+                reopenProduct INTEGER NOT NULL,
+                reason TEXT,
+                replacementDate TEXT,
+                replacementTime TEXT,
+                replacementProductUuid TEXT,
+                replacementProductId TEXT,
+                replacementUses REAL,
+                replacementWeightCode TEXT,
+                replacementFinished INTEGER,
+                PRIMARY KEY(targetEventId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE product_interactions (
+                productId TEXT NOT NULL,
+                lastLoggedAtEpochMillis INTEGER NOT NULL,
+                lastQuantity REAL NOT NULL,
+                PRIMARY KEY(productId)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE sync_request_state (
+                id INTEGER NOT NULL,
+                requestId TEXT NOT NULL,
+                createdAtEpochMillis INTEGER NOT NULL,
+                payloadFingerprint TEXT NOT NULL,
+                PRIMARY KEY(id)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            """
+            CREATE TABLE analytics_cache (
+                environment TEXT NOT NULL,
+                resource TEXT NOT NULL,
+                analyticsVersion INTEGER NOT NULL,
+                requestJson TEXT NOT NULL,
+                payloadJson TEXT NOT NULL,
+                sourceDataVersion TEXT NOT NULL,
+                generatedAtEpochMillis INTEGER NOT NULL,
+                cachedAtEpochMillis INTEGER NOT NULL,
+                PRIMARY KEY(environment, resource)
+            )
+            """.trimIndent(),
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX index_purchase_actions_actionId " +
+                "ON purchase_actions (actionId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX index_consumption_actions_eventId " +
+                "ON consumption_actions (eventId)",
+        )
+        db.execSQL(
+            "CREATE UNIQUE INDEX index_pending_consumption_corrections_actionId " +
+                "ON pending_consumption_corrections (actionId)",
+        )
     }
 
     private fun configuration(

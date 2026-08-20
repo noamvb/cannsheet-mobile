@@ -63,6 +63,21 @@ data class ConsumptionAction(
     val productUuid: String? = null,
 )
 
+@Entity(
+    tableName = "consumption_history",
+    indices = [Index(value = ["eventId"], unique = true), Index(value = ["loggedAtEpochMillis"])],
+)
+data class ConsumptionHistoryEntry(
+    @PrimaryKey val eventId: String,
+    val date: String,
+    val time: String,
+    val productId: String,
+    val productUuid: String?,
+    val uses: Double,
+    val isFinished: Boolean,
+    val loggedAtEpochMillis: Long,
+)
+
 @Entity(tableName = "finish_actions")
 data class FinishAction(
     @PrimaryKey val actionId: String,
@@ -177,6 +192,19 @@ interface CannsheetDao {
 
     @Query("DELETE FROM consumption_actions WHERE eventId IN (:eventIds)")
     suspend fun deleteConsumptionsByEventIds(eventIds: List<String>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertConsumptionHistory(entry: ConsumptionHistoryEntry)
+
+    @Query(
+        "SELECT * FROM consumption_history " +
+            "WHERE loggedAtEpochMillis >= :fromEpochMillis " +
+            "ORDER BY loggedAtEpochMillis DESC",
+    )
+    fun consumptionHistorySince(fromEpochMillis: Long): Flow<List<ConsumptionHistoryEntry>>
+
+    @Query("DELETE FROM consumption_history WHERE loggedAtEpochMillis < :beforeEpochMillis")
+    suspend fun pruneConsumptionHistoryBefore(beforeEpochMillis: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFinishAction(action: FinishAction)
@@ -375,13 +403,14 @@ interface CannsheetDao {
         Product::class,
         PurchaseAction::class,
         ConsumptionAction::class,
+        ConsumptionHistoryEntry::class,
         FinishAction::class,
         PendingConsumptionCorrection::class,
         ProductInteraction::class,
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = false,
 )
 @TypeConverters(CannsheetTypeConverters::class)
@@ -596,6 +625,34 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_9_10: Migration = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `products` ADD COLUMN `totalUses` REAL")
+            }
+        }
+
+        val MIGRATION_10_11: Migration = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `consumption_history` (
+                        `eventId` TEXT NOT NULL,
+                        `date` TEXT NOT NULL,
+                        `time` TEXT NOT NULL,
+                        `productId` TEXT NOT NULL,
+                        `productUuid` TEXT,
+                        `uses` REAL NOT NULL,
+                        `isFinished` INTEGER NOT NULL,
+                        `loggedAtEpochMillis` INTEGER NOT NULL,
+                        PRIMARY KEY(`eventId`)
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_consumption_history_eventId` " +
+                        "ON `consumption_history` (`eventId`)",
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_consumption_history_loggedAtEpochMillis` " +
+                        "ON `consumption_history` (`loggedAtEpochMillis`)",
+                )
             }
         }
     }

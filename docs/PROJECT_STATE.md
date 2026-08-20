@@ -148,7 +148,7 @@ Last updated: 2026-08-20
   pending explicit repository-owner approval under the release runbook; no tag,
   signed APK, or production installation has been performed.
 
-## Release B widget surfaces (B1-B3 merged; B4 in progress)
+## Release B widget surfaces (B1-B4 merged; B5 in progress)
 
 - B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
   squash-merged as PR #116 / `419d506`. Static launcher shortcuts route to the
@@ -186,27 +186,43 @@ Last updated: 2026-08-20
   package ID, or version metadata are changed. No physical phone or production
   data action was used. The exact post-merge `main` run [32379701895](https://github.com/noamvb/cannsheet-mobile/actions/runs/32379701895)
   passed all six required jobs.
-- B4 (`feat: add a multi-cart quick log widget`) is in progress on
-  `agent/multi-cart-widget`. It offers up to four fixed buttons for selectable
-  pen carts, orders them by recent interaction, shows an overflow link when
-  renderable carts exceed the fixed surface, and suppresses the grid for the
-  shared durable undo state. Each button captures that cart's first effective
-  preset, converts display seconds with `secondsToUses` before Room/queue
-  logging, and leaves the loaded-cart preference unchanged. The updater routes
-  multi-cart IDs through the shared `PenWidgetRuntime` commit callback so a
-  deferred commit cannot repaint the instance with the single-cart layout.
-  The focused JVM model suite passed 7/7 and the exact local Android gate passed
-  with JDK 17.0.20, Gradle 9.3.1, Android Platform 36.1, and Build Tools
-  36.0.0. API-36 emulator evidence observed two distinct cart rows with
-  `0.5` uses each, correct product UUIDs, unchanged loaded preference `*P104`,
-  light/dark rendering, launcher restart persistence, and horizontal resize
-  behavior. Screenshots are `docs/images/multi-cart-widget-grid.png`,
+- B4 (`feat: add a multi-cart quick log widget`) is squash-merged as PR #119 /
+  `f5109b7`. It offers up to four fixed buttons for selectable pen carts, orders
+  them by recent interaction, shows an overflow link when renderable carts exceed
+  the fixed surface, and suppresses the grid for the shared durable undo state.
+  Each button captures that cart's first effective preset, converts display
+  seconds with `secondsToUses` before Room/queue logging, and leaves the
+  loaded-cart preference unchanged. The updater routes multi-cart IDs through
+  the shared `PenWidgetRuntime` commit callback so a deferred commit cannot
+  repaint the instance with the single-cart layout. Its focused JVM model suite
+  passed 7/7 and the exact local Android gate passed with JDK 17.0.20, Gradle
+  9.3.1, Android Platform 36.1, and Build Tools 36.0.0. API-36 emulator
+  evidence observed two distinct cart rows with `0.5` uses each, correct
+  product UUIDs, unchanged loaded preference `*P104`, light/dark rendering,
+  launcher restart persistence, and horizontal resize behavior. Screenshots are
+  `docs/images/multi-cart-widget-grid.png`,
   `docs/images/multi-cart-widget-grid-light.png`, and
   `docs/images/multi-cart-widget-undo.png`. The emulator network remained
   disabled; exact fixture rows were removed afterward. The launcher test
   instance remains on the isolated emulator because its shell offers no
   deterministic widget-delete operation; no physical phone or production data
-  action was used.
+  action was used. The exact post-merge `main` run `32386087534` passed all six
+  required jobs after the hosted API-24 installation timeout was rerun.
+- B5 (`feat: record consumption history locally`) is in progress on
+  `agent/local-consumption-history`. It adds Room schema version 11 with an
+  append-only `consumption_history` table keyed by the stable event ID, an
+  idempotent DAO insert plus bounded query and explicit future-prune method, and
+  a narrow repository boundary wired after the existing queue write. History is
+  derived convenience data: a history failure is ignored so it cannot roll back
+  a queued consumption, automatic pruning is intentionally absent, and no
+  backfill is performed. The exact local unit/compile/lint/debug gate passed;
+  focused API-36 instrumentation passed 4/4 DAO tests and 10/10 migration tests.
+  The isolated emulator upgrade readback moved v1.4.4-local version 10 to
+  version 11, preserved three legacy queued rows, created no history rows during
+  migration, and then recorded one post-upgrade history row from the current
+  app. The local test APK used the debug certificate as a same-signer emulator
+  substitute; this is not production signing evidence. No physical phone or
+  production data action was used.
 
 ## v1.4.5 widget expansion (release candidate)
 

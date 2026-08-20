@@ -1501,3 +1501,34 @@ added to queue-alert notification paths.
   `app/src/main/res/xml/multi_cart_widget_info.xml`,
   `app/src/main/res/xml-v31/multi_cart_widget_info.xml`,
   `app/src/test/java/com/example/widget/multi/MultiCartUiModelTest.kt`
+
+## ADR-037: Keep local consumption history separate from the sync queue
+
+- Status: Accepted
+- Date: 2026-08-20
+- Context: Consumption queue rows are intentionally deleted after server
+  acknowledgement, but upcoming local widgets need a durable record of what was
+  logged. The record must not change the existing queue or wire contract and
+  must not make a derived convenience write capable of losing a user action.
+- Decision: Add Room schema version 11 with an append-only
+  `consumption_history` table keyed by the stable `eventId`. Insert the history
+  row immediately after the existing queue write through a narrow
+  `ConsumptionHistoryRecorder` boundary. Use `OnConflictStrategy.IGNORE` so a
+  replay cannot overwrite the original timestamp, and keep timestamp-bounded
+  reads plus an explicit prune DAO method available for a future separately
+  reviewed destructive action. Do not backfill from analytics or automatically
+  prune in this change. Catch non-cancellation history failures without rolling
+  back the queue write; cancellation still propagates normally.
+- Consequences: Every current consumption entry point that reaches
+  `ConsumptionLogger` gets a local history row without adding fields to
+  `ConsumptionAction`, sync payloads, Apps Script, or Sheets. A history insert
+  can be absent if the derived write fails, but the queued action remains the
+  source of truth for synchronization. Existing products and all queued action
+  rows survive the 10-to-11 migration, and a real Room-open validation test plus
+  in-memory DAO tests cover the schema and idempotency boundaries.
+- Related files: `app/src/main/java/com/example/data/Database.kt`,
+  `app/src/main/java/com/example/data/CannsheetGraph.kt`,
+  `app/src/main/java/com/example/data/ConsumptionLogger.kt`,
+  `app/src/main/java/com/example/data/Repository.kt`,
+  `app/src/androidTest/java/com/example/data/DatabaseMigrationTest.kt`,
+  `app/src/androidTest/java/com/example/data/ConsumptionHistoryDaoTest.kt`
