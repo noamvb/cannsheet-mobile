@@ -122,7 +122,7 @@ class PenWidgetCommitCoordinator(
                 stateRepository = PenWidgetStateRepository(appContext),
                 consumptionLogger = graph.consumptionLogger,
                 enqueueSync = SyncScheduler::enqueueImmediate,
-                updateWidget = PenWidgetUpdater::update,
+                updateWidget = PenWidgetSurfaceRouter::refresh,
             )
         }
     }

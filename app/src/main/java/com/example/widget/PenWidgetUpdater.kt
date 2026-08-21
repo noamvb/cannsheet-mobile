@@ -7,7 +7,6 @@ import android.os.Build
 import android.util.SizeF
 import android.widget.RemoteViews
 import com.example.R
-import com.example.widget.multi.MultiCartUpdater
 
 object PenWidgetUpdater {
     /** Safe to call from any app path; users without widget instances pay no update cost. */
@@ -28,14 +27,6 @@ object PenWidgetUpdater {
     suspend fun update(context: Context, appWidgetId: Int) {
         if (appWidgetId < 0) return
         val appContext = context.applicationContext
-        if (MultiCartUpdater.ownsAppWidgetId(appContext, appWidgetId)) {
-            MultiCartUpdater.update(appContext, appWidgetId)
-            return
-        }
-        if (appWidgetId == PEN_TILE_WIDGET_ID) {
-            PenQuickTileService.requestRefresh(context)
-            return
-        }
         val repository = PenWidgetStateRepository(appContext)
         val configRepository = PenWidgetConfigRepository(appContext)
         val config = configRepository.read(appWidgetId)
