@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 ## Repository state
 
@@ -58,6 +58,26 @@ Last updated: 2026-08-20
 - Performance optimization feature [PR #83](https://github.com/noamvb/cannsheet-mobile/pull/83)
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
+
+## Runway same-size capacity correction (unreleased)
+
+- Runway capacity now prefers at least three finished products with the same
+  normalized type and canonical gram amount as the active product. Different
+  sizes cannot affect that exact cohort's median. When the exact cohort is too
+  small, the existing same-type grams-adjusted evidence remains the fallback,
+  followed by the same-type per-product median when gram data is unavailable.
+- The presentation names whether its evidence is exact-size, grams-adjusted, or
+  per-product and reports the selected basis's actual finished-product count.
+- Remaining recorded uses and days remaining are no longer all-or-nothing. A
+  fresh trusted snapshot can show the capacity comparison immediately,
+  including for an active product with zero recorded uses; a days estimate is
+  added only after positive selected-range use and seven effective calendar
+  days. Capacity-only states explain the missing pace instead of collapsing to
+  the generic no-reliable-estimate diagnostic.
+- The existing in-app freshness and zero-pending-action gates remain unchanged.
+  The change is presentation-only and adds no Room migration, analytics or
+  queue field, cache schema, Apps Script/backend behavior, spreadsheet write,
+  endpoint, package ID, or stored/transmitted unit.
 
 ## Pen widget expansion (A1-A7 published in v1.4.5)
 

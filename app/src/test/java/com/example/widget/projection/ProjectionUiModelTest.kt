@@ -45,6 +45,36 @@ class ProjectionUiModelTest {
     }
 
     @Test
+    fun runwayModeShowsCapacityWithoutInventingAPaceForABrandNewProduct() {
+        val source = snapshot()
+        val active = source.products.first()
+        val brandNew = active.copy(
+            allTime = active.allTime.copy(
+                logCount = 0,
+                quantity = 0.0,
+                activeDayCount = 0,
+                firstLogAtEpochMillis = null,
+                lastLogAtEpochMillis = null,
+            ),
+            range = active.range.copy(
+                logCount = 0,
+                quantity = 0.0,
+                activeDayCount = 0,
+            ),
+        )
+        val model = buildProjectionUiModel(
+            source.copy(products = listOf(brandNew) + source.products.drop(1)),
+            ProjectionMode.RUNWAY,
+        ) as ProjectionUiModel.Ready
+        val text = model.figures.single().valueText
+
+        assertTrue(text.contains("uses to the typical"))
+        assertTrue(text.contains("needs recorded use in this range"))
+        assertTrue(!text.contains("recorded-use rate"))
+        assertEquals("2026-07-14", model.figures.single().asOfDate)
+    }
+
+    @Test
     fun spendModeShowsMonthToDateAndProjectionWithAnAsOfDate() {
         val model = buildProjectionUiModel(snapshot(), ProjectionMode.SPEND)
         val ready = model as ProjectionUiModel.Ready

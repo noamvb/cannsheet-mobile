@@ -78,6 +78,7 @@ import com.example.data.MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
 import com.example.data.Product
 import com.example.data.QualityWarningsDto
 import com.example.domain.ProductRunway
+import com.example.domain.RunwayPace
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -515,7 +516,14 @@ internal fun RunwaySection(
                 productsById[runway.productId]?.let { product -> product to runway }
             }
             .sortedWith(
-                compareBy<Pair<AnalyticsProductDto, ProductRunway>> { it.second.estimatedDaysRemaining }
+                compareBy<Pair<AnalyticsProductDto, ProductRunway>> {
+                    it.second.pace !is RunwayPace.Ready
+                }
+                    .thenBy {
+                        (it.second.pace as? RunwayPace.Ready)?.estimatedDaysRemaining
+                            ?: Double.POSITIVE_INFINITY
+                    }
+                    .thenBy { it.second.estimatedRemainingToTypicalUses }
                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.first.name }
                     .thenBy { it.first.productId },
             )

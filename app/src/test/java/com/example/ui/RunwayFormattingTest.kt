@@ -3,6 +3,7 @@ package com.example.ui
 import com.example.domain.ProductRunway
 import com.example.domain.RunwayBasis
 import com.example.domain.RunwayConfidence
+import com.example.domain.RunwayPace
 import com.example.domain.SpendRunRate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -44,7 +45,23 @@ class RunwayFormattingTest {
         assertTrue(text.contains("typical ~12.75 uses recorded at finish"))
         assertTrue(text.contains("good sample"))
         assertTrue(text.contains("8 finished Pen products with recorded grams"))
+        assertTrue(text.contains("adjusted to 1 g"))
         assertTrue(text.contains("14-day recorded-use rate"))
+    }
+
+    @Test
+    fun matchedGramsSummaryNamesTheExactComparableSize() {
+        val text = runwaySummaryText(
+            runway(
+                basis = RunwayBasis.MATCHED_GRAMS,
+                confidence = RunwayConfidence.LOW,
+                sampleSize = 3,
+                targetGrams = 1.0,
+            ),
+        )
+
+        assertTrue(text.contains("3 finished Pen products at 1 g"))
+        assertFalse(text.contains("adjusted to"))
     }
 
     @Test
@@ -137,6 +154,44 @@ class RunwayFormattingTest {
     }
 
     @Test
+    fun capacityOnlySummaryShowsUsesWithoutInventingDaysOrARate() {
+        val text = runwaySummaryText(
+            runway(
+                basis = RunwayBasis.MATCHED_GRAMS,
+                confidence = RunwayConfidence.LOW,
+                sampleSize = 3,
+                pace = RunwayPace.TooFewEffectiveDays(effectiveBurnRateDays = 2),
+                targetGrams = 1.0,
+            ),
+        )
+
+        assertTrue(text.startsWith("~2.25 uses to the typical ~12.75 uses"))
+        assertTrue(text.contains("3 finished Pen products at 1 g"))
+        assertTrue(text.contains("after at least 7 effective days"))
+        assertTrue(text.contains("2 days available"))
+        assertFalse(text.contains("recorded-use rate"))
+        assertFalse(text.contains("~4.45 days"))
+    }
+
+    @Test
+    fun brandNewCapacityExplainsThatDaysNeedUseInTheSelectedRange() {
+        val text = runwaySummaryText(
+            runway(
+                estimatedRemaining = 12.75,
+                basis = RunwayBasis.MATCHED_GRAMS,
+                confidence = RunwayConfidence.LOW,
+                sampleSize = 3,
+                pace = RunwayPace.NoUseInRange,
+                targetGrams = 1.0,
+            ),
+        )
+
+        assertTrue(text.contains("~12.75 uses to the typical ~12.75 uses"))
+        assertTrue(text.contains("needs recorded use in this range"))
+        assertFalse(text.contains("recorded-use rate"))
+    }
+
+    @Test
     fun currencyUsesExactCentsAcrossTinyAndLargeAmounts() {
         assertEquals("\$0.01", formatCadCents(1))
         assertEquals("\$1,234.56", formatCadCents(123_456))
@@ -187,16 +242,21 @@ class RunwayFormattingTest {
         confidence: RunwayConfidence,
         sampleSize: Int,
         effectiveBurnRateDays: Int = 9,
+        pace: RunwayPace = RunwayPace.Ready(
+            usesPerDay = 0.5,
+            effectiveBurnRateDays = effectiveBurnRateDays,
+            estimatedDaysRemaining = estimatedDays,
+        ),
+        targetGrams: Double? = if (basis == RunwayBasis.PER_PRODUCT) null else 1.0,
     ) = ProductRunway(
         productId = "product-id",
         type = "P",
         usesSoFar = 10.5,
         estimatedTypicalFinishedUses = 12.75,
         estimatedRemainingToTypicalUses = estimatedRemaining,
-        usesPerDay = 0.5,
-        effectiveBurnRateDays = effectiveBurnRateDays,
-        estimatedDaysRemaining = estimatedDays,
+        pace = pace,
         basis = basis,
+        targetGrams = targetGrams,
         confidence = confidence,
         sampleSize = sampleSize,
     )

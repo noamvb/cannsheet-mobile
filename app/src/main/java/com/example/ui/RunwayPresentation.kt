@@ -116,7 +116,10 @@ internal fun deriveRunwayPresentationState(
         .associateBy(ProductRunway::productId)
 
     val diagnostics = buildList {
-        if (data.range.dayCount < MIN_BURN_RATE_DAYS) {
+        if (
+            data.range.dayCount < MIN_BURN_RATE_DAYS &&
+            runwayByProductId.isEmpty()
+        ) {
             add(RunwayDiagnostic.SelectedRangeTooShort)
         }
         activeProducts

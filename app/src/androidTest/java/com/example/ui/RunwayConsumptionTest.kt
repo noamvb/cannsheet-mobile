@@ -17,6 +17,7 @@ import com.example.domain.PenQuickLogState
 import com.example.domain.ProductRunway
 import com.example.domain.RunwayBasis
 import com.example.domain.RunwayConfidence
+import com.example.domain.RunwayPace
 import org.junit.Rule
 import org.junit.Test
 
@@ -119,6 +120,49 @@ class RunwayConsumptionTest {
     }
 
     @Test
+    fun loadedPenShowsMatchedGramCapacityAndNoDaysRateBeforePaceIsReady() {
+        val loaded = Product(
+            id = "matched-loaded-pen",
+            name = "Matched loaded cart",
+            type = "P",
+            status = 0,
+            productUuid = "matched-uuid",
+        )
+        val estimate = runway(
+            loaded.id,
+            basis = RunwayBasis.MATCHED_GRAMS,
+            sampleSize = 3,
+            paceOverride = RunwayPace.NoUseInRange,
+        )
+
+        composeRule.setContent {
+            MaterialTheme {
+                PenQuickLogCard(
+                    state = PenQuickLogState.Loaded(
+                        product = loaded,
+                        presetUses = listOf(1.0),
+                        secondsPerUse = 10.0,
+                        syncedUses = 8.0,
+                        pendingUses = 0.0,
+                    ),
+                    onQuickLogPen = {},
+                    onChooseCart = {},
+                    runwayByProductId = mapOf(loaded.id to estimate),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(PenQuickLogTestTags.RUNWAY)
+            .assertIsDisplayed()
+            .assert(hasText("3 finished Pen products at 1 g", substring = true))
+            .assert(hasText("~12 uses to the typical ~20 uses recorded at finish", substring = true))
+            .assert(hasText("needs recorded use in this range", substring = true))
+        composeRule.onNodeWithTag(PenQuickLogTestTags.RUNWAY)
+            .assert(!hasText("recorded-use rate", substring = true))
+            .assert(!hasText("to the usual recorded finish amount", substring = true))
+    }
+
+    @Test
     fun loadedPenDoesNotFallBackToNameOrUuid() {
         val loaded = Product(
             id = "loaded-pen",
@@ -189,17 +233,25 @@ class RunwayConsumptionTest {
             .assert(hasText("5 finished Pen products", substring = true))
     }
 
-    private fun runway(productId: String) = ProductRunway(
+    private fun runway(
+        productId: String,
+        basis: RunwayBasis = RunwayBasis.PER_PRODUCT,
+        sampleSize: Int = 5,
+        paceOverride: RunwayPace? = null,
+    ) = ProductRunway(
         productId = productId,
         type = "P",
         usesSoFar = 8.0,
         estimatedTypicalFinishedUses = 20.0,
         estimatedRemainingToTypicalUses = 12.0,
-        usesPerDay = 1.0,
-        effectiveBurnRateDays = 14,
-        estimatedDaysRemaining = 12.0,
-        basis = RunwayBasis.PER_PRODUCT,
+        pace = paceOverride ?: RunwayPace.Ready(
+            usesPerDay = 1.0,
+            effectiveBurnRateDays = 14,
+            estimatedDaysRemaining = 12.0,
+        ),
+        basis = basis,
+        targetGrams = if (basis == RunwayBasis.PER_PRODUCT) null else 1.0,
         confidence = RunwayConfidence.MEDIUM,
-        sampleSize = 5,
+        sampleSize = sampleSize,
     )
 }

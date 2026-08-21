@@ -704,6 +704,9 @@ historical rationale.
 ## ADR-018: Estimate runway from the user's own finished products
 
 - Status: Accepted; implemented and released in v1.3.0.
+- Amendment: ADR-043 supersedes the type-wide-first capacity basis and the
+  all-or-nothing seven-day product gate. Snapshot safety and the minimum
+  three-observation rule remain in force.
 - Date: 2026-08-13
 - Context: The Insights contract already contains per-product status, grams,
   first-use time, recorded quantities, and month spending. A remaining-use
@@ -1781,3 +1784,57 @@ send, so `onUpdate` and `onEnabled` cannot be triggered from `adb` without
 binding a widget through a launcher. `scheduleIfWidgetsExist` exists so that a
 failure of that link degrades to recovery on the next app launch rather than a
 permanently dead chain.
+
+## ADR-043: Prefer same-size runway evidence and separate capacity from pace
+
+- Status: Accepted
+- Date: 2026-08-21
+- Context: ADR-018 pooled every valid finished product of a normalized type
+  into one uses-per-gram median and made a seven-day burn-rate window a
+  prerequisite for the whole runway result. Products at different package
+  sizes could therefore influence a current Pen even when the owner had a
+  direct history of finished Pens at the same gram amount. A new or recently
+  started product also lost the independently useful remaining-uses estimate
+  merely because its days-remaining pace was not mature yet, surfacing as the
+  generic "No reliable Pen runway estimate" state.
+- Decision:
+  1. Keep `MIN_CAPACITY_SAMPLE = 3`. When an active product and at least three
+     valid finished products share the normalized type and the same canonical
+     positive gram amount, use the median of that exact cohort's recorded
+     finish quantities. Canonical gram keys use decimal value equality, so
+     equivalent representations such as `1`, `1.0`, and `1.00` match while
+     nearby amounts do not.
+  2. When fewer than three exact-size observations exist, retain ADR-018's
+     broader same-type uses-per-gram median when it has three observations;
+     retain the same-type per-product median when gram evidence is unavailable.
+     Copy must identify whether evidence was exact-size, grams-adjusted, or
+     per-product and report the selected basis's actual sample count.
+  3. Represent the product capacity comparison separately from its use pace.
+     A trusted active product with finite nonnegative all-time use may show
+     `max(typical recorded finish uses - uses so far, 0)` immediately,
+     including when it has zero recorded use.
+  4. Keep the seven-effective-day rule for the time projection only. A days
+     estimate additionally requires positive selected-range use and a usable
+     first-use date. Until those inputs are available, show the remaining-use
+     capacity with a specific pace explanation and do not invent a use rate or
+     days value.
+  5. Keep all snapshot-level safety gates from ADR-018: in-app figures still
+     require a live, non-cache, non-stale, non-transitioning Insights response
+     and a real zero pending-action count. Projection widgets retain their
+     separately documented cache/as-of-date boundary.
+- Rationale: Exact-size personal history is the closest available comparison
+  without adding a physical-capacity field. Capacity and pace depend on
+  different evidence, so withholding both until the pace matures discards a
+  valid comparison and makes the feature look broken. The retained fallback
+  avoids turning a sparse exact-size cohort into a new availability regression.
+- Consequences: Remaining uses can appear before remaining days, including for
+  a brand-new active product. The estimate remains presentation-only and
+  describes recorded finish behavior rather than physical contents. No Room
+  schema, analytics DTO, cache schema, queue payload, Apps Script contract,
+  spreadsheet write, endpoint, package ID, or stored/transmitted unit changes.
+- Related files: `app/src/main/java/com/example/domain/InventoryRunway.kt`,
+  `app/src/main/java/com/example/ui/RunwayFormatting.kt`,
+  `app/src/main/java/com/example/ui/RunwayPresentation.kt`,
+  `app/src/main/java/com/example/ui/InsightsScreen.kt`,
+  `app/src/main/java/com/example/widget/projection/ProjectionUiModel.kt`,
+  `docs/ARCHITECTURE.md`

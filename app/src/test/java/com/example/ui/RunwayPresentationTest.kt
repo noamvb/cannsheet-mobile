@@ -17,6 +17,7 @@ import com.example.data.SpendBucketDto
 import com.example.data.SpendingDto
 import com.example.data.SyncHealthDto
 import com.example.domain.RunwayBasis
+import com.example.domain.RunwayPace
 import java.util.Calendar
 import java.util.GregorianCalendar
 import java.util.Locale
@@ -154,18 +155,20 @@ class RunwayPresentationTest {
         assertFalse(ready.runwayByProductId.containsKey(ACTIVE_PRODUCT_NAME))
 
         val runway = checkNotNull(ready.runwayByProductId[ACTIVE_PRODUCT_ID])
-        assertEquals(RunwayBasis.PER_PRODUCT, runway.basis)
+        assertEquals(RunwayBasis.MATCHED_GRAMS, runway.basis)
         assertEquals(3, runway.sampleSize)
+        assertEquals(1.0, checkNotNull(runway.targetGrams), 0.0)
         assertEquals(12.0, runway.estimatedTypicalFinishedUses, 0.0)
         assertEquals(8.0, runway.estimatedRemainingToTypicalUses, 0.0)
-        assertEquals(15, runway.effectiveBurnRateDays)
-        assertEquals(2.0 / 15.0, runway.usesPerDay, 0.0)
-        assertEquals(60.0, runway.estimatedDaysRemaining, 0.0)
+        val pace = runway.pace as RunwayPace.Ready
+        assertEquals(15, pace.effectiveBurnRateDays)
+        assertEquals(2.0 / 15.0, pace.usesPerDay, 0.0)
+        assertEquals(60.0, pace.estimatedDaysRemaining, 0.0)
 
         val evidence = checkNotNull(ready.evidenceByType["P"])
         assertEquals("P", evidence.type)
         assertEquals(3, evidence.sampleSize)
-        assertEquals(0, evidence.perGramSampleSize)
+        assertEquals(3, evidence.perGramSampleSize)
         assertTrue(ready.diagnostics.isEmpty())
 
         val spend = checkNotNull(ready.spendRunRate)
@@ -179,7 +182,7 @@ class RunwayPresentationTest {
     }
 
     @Test
-    fun unavailableProductsAreAggregatedByTypeAndCause() {
+    fun capacityOnlyProductsAreNotMisreportedAsUnavailable() {
         val data = insights()
         val products = data.products + listOf(
             product(id = "unused-one", status = "ACTIVE", allQuantity = 0.0),
@@ -200,21 +203,38 @@ class RunwayPresentationTest {
         )
 
         val ready = result.estimates as RunwayEstimateState.Ready
-        assertTrue(
-            ready.diagnostics.contains(
-                RunwayDiagnostic.NoUseInRange(type = "P", productCount = 2),
-            ),
+        assertTrue(ready.diagnostics.isEmpty())
+        assertEquals(RunwayPace.NoUseInRange, ready.runwayByProductId["unused-one"]?.pace)
+        assertEquals(RunwayPace.NoUseInRange, ready.runwayByProductId["unused-two"]?.pace)
+        assertEquals(
+            RunwayPace.TooFewEffectiveDays(effectiveBurnRateDays = 1),
+            ready.runwayByProductId["too-new-for-rate"]?.pace,
         )
-        assertTrue(
-            ready.diagnostics.contains(
-                RunwayDiagnostic.UnavailableForType(type = "P", productCount = 1),
-            ),
+    }
+
+    @Test
+    fun capacityRowsOwnTheShortRangeExplanationWithoutASectionDiagnostic() {
+        val data = insights()
+        val shortRange = AnalyticsRangeDto(
+            scope = "CUSTOM",
+            from = "2026-07-10",
+            to = "2026-07-15",
+            dayCount = 6,
         )
-        assertTrue(
-            runwayDiagnosticText(
-                RunwayDiagnostic.NoUseInRange(type = "P", productCount = 2),
-            ).contains("2 active products"),
+
+        val result = deriveRunwayPresentationState(
+            insights = InsightsUiState(data = data.copy(range = shortRange)),
+            pendingActionCount = 0,
+            nowEpochMillis = NOW,
         )
+
+        val ready = result.estimates as RunwayEstimateState.Ready
+        assertEquals(1, ready.runwayByProductId.size)
+        assertEquals(
+            RunwayPace.SelectedRangeTooShort,
+            ready.runwayByProductId[ACTIVE_PRODUCT_ID]?.pace,
+        )
+        assertFalse(ready.diagnostics.contains(RunwayDiagnostic.SelectedRangeTooShort))
     }
 
     @Test
@@ -254,11 +274,12 @@ class RunwayPresentationTest {
                 finalCostCents = 2_000,
                 allQuantity = 4.0,
                 rangeQuantity = 2.0,
+                grams = 1.0,
                 firstLogAt = utcEpoch(2026, 7, 1, 16),
             ),
-            product(id = "finished-10", status = "FINISHED", allQuantity = 10.0),
-            product(id = "finished-12", status = "FINISHED", allQuantity = 12.0),
-            product(id = "finished-14", status = "FINISHED", allQuantity = 14.0),
+            product(id = "finished-10", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product(id = "finished-12", status = "FINISHED", allQuantity = 12.0, grams = 1.0),
+            product(id = "finished-14", status = "FINISHED", allQuantity = 14.0, grams = 1.0),
         )
         return InsightsResponseDto(
             success = true,
@@ -337,6 +358,7 @@ class RunwayPresentationTest {
         finalCostCents: Long = 1_000,
         allQuantity: Double,
         rangeQuantity: Double = 0.0,
+        grams: Double? = null,
         firstLogAt: Long = utcEpoch(2026, 1, 1, 17),
     ) = AnalyticsProductDto(
         productUuid = uuid,
@@ -348,6 +370,7 @@ class RunwayPresentationTest {
         purchaseDate = purchaseDate,
         purchaseDateSource = "RECORDED",
         finalCostCents = finalCostCents,
+        grams = grams,
         thcQuality = "UNKNOWN",
         allTime = ProductActivityDto(
             logCount = if (allQuantity > 0.0) 1 else 0,
