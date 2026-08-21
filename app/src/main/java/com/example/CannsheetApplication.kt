@@ -8,6 +8,7 @@ import com.example.notifications.QueueAlertNotifier
 import com.example.widget.CannsheetWidgetRefresher
 import com.example.widget.PenWidgetCommitCoordinator
 import com.example.widget.PenWidgetRuntime
+import com.example.widget.today.TodayRolloverScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,9 @@ class CannsheetApplication : Application() {
         val graph = CannsheetGraph.get(this)
         graph.installWidgetRefresher(CannsheetWidgetRefresher(this))
         graph.installQueueAlertPresenter(QueueAlertNotifier(this))
+        // Recovers the today widget's midnight schedule if its self-re-arming chain was ever
+        // lost; a no-op when no today widget exists.
+        TodayRolloverScheduler.scheduleIfWidgetsExist(this)
         PenWidgetRuntime.launchSerialized {
             PenWidgetCommitCoordinator.flushOverdue(this@CannsheetApplication, System.currentTimeMillis())
         }
