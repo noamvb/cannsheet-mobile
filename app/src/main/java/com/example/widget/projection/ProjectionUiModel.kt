@@ -22,7 +22,6 @@ enum class ProjectionMode {
 /** Why the projection widget has no figure to render. */
 enum class ProjectionSuppressionReason {
     NO_SNAPSHOT,
-    INCOMPLETE_SNAPSHOT,
     STRUCTURALLY_UNUSABLE_SNAPSHOT,
     NO_USABLE_FIGURE,
 }
@@ -51,8 +50,11 @@ data class ProjectionFigure(
 /**
  * Builds the pure projection-widget state from one cached snapshot.
  *
- * No freshness check is performed here: B7 allows a widget to show a cached projection when the
- * snapshot itself is complete, provided every figure carries the snapshot's own as-of date.
+ * No freshness or aggregate data-quality check is performed here: B7 allows a widget to show a
+ * cached projection when a snapshot exists, provided every figure carries the snapshot's own
+ * as-of date. The aggregate `dataQuality.complete` flag combines warnings across all analytics
+ * fields, including fields unrelated to a particular mode, so each projection builder remains
+ * responsible for rejecting the inputs that make its own figure unsafe.
  */
 fun buildProjectionUiModel(
     insights: InsightsResponseDto?,
@@ -60,9 +62,6 @@ fun buildProjectionUiModel(
 ): ProjectionUiModel {
     if (insights == null) {
         return ProjectionUiModel.Suppressed(ProjectionSuppressionReason.NO_SNAPSHOT)
-    }
-    if (!insights.dataQuality.complete) {
-        return ProjectionUiModel.Suppressed(ProjectionSuppressionReason.INCOMPLETE_SNAPSHOT)
     }
     if (!insights.success || insights.products.isEmpty()) {
         return ProjectionUiModel.Suppressed(

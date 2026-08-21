@@ -123,7 +123,6 @@
     <string name="projection_widget_title_spend">Spend</string>
     <string name="projection_widget_unavailable">Projection unavailable</string>
     <string name="projection_widget_no_snapshot">No cached Insights snapshot yet.</string>
-    <string name="projection_widget_incomplete">The cached snapshot is incomplete.</string>
     <string name="projection_widget_no_usable_figure">No usable projection in this snapshot.</string>
     <string name="projection_widget_no_as_of">No as-of date available</string>
     <string name="projection_widget_cached_note">From the cached Insights snapshot</string>
