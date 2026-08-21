@@ -6,121 +6,133 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Current release
 
-Cannsheet Mobile `v1.5.1` (`versionCode 43`, `versionName 1.5.1`) remains the
-latest published Obtainium release in
-[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.1).
-Its annotated source tag peels to
-`96807f048297dd553beb653a06c5736928e2927f`, the exact version-only `main`
-commit validated before publication. The published APK SHA-256 is
-`74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`.
+Cannsheet Mobile `v1.5.2` (`versionCode 44`, `versionName 1.5.2`) is the latest
+published Obtainium release in
+[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.2).
+Feature PR [#138](https://github.com/noamvb/cannsheet-mobile/pull/138) was
+squash-merged as `9b1f0d7c120790565ea3764082bef7b305e5792d`; separate
+version-only PR [#139](https://github.com/noamvb/cannsheet-mobile/pull/139) was
+squash-merged as `ae9a4ebbc6509cd3b0ad3450dd4964574990f915`.
 
-Independent v1.5.1 verification reported package
-`com.noamv.cannsheet.mobile`, version code `43`, version name `1.5.1`, min SDK
-`24`, target SDK `36`, zip alignment, one signer, and APK Signature Scheme v2.
-Its certificate SHA-256 is
-`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e` and
-its public-key SHA-256 is
-`2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`;
-both matched the independently downloaded v1.5.0 APK.
+The annotated source tag `v1.5.2` peels to
+`ae9a4ebbc6509cd3b0ad3450dd4964574990f915`, the exact version commit whose
+`push` run passed the required six-job `main` gate. A later documentation-only
+commit may advance `main`; the release tag intentionally remains on the exact
+validated version commit.
 
-## Runway correction in release preparation
+The public release contains exactly:
 
-Feature PR #138 fixes the reported generic "No reliable Pen runway estimate"
-behavior and carries the implementation, regression coverage, and durable
-documentation. Its behavior is:
+- `Cannsheet-Mobile-1.5.2.apk` (14,024,579 bytes)
+- `Cannsheet-Mobile-1.5.2.apk.sha256`
 
-- For an active product with valid grams, prefer the median recorded finish
-  total from at least three finished products with the same normalized type and
-  canonical gram amount. Other sizes cannot affect that exact cohort.
-- If the exact-size cohort has fewer than three observations, retain the
-  broader same-type grams-adjusted fallback, then the legacy same-type
-  per-product fallback. Visible copy identifies the selected basis and its
-  actual finished-product count.
-- Compute remaining recorded uses separately from the burn-rate pace. A new
-  active product with zero recorded uses can show its full estimated comparison
-  immediately. Days remaining still requires positive selected-range use, a
-  usable first-log date, and at least seven effective response-time-zone days.
-- Preserve the existing in-app non-cache, non-stale, non-transitioning snapshot
-  and real zero-pending-action gates. Projection-widget cache/as-of rules are
-  unchanged.
+The independently calculated APK SHA-256 is
+`46e7a9808813faa0c0dac672fc17c62192199eca4356bed8a07064753ed27707`.
 
-The change is presentation-only. It adds no Room migration, analytics or cache
-field, queue mutation, wire payload, Apps Script/backend behavior, spreadsheet
-write, endpoint, application ID, signing, or stored/transmitted-unit change.
-ADR-043 records the owner-selected exact-size preference, labeled fallback,
-and immediate zero-use capacity policy.
+## Runway behavior shipped in v1.5.2
 
-## Validation completed for PR #138
+- For an active product with valid grams, Runway first looks for at least three
+  finished products with the same normalized type and canonical gram amount.
+  It uses the median recorded finish total from that exact-size cohort, so
+  differently sized products cannot influence the preferred baseline.
+- If fewer than three exact-size observations exist, Runway deliberately falls
+  back to the same-type grams-adjusted median and then the same-type
+  per-product median when usable gram evidence is unavailable. Visible copy
+  identifies the selected basis and reports its actual finished-product count.
+- Remaining recorded uses are calculated separately from daily pace. An active
+  product with zero recorded uses can therefore show its full typical recorded
+  capacity immediately. Days remaining appears only after positive use in the
+  selected range, a usable first-use date, and at least seven effective days in
+  the response time zone.
+- Capacity-only rows explain why a days estimate is not ready instead of
+  collapsing to the generic "No reliable Pen runway estimate" message.
+  Short-range guidance is not duplicated below rendered capacity rows.
+- All pre-existing in-app safety gates remain: estimates require a live,
+  non-cache, non-stale, non-transitioning Insights snapshot and a real zero
+  pending-action count. Projection widgets retain their documented cached
+  snapshot plus as-of-date rule.
 
-The complete local gate ran from the isolated feature worktree with JDK 17,
-Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
+This remains a presentation-only estimate of recorded finish behavior. It adds
+no Room migration, cache or analytics field, queue mutation, wire payload,
+Apps Script/backend behavior, spreadsheet write, endpoint, application ID,
+signing configuration, or stored/transmitted-unit change. ADR-043 records the
+owner-selected exact-size preference, labeled fallback, and immediate zero-use
+capacity policy.
+
+## Validation and release provenance
+
+The complete local implementation gate ran from an isolated worktree with JDK
+17, Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
 
 - `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
   passed. JVM XML totals were 495 tests, zero failures, zero errors, and zero
   skips; lint reported zero errors and the debug APK assembled.
-- All eight checked-in Node backend suites passed with Node 22.14.0.
+- All eight checked-in Node backend suites passed.
 - `python3 -m unittest tests/test_backend_sync_benchmark.py` passed all 13
   tests.
-- `git diff --check` passed, and independent diff review found no remaining
-  correctness or data-safety issue.
+- `git diff --check` passed, and independent review found no remaining
+  correctness or data-safety defect. The review's duplicate short-range-copy
+  finding and missing direct Compose coverage were corrected before merge.
 
-The first PR run, `32447738171`, correctly failed one newly added Insights
-Compose assertion. The UI row tag is on a parent container, while the rendered
-copy lives on descendant text nodes; the failure was a test-selector defect,
-not a product-code failure. Commit `74bef32` changed that assertion to inspect
-descendants and recompiled the instrumentation suite locally. PR run
-`32448073354` then passed repository scan, backend validation, Android static
-validation, all 162 API 24 instrumentation tests, and the aggregate validation
-job. The handoff-only follow-up commit must still receive its own final PR gate
-before merge.
+Remote provenance:
 
-No screenshot or production-data walkthrough is claimed. The visible state
-requires a fresh Insights snapshot with the owner's matching product history,
-and this checkout has no safe seeded end-to-end sandbox fixture for that
-screen. The new Compose tests render and assert the exact-size capacity-only
-state in both Insights and Pen Quick Log, including the absence of fabricated
-days/rate copy.
+- Feature PR final run
+  [32448486181](https://github.com/noamvb/cannsheet-mobile/actions/runs/32448486181)
+  passed repository scan, backend validation, Android static validation, all
+  API 24 instrumentation tests, and the aggregate gate. Exact feature-`main`
+  run [32448792817](https://github.com/noamvb/cannsheet-mobile/actions/runs/32448792817)
+  passed all six jobs, including API 24 and API 36.
+- Version PR run
+  [32449569622](https://github.com/noamvb/cannsheet-mobile/actions/runs/32449569622)
+  passed its required jobs. Exact tagged-`main` run
+  [32449886506](https://github.com/noamvb/cannsheet-mobile/actions/runs/32449886506)
+  was a successful `push` run on
+  `ae9a4ebbc6509cd3b0ad3450dd4964574990f915`; each of its six named jobs
+  succeeded.
+- Signed publication run
+  [32450412524](https://github.com/noamvb/cannsheet-mobile/actions/runs/32450412524)
+  passed exact-main confirmation, version and monotonicity checks, unit
+  tests/lint, signed build, workflow signature verification, publication, and
+  post-publication verification.
 
-## Release work still required
+Independent fresh-download verification of the public APK and checksum passed.
+The checksum file and GitHub asset digest both match the SHA-256 above. Build
+Tools 36.0.0 readback confirmed package `com.noamv.cannsheet.mobile`, version
+code `44`, version name `1.5.2`, min SDK `24`, target SDK `36`, valid zip
+alignment, one signer, and APK Signature Scheme v2. Certificate SHA-256
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+and public-key SHA-256
+`2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`
+exactly match an independently downloaded public v1.5.1 APK.
 
-Do not describe the correction as shipped yet. The remaining release sequence
-is:
+## Validation boundary and remaining owner action
 
-1. Let the updated feature PR #138 pass and squash-merge it.
-2. Wait for that feature merge's `main` run to complete before merging anything
-   else.
-3. Reconfirm the public latest release, then use a separate version-only PR for
-   the next monotonic version (expected `versionCode 44`, `versionName 1.5.2`).
-4. Wait for the exact version commit's successful `push` run on `main` and
-   verify all six named jobs individually, including API 24 and API 36.
-5. Annotate and push the matching tag, wait for signed publication, then
-   independently download and verify the APK/checksum, package metadata,
-   alignment, v2 signature, and signer continuity against v1.5.1.
-6. Replace this handoff with the final PR/SHA/run/tag/asset provenance and tell
-   the owner to update through Obtainium.
+A read-only `adb devices -l` check found the owner's physical Samsung phone;
+the ADB server was immediately stopped. No APK was installed, no app was
+launched, and no phone data or state was changed. Local instrumentation was not
+run because Gradle could have targeted that physical phone; GitHub's isolated
+API 24 and API 36 emulators supply the device-level automated evidence.
 
-The tag must point to the exact current `origin/main` commit whose push run
-passed all six jobs. Do not merge another PR between that validation and tag
-publication.
+No physical screenshot or production-history walkthrough is claimed. The
+visible state depends on a fresh Insights snapshot and the owner's actual
+product history, and there was no safe seeded end-to-end sandbox fixture for
+that screen. Direct Compose tests render the same-size capacity-only state in
+both Insights and Pen Quick Log and assert that no fabricated days or rate copy
+appears.
 
-## Data and device boundaries
-
-A read-only `adb devices -l` check on 2026-08-21 found the owner's physical
-Samsung phone connected. The ADB server was immediately stopped. No APK was
-installed, no app was launched, and no phone data or state was changed; the
-phone was explicitly declared safe to resume using. Local instrumentation was
-not run because Gradle could have targeted the physical phone. Isolated GitHub
-emulators are the device-level evidence for this release.
-
-Never install a local debug APK over the production app or uninstall the
-production app. Debug signing cannot update the release build, and uninstalling
-would delete the Room database and any pending offline queue rows. Final phone
-installation remains owner-performed through Obtainium.
+The release workflow is complete. The only remaining release action is for the
+owner to update through Obtainium, refresh Insights, and compare the Pen runway
+with real same-size finished products. Do not uninstall the production app or
+sideload a local debug APK; either could break the signed-update path, and
+uninstalling would delete the Room database and pending offline queue rows.
 
 ## Canonical references
 
 - `docs/PROJECT_STATE.md`: verified implementation and release state.
-- `docs/ARCHITECTURE.md`: system boundaries and data flows.
-- `docs/DECISIONS.md`: durable design and safety decisions, including ADR-043.
-- `.agents/skills/ship-release/SKILL.md`: exact branch, PR, main-proof, tag,
+- `docs/ARCHITECTURE.md`: system boundaries and Runway data flow.
+- `docs/DECISIONS.md`: durable decisions, including ADR-043.
+- `app/src/main/java/com/example/domain/InventoryRunway.kt`: capacity cohorts
+  and pace calculation.
+- `app/src/main/java/com/example/ui/RunwayFormatting.kt`: evidence and
+  capacity-only copy.
+- `.agents/skills/ship-release/SKILL.md`: branch, PR, exact-main, tag,
   publication, artifact-verification, and Obtainium workflow.

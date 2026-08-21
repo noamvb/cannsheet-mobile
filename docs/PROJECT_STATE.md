@@ -6,26 +6,25 @@ Last updated: 2026-08-21
 
 - Canonical branch: `main`
 - Latest published application release source commit
-  `96807f048297dd553beb653a06c5736928e2927f` (v1.5.1)
-- Current release metadata in `app/build.gradle.kts`: version name `1.5.1`,
-  version code `43` (published).
-- v1.5.1 publishes post-v1.5.0 widget corrections from PRs #128-#135. The
-  projection correction removes the widget's aggregate
-  `dataQuality.complete` veto. That bit combines unrelated source warnings, so
-  it could make every Runway and Spend instance report an incomplete cached
-  snapshot even when the requested figure's own inputs were usable. The widget
-  now lets the existing runway/spend builders reject mode-specific unsafe
-  inputs and still requires a structurally usable snapshot plus an as-of date.
-  The focused projection JVM suite and the full local Android gate passed with
-  484 JVM tests and zero failures, errors, or skips; lint reported zero errors,
-  all eight checked-in Node backend suites passed, and the Python benchmark
-  suite passed all 13 tests. Exact tagged-main run `32443710327` passed all six
-  required jobs, and signed publication run `32444205628` completed. The
-  public APK SHA-256 is
-  `74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`;
-  package/version/SDK/alignment/v2-signature readback passed and its certificate
-  and public-key digests match public v1.5.0. No physical widget walkthrough or
-  phone installation is claimed.
+  `ae9a4ebbc6509cd3b0ad3450dd4964574990f915` (v1.5.2)
+- Current release metadata in `app/build.gradle.kts`: version name `1.5.2`,
+  version code `44` (published).
+- v1.5.2 publishes the Runway same-size capacity correction from feature PR
+  [#138](https://github.com/noamvb/cannsheet-mobile/pull/138), squash-merged as
+  `9b1f0d7c120790565ea3764082bef7b305e5792d`, and version-only PR
+  [#139](https://github.com/noamvb/cannsheet-mobile/pull/139), squash-merged as
+  `ae9a4ebbc6509cd3b0ad3450dd4964574990f915`. Exact tagged-`main` push run
+  [32449886506](https://github.com/noamvb/cannsheet-mobile/actions/runs/32449886506)
+  passed all six required jobs. The annotated `v1.5.2` tag peels to that exact
+  version commit, and signed publication run
+  [32450412524](https://github.com/noamvb/cannsheet-mobile/actions/runs/32450412524)
+  passed exact-main confirmation, test/lint, signed build, publication, and
+  post-publication verification. The public release contains exactly the APK
+  and checksum assets. Independent download verification produced APK SHA-256
+  `46e7a9808813faa0c0dac672fc17c62192199eca4356bed8a07064753ed27707`;
+  package/version/SDK/alignment/v2-signature readback passed, and its certificate
+  and public-key digests match public v1.5.1. No physical walkthrough or phone
+  installation is claimed.
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -59,7 +58,7 @@ Last updated: 2026-08-21
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Runway same-size capacity correction (unreleased)
+## Runway same-size capacity correction (published in v1.5.2)
 
 - Runway capacity now prefers at least three finished products with the same
   normalized type and canonical gram amount as the active product. Different
@@ -78,6 +77,22 @@ Last updated: 2026-08-21
   The change is presentation-only and adds no Room migration, analytics or
   queue field, cache schema, Apps Script/backend behavior, spreadsheet write,
   endpoint, package ID, or stored/transmitted unit.
+- The full local Android gate passed with 495 JVM tests and zero failures,
+  errors, or skips; lint reported zero errors. All eight checked-in Node
+  backend suites and all 13 Python benchmark tests passed. The feature PR's
+  final run `32448486181` and exact feature-`main` run `32448792817` passed
+  their required jobs, including API 24 and API 36 instrumentation.
+- The public [Cannsheet Mobile v1.5.2 release](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.2)
+  contains exactly `Cannsheet-Mobile-1.5.2.apk` (14,024,579 bytes) and
+  `Cannsheet-Mobile-1.5.2.apk.sha256`. The checksum file and GitHub asset digest
+  match the independently calculated APK SHA-256. Build Tools 36.0.0 readback
+  confirmed package `com.noamv.cannsheet.mobile`, version code `44`, version
+  name `1.5.2`, min SDK `24`, target SDK `36`, valid zip alignment, one signer,
+  and APK Signature Scheme v2. Certificate SHA-256
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+  and public-key SHA-256
+  `2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`
+  match an independently downloaded public v1.5.1 APK.
 
 ## Pen widget expansion (A1-A7 published in v1.4.5)
 
@@ -1379,8 +1394,9 @@ Local and device evidence:
 
 ## Current priorities
 
-1. Update the production phone to v1.5.1 through Obtainium, refresh Insights,
-   and inspect both Runway and Spend widgets. Do not uninstall or sideload the
+1. Update the production phone to v1.5.2 through Obtainium, refresh Insights,
+   and inspect the corrected Pen runway against real same-size history. Also
+   inspect both Runway and Spend widgets. Do not uninstall or sideload the
    local debug APK.
 2. If synthetic physical widget coverage is needed beyond normal owner use,
    build a separate sandbox/debug package with a non-production endpoint and
@@ -1403,7 +1419,7 @@ Local and device evidence:
 - Does the main Fold display provide enough useful width for the 40/60
   Insights and History panes in portrait and landscape, and is the
   width-only divider acceptable near the physical crease?
-- Obtainium's v1.5.1 install and post-install refresh were not observed in this
+- Obtainium's v1.5.2 install and post-install refresh were not observed in this
   release session. The full
   History UI plan remains partially unverified: the offline error inside the
   detail sheet, correction save, rotation, and missing-entry dialog.
