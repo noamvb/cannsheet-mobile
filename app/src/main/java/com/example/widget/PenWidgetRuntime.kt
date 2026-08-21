@@ -60,7 +60,7 @@ object PenWidgetRuntime {
     private val commitTimer = PenWidgetCommitTimer<Context>(
         scope = scope,
         renderSaving = { context, appWidgetId ->
-            withSerialized { PenWidgetUpdater.update(context, appWidgetId) }
+            withSerialized { PenWidgetSurfaceRouter.refresh(context, appWidgetId) }
         },
         commit = { context, appWidgetId, commitId ->
             withSerialized {

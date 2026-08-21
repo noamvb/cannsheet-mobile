@@ -25,13 +25,6 @@ object MultiCartUpdater {
         }
     }
 
-    internal fun ownsAppWidgetId(context: Context, appWidgetId: Int): Boolean {
-        val appContext = context.applicationContext
-        val manager = AppWidgetManager.getInstance(appContext)
-        val component = ComponentName(appContext, MultiCartWidgetProvider::class.java)
-        return manager.getAppWidgetIds(component).contains(appWidgetId)
-    }
-
     suspend fun update(context: Context, appWidgetId: Int) {
         if (appWidgetId < 0) return
 
