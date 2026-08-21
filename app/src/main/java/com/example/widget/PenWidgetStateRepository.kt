@@ -37,9 +37,6 @@ private data class RemappedState(
     val draftSeconds: Int?,
     val pendingCommit: String?,
     val lastQueuedAtMillis: Long?,
-    val pinnedProductId: String?,
-    val discreet: Boolean?,
-    val stepSecondsOverride: Int?,
 )
 
 /**
@@ -270,7 +267,12 @@ class PenWidgetStateRepository internal constructor(
             .toList()
     }
 
-    suspend fun readConfig(appWidgetId: Int): PenWidgetInstanceConfig {
+    /**
+     * Reads pre-v1.5.1 configuration that may still be sitting in this (legacy) store. Only
+     * [PenWidgetConfigRepository.read] (via its injected `readLegacy` dependency) should call
+     * this; every other caller belongs on the new config repository.
+     */
+    suspend fun readLegacyConfig(appWidgetId: Int): PenWidgetInstanceConfig {
         requireValidWidgetId(appWidgetId)
         val preferences = dataStore.data.first()
         return PenWidgetInstanceConfig(
@@ -286,6 +288,12 @@ class PenWidgetStateRepository internal constructor(
      * Moves every per-widget key from [oldWidgetIds][i] to [newWidgetIds][i] in one edit. Android
      * remaps app widget ids on restore; without this the restored widget reads a foreign id's
      * state and any pending commit is stranded.
+     *
+     * Configuration no longer lives in this store (see [PenWidgetConfigRepository]), so this remap
+     * only moves the draft/pending/last-queued state that is deliberately excluded from backup.
+     * Within a single device an id remap can still happen and the draft should follow; it is only
+     * cross-device restore that must not carry queue-participating payloads, and that is enforced
+     * by keeping this store out of the backup file, not by anything in this method.
      */
     suspend fun remapWidgetIds(oldWidgetIds: IntArray, newWidgetIds: IntArray) {
         require(oldWidgetIds.size == newWidgetIds.size) {
@@ -302,9 +310,6 @@ class PenWidgetStateRepository internal constructor(
                     draftSeconds = preferences[draftKey(oldId)],
                     pendingCommit = preferences[pendingKey(oldId)],
                     lastQueuedAtMillis = preferences[lastQueuedKey(oldId)],
-                    pinnedProductId = preferences[pinnedProductKey(oldId)],
-                    discreet = preferences[discreetKey(oldId)],
-                    stepSecondsOverride = preferences[stepOverrideKey(oldId)],
                 )
             }
 
@@ -312,9 +317,6 @@ class PenWidgetStateRepository internal constructor(
                 preferences.remove(draftKey(oldId))
                 preferences.remove(pendingKey(oldId))
                 preferences.remove(lastQueuedKey(oldId))
-                preferences.remove(pinnedProductKey(oldId))
-                preferences.remove(discreetKey(oldId))
-                preferences.remove(stepOverrideKey(oldId))
             }
 
             snapshot.forEach { state ->
@@ -322,29 +324,17 @@ class PenWidgetStateRepository internal constructor(
                 state.draftSeconds?.let { preferences[draftKey(newId)] = it }
                 state.pendingCommit?.let { preferences[pendingKey(newId)] = it }
                 state.lastQueuedAtMillis?.let { preferences[lastQueuedKey(newId)] = it }
-                state.pinnedProductId?.let { preferences[pinnedProductKey(newId)] = it }
-                state.discreet?.let { preferences[discreetKey(newId)] = it }
-                state.stepSecondsOverride?.let { preferences[stepOverrideKey(newId)] = it }
             }
         }
     }
 
-    suspend fun writeConfig(appWidgetId: Int, config: PenWidgetInstanceConfig) {
+    /** Removes only the three legacy config keys; used once migration has copied them forward. */
+    suspend fun clearLegacyConfig(appWidgetId: Int) {
         requireValidWidgetId(appWidgetId)
         dataStore.edit { preferences ->
-            val pinned = config.pinnedProductId?.trim()
-            if (pinned.isNullOrBlank()) {
-                preferences.remove(pinnedProductKey(appWidgetId))
-            } else {
-                preferences[pinnedProductKey(appWidgetId)] = pinned
-            }
-            preferences[discreetKey(appWidgetId)] = config.discreet
-            val step = config.stepSecondsOverride?.takeIf { it in 1..MAX_SECONDS }
-            if (step == null) {
-                preferences.remove(stepOverrideKey(appWidgetId))
-            } else {
-                preferences[stepOverrideKey(appWidgetId)] = step
-            }
+            preferences.remove(pinnedProductKey(appWidgetId))
+            preferences.remove(discreetKey(appWidgetId))
+            preferences.remove(stepOverrideKey(appWidgetId))
         }
     }
 

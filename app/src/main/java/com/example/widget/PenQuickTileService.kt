@@ -29,6 +29,7 @@ class PenQuickTileService : TileService() {
         val appContext = applicationContext
         PenWidgetRuntime.launchSerialized {
             val state = PenWidgetStateRepository(appContext)
+            val config = PenWidgetConfigRepository(appContext)
             val pending = state.read(PEN_TILE_WIDGET_ID).pendingCommit
             if (pending != null) {
                 if (state.undo(PEN_TILE_WIDGET_ID, pending.commitId)) {
@@ -36,26 +37,31 @@ class PenQuickTileService : TileService() {
                     PenWidgetScheduler.cancelCommit(appContext, PEN_TILE_WIDGET_ID)
                 }
             } else {
-                submitDefaultPreset(appContext, state)
+                submitDefaultPreset(appContext, state, config)
             }
-            refreshTileFromState(appContext, state)
+            refreshTileFromState(appContext, state, config)
         }
     }
 
     private fun refreshTile() {
         val appContext = applicationContext
         PenWidgetRuntime.launchSerialized {
-            refreshTileFromState(appContext, PenWidgetStateRepository(appContext))
+            refreshTileFromState(
+                appContext,
+                PenWidgetStateRepository(appContext),
+                PenWidgetConfigRepository(appContext),
+            )
         }
     }
 
     private suspend fun refreshTileFromState(
         context: android.content.Context,
         state: PenWidgetStateRepository,
+        config: PenWidgetConfigRepository,
     ) {
         val stored = state.read(PEN_TILE_WIDGET_ID)
-        val config = state.readConfig(PEN_TILE_WIDGET_ID)
-        val penState = PenWidgetDataSource.loadPenState(context, config.pinnedProductId)
+        val instanceConfig = config.read(PEN_TILE_WIDGET_ID)
+        val penState = PenWidgetDataSource.loadPenState(context, instanceConfig.pinnedProductId)
         val model = penTileState(penState, stored.pendingCommit)
         val label = when (model.state) {
             Tile.STATE_ACTIVE -> getString(R.string.pen_tile_undo)
@@ -68,9 +74,10 @@ class PenQuickTileService : TileService() {
     private suspend fun submitDefaultPreset(
         context: android.content.Context,
         state: PenWidgetStateRepository,
+        config: PenWidgetConfigRepository,
     ) {
-        val config = state.readConfig(PEN_TILE_WIDGET_ID)
-        val loaded = PenWidgetDataSource.loadPenState(context, config.pinnedProductId)
+        val instanceConfig = config.read(PEN_TILE_WIDGET_ID)
+        val loaded = PenWidgetDataSource.loadPenState(context, instanceConfig.pinnedProductId)
             as? PenQuickLogState.Loaded
             ?: return
         if (loaded.secondsPerUse == null) return

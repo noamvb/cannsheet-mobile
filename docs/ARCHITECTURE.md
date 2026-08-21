@@ -472,13 +472,18 @@ non-empty episode rather than any individual row. The claim ID gives one alert
 delivery attempt exact ownership for completion or release.
 
 Backup and device-transfer policy is explicit on both API 24–30 and API 31+.
-User-only `consumption_preferences` and `purchase_defaults` may be restored.
-The `pen_widget_state` DataStore is also included so per-widget configuration,
-stable pending event IDs, and deferred payloads survive a launcher restore;
-restore handling remaps widget IDs and keeps retries duplicate-safe. Room
-databases and `sync_preferences` remain excluded because they contain
-queue/request identity, point-in-time server cache state, or queue-alert episode
-state that must not be replayed blindly on another installation. The two XML
+User-only `consumption_preferences`, `purchase_defaults`, and the
+`pen_widget_config` DataStore may be restored: per-instance widget configuration
+carries no synchronization identity, and `onRestored` remaps widget IDs onto it.
+Room databases, `sync_preferences`, and the `pen_widget_state` DataStore remain
+excluded because they contain queue/request identity, point-in-time server cache
+state, queue-alert episode state, or captured commit payloads that must not be
+replayed blindly on another installation. `pen_widget_state` is excluded
+specifically because it holds deferred commit payloads that the application
+flushes on every start while `cannsheet_db` is not restored, so including it
+would re-queue consumptions the source device already recorded. Configuration
+therefore lives in a separate DataStore file from draft and payload state, so
+one can be backed up without the other. The two XML
 policies must remain aligned.
 
 Room and the pending queues are user-data boundaries. Migrations must be

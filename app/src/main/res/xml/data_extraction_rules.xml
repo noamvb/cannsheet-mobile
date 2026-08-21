@@ -9,11 +9,13 @@
         <exclude domain="database" path="cannsheet_db-wal" />
         <exclude domain="database" path="cannsheet_db-shm" />
         <exclude domain="file" path="datastore/sync_preferences.preferences_pb" />
+        <exclude domain="file" path="datastore/pen_widget_state.preferences_pb" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="cannsheet_db" />
         <exclude domain="database" path="cannsheet_db-wal" />
         <exclude domain="database" path="cannsheet_db-shm" />
         <exclude domain="file" path="datastore/sync_preferences.preferences_pb" />
+        <exclude domain="file" path="datastore/pen_widget_state.preferences_pb" />
     </device-transfer>
 </data-extraction-rules>

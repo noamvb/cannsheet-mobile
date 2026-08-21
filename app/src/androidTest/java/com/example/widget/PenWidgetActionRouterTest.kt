@@ -25,7 +25,9 @@ class PenWidgetActionRouterTest {
     private lateinit var context: Context
     private lateinit var database: AppDatabase
     private lateinit var stateFile: File
+    private lateinit var configFile: File
     private lateinit var repository: PenWidgetStateRepository
+    private lateinit var configRepository: PenWidgetConfigRepository
     private lateinit var router: PenWidgetActionRouter
     private lateinit var penState: PenQuickLogState
     private lateinit var pinnedState: PenQuickLogState
@@ -47,10 +49,18 @@ class PenWidgetActionRouterTest {
         repository = PenWidgetStateRepository(
             PreferenceDataStoreFactory.create { stateFile },
         )
+        configFile = File(
+            context.cacheDir,
+            "pen-widget-router-config-${UUID.randomUUID()}.preferences_pb",
+        )
+        configRepository = PenWidgetConfigRepository(
+            PreferenceDataStoreFactory.create { configFile },
+        )
         penState = loadedState(secondsPerUse = 10.0)
         pinnedState = loadedState(secondsPerUse = 20.0, productId = "pen-pinned")
         router = PenWidgetActionRouter(
             stateRepository = { repository },
+            configRepository = { configRepository },
             loadPenState = { _, pinnedProductId ->
                 requestedPinnedProductId = pinnedProductId
                 if (pinnedProductId == "pen-pinned") pinnedState else penState
@@ -73,6 +83,7 @@ class PenWidgetActionRouterTest {
     fun tearDown() {
         database.close()
         stateFile.delete()
+        configFile.delete()
     }
 
     @Test
@@ -149,7 +160,7 @@ class PenWidgetActionRouterTest {
 
     @Test
     fun submitUsesTheWidgetPinnedProduct() = runBlocking {
-        repository.writeConfig(
+        configRepository.write(
             WIDGET_ID,
             PenWidgetInstanceConfig(pinnedProductId = "pen-pinned"),
         )
