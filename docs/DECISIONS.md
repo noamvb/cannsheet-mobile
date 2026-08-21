@@ -1719,3 +1719,57 @@ guard and did not publish a release.
 - `.github/workflows/release-historical-apk.yml`
 - `docs/PROJECT_STATE.md`
 - `docs/HANDOFF.md`
+
+## ADR-042: Anchor the Today widget rollover to a self-re-arming midnight job
+
+### Context
+
+The Today widget declares `updatePeriodMillis="0"` and had no date trigger, so
+after B6 shipped it kept rendering the previous day's total, comparison, and
+streak until a sync or a log happened to refresh it.
+
+The obvious remedy does not work. `android.intent.action.DATE_CHANGED` is not on
+Android's implicit-broadcast exception list, so a manifest-declared receiver for
+it is never delivered on API 26 and above, and `targetSdk` is 36. The receiver
+still appears in `adb shell cmd package query-receivers`, which makes the defect
+easy to mistake for working: resolution is not delivery.
+`android.intent.action.TIME_SET` and `android.intent.action.TIMEZONE_CHANGED`
+are on the exception list.
+
+### Decision
+
+Arm a one-shot WorkManager job for the next local midnight and have
+`TodayRolloverWorker` re-arm it after every run. Each run recomputes the delay
+from the current clock, so the schedule cannot drift away from midnight the way
+a fixed twenty-four hour period does after a Doze deferral. Periodic work was
+rejected for that drift, and `AlarmManager` was rejected because exact alarms
+require `SCHEDULE_EXACT_ALARM` on API 31 and above for a job that does not need
+to be exact.
+
+`TIME_SET` and `TIMEZONE_CHANGED` remain manifest-declared, refresh the widget,
+and re-arm the schedule in a `finally` block, because either broadcast moves
+when local midnight falls and a failed render must not leave the next rollover
+anchored to the old clock.
+
+`TodayRolloverScheduler.scheduleIfWidgetsExist`, called from
+`CannsheetApplication.onCreate`, is a recovery path for a lost chain and must
+enqueue with `ExistingWorkPolicy.KEEP`. WorkManager starts a cold process to run
+the midnight job and `Application.onCreate` runs before the worker, so replacing
+there would cancel the due job, skip the refresh, and defer the rollover by a
+day. Deliberate re-arms keep `ExistingWorkPolicy.REPLACE`.
+
+### Consequences
+
+The widget rolls over without depending on unrelated app activity, and one daily
+background job exists only while a Today widget is installed. No Room, queue,
+sync, or analytics behaviour changes; the widget only reads local consumption
+history.
+
+### Not verified
+
+The worker's self-replacement of its own unique work was not exercised on a
+device. `APPWIDGET_UPDATE` is a protected broadcast that only the system may
+send, so `onUpdate` and `onEnabled` cannot be triggered from `adb` without
+binding a widget through a launcher. `scheduleIfWidgetsExist` exists so that a
+failure of that link degrades to recovery on the next app launch rather than a
+permanently dead chain.
