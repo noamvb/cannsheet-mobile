@@ -246,6 +246,22 @@ Last updated: 2026-08-20
   empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
   AVD was deleted and ADB was disconnected afterward; no physical phone or
   production data action was used.
+- Correction in v1.5.1 (PR #131): as shipped in v1.5.0 the Today widget had no
+  date trigger and `updatePeriodMillis="0"`, so it kept rendering the previous
+  day's total, comparison, and streak until a sync or a log refreshed it. A
+  manifest receiver for `android.intent.action.DATE_CHANGED` does not fix this:
+  that action is not on Android's implicit-broadcast exception list, so it is
+  never delivered on API 26 and above, even though the receiver still resolves
+  through `adb shell cmd package query-receivers`. The rollover is now a
+  self-re-arming WorkManager job timed to the next local midnight
+  (`TodayRolloverScheduler`, `TodayRolloverWorker`), with `TIME_SET` and
+  `TIMEZONE_CHANGED` retained as supplementary triggers that re-arm in a
+  `finally` block. `CannsheetApplication.onCreate` calls
+  `scheduleIfWidgetsExist` with `ExistingWorkPolicy.KEEP` so a cold process
+  started for the midnight job cannot cancel it. See ADR-042. Residual gap: the
+  worker's self-replacement of its own unique work was not exercised on a
+  device, because `APPWIDGET_UPDATE` is a protected broadcast that only the
+  system may send.
 - B7 (`docs: allow labelled cached projections on widget surfaces`) is
   squash-merged as PR #122 / `1230cda`. It clarifies that in-app projections
   remain suppressed for cached, stale, changing, or incomplete snapshots,

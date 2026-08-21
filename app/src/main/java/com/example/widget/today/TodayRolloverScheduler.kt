@@ -23,13 +23,22 @@ import java.util.concurrent.TimeUnit
 object TodayRolloverScheduler {
     const val ROLLOVER_WORK_NAME = "cannsheet-today-widget-rollover"
 
-    fun scheduleNext(context: Context, nowMillis: Long = System.currentTimeMillis()) {
+    /**
+     * [policy] is [ExistingWorkPolicy.REPLACE] for deliberate re-arms, where resetting the delay to
+     * the next midnight is the point. Recovery paths must pass [ExistingWorkPolicy.KEEP] instead —
+     * see [scheduleIfWidgetsExist].
+     */
+    fun scheduleNext(
+        context: Context,
+        nowMillis: Long = System.currentTimeMillis(),
+        policy: ExistingWorkPolicy = ExistingWorkPolicy.REPLACE,
+    ) {
         val request = OneTimeWorkRequestBuilder<TodayRolloverWorker>()
             .setInitialDelay(millisUntilNextMidnight(nowMillis), TimeUnit.MILLISECONDS)
             .build()
         WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(
             ROLLOVER_WORK_NAME,
-            ExistingWorkPolicy.REPLACE,
+            policy,
             request,
         )
     }
@@ -53,7 +62,11 @@ object TodayRolloverScheduler {
         val appWidgetIds = AppWidgetManager.getInstance(appContext)
             .getAppWidgetIds(ComponentName(appContext, TodayWidgetProvider::class.java))
         if (appWidgetIds.isEmpty()) return
-        scheduleNext(appContext)
+        // KEEP, never REPLACE. WorkManager starts a cold process to run the midnight job, and
+        // Application.onCreate runs before the worker does — replacing here would cancel the very
+        // job that is starting, skip the refresh, and push the rollover to tomorrow. Opening the
+        // app after a Doze-delayed midnight would do the same. This path only ever fills a gap.
+        scheduleNext(appContext, policy = ExistingWorkPolicy.KEEP)
     }
 
     /** Milliseconds from [nowMillis] until the next local midnight. Always > 0. */

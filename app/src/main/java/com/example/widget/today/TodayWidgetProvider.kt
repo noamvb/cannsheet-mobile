@@ -46,9 +46,15 @@ class TodayWidgetProvider : AppWidgetProvider() {
                 val pendingResult = goAsync()
                 val appContext = context.applicationContext
                 PenWidgetRuntime.launchReceiver(pendingResult) {
-                    TodayUpdater.updateAllSuspending(appContext)
-                    // A clock or timezone change moves when local midnight falls; re-arm against it.
-                    TodayRolloverScheduler.scheduleNext(appContext)
+                    try {
+                        TodayUpdater.updateAllSuspending(appContext)
+                    } finally {
+                        // A clock or timezone change moves when local midnight falls, so the
+                        // re-arm must happen even if the refresh threw. launchReceiver catches
+                        // outside this block, which would otherwise leave the next rollover
+                        // anchored to the old clock.
+                        TodayRolloverScheduler.scheduleNext(appContext)
+                    }
                 }
             }
 
