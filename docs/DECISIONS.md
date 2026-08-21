@@ -1591,7 +1591,12 @@ home-screen widget may render a cached projection when a snapshot exists and the
 widget displays the snapshot's own as-of date beside the figure. It must render
 nothing when no snapshot has ever been cached. The exception does not permit
 persisting or transmitting projections, treating them as confirmed values, or
-showing them without the source snapshot's as-of date.
+showing them without the source snapshot's as-of date. "When a snapshot exists"
+is not shorthand for requiring the response-wide `dataQuality.complete` bit:
+that bit combines warnings from unrelated inputs. The existing mode-specific
+runway and spend builders must instead reject the inputs that make their own
+figure unsafe; when no figure survives, the widget renders its explicit
+unavailable state.
 
 ### Consequences
 
@@ -1635,7 +1640,10 @@ existing pure runway/spend builders; it never refreshes analytics, writes a
 snapshot, persists a projection, or transmits a derived figure. The renderer
 uses only API-24-safe `TextView` RemoteViews, places the source snapshot's
 as-of date beside every ready figure, and renders an explicit reason when no
-figure can be shown. Every instance's action opens the existing Insights route.
+figure can be shown. The aggregate `dataQuality.complete` flag is not a
+provider-level veto because it mixes warnings unrelated to the selected mode;
+the pure builders retain their existing per-input safety checks. Every
+instance's action opens the existing Insights route.
 The analytics repository invokes the installed widget refresher only after an
 Insights cache upsert completes; the callback is suspend-aware and best-effort
 so a refresh failure cannot turn a successful analytics fetch into a retry.

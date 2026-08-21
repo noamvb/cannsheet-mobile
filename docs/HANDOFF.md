@@ -4,6 +4,46 @@ Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Post-v1.5.0 projection widget correction (local branch; not released)
+
+The owner reported that every projection widget rendered `Projection unavailable`
+with `The cached snapshot is incomplete.` Source review traced that exact copy to
+`buildProjectionUiModel`: it returned before either projection builder whenever
+the response-wide `dataQuality.complete` bit was false. The backend sets that bit
+false for any warning, combining inputs unrelated to a selected mode (for example,
+THC quality) with inputs the mode-specific builder may already handle safely (for
+example, a missing usable grams value falls back to runway's per-product basis,
+and an estimated purchase date is explicitly qualified in spend copy).
+
+The local `codex/fix-projection-widget-completeness` branch removes that aggregate
+veto and its now-unreachable suppression reason/copy. A cached response must still
+be successful and structurally usable, and every ready figure still reaches the
+renderer only with the snapshot's own as-of date. The existing builders remain the
+safety boundary: the new regression test proves an unrelated aggregate warning no
+longer hides either otherwise-valid mode, while an unknown personal cost still
+suppresses the spend figure as `NO_USABLE_FIGURE`. There is no new fallback to
+names, temporary IDs, device-local dates, persisted projections, or transmitted
+derived values.
+
+Focused validation passed:
+`./gradlew --no-daemon testDebugUnitTest --tests com.example.widget.projection.ProjectionUiModelTest`.
+The exact full local gate also passed with JDK 17.0.20, Gradle 9.3.1, Android
+Platform 36.1, and Build Tools 36.0.0:
+`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
+After rebasing onto `origin/main` at `423a62ef24c09889d1e0a438dce0052c04b78378`,
+Gradle reported `BUILD SUCCESSFUL` in 8m40s; the JVM report contains 484 tests,
+zero failures, zero errors, and zero skips, and lint contains zero errors. All
+eight checked-in Node backend suites passed with the documented Node 22.14.0
+runtime, and `python3 -m unittest tests/test_backend_sync_benchmark.py` passed
+all 13 tests. `git diff --check` passed.
+
+ADB was explicitly authorized for read-only diagnosis, but repeated `adb devices -l`
+and `adb mdns services` checks found no attached or advertised device. No phone
+screen, package, app data, widget action, network request, or production record was
+accessed or changed, and no physical screenshot or populated-device walkthrough is
+claimed. The local ADB server was stopped afterward. The version, signing, package,
+Room, queue, wire, Apps Script, endpoint, and release surfaces are unchanged.
+
 ## Current widget expansion: A7 and B9 published; implementation plan complete
 
 PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into

@@ -65,7 +65,6 @@ class ProjectionWidgetRendererTest {
             ),
             ProjectionUiModel.Ready(mode = ProjectionMode.RUNWAY, figures = emptyList()),
             ProjectionUiModel.Suppressed(ProjectionSuppressionReason.NO_SNAPSHOT),
-            ProjectionUiModel.Suppressed(ProjectionSuppressionReason.INCOMPLETE_SNAPSHOT),
             ProjectionUiModel.Suppressed(ProjectionSuppressionReason.STRUCTURALLY_UNUSABLE_SNAPSHOT),
             ProjectionUiModel.Suppressed(ProjectionSuppressionReason.NO_USABLE_FIGURE),
         )

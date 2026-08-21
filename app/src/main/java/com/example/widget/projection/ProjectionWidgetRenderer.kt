@@ -108,8 +108,6 @@ object ProjectionWidgetRenderer {
             context.getString(
                 when (model.reason) {
                     ProjectionSuppressionReason.NO_SNAPSHOT -> R.string.projection_widget_no_snapshot
-                    ProjectionSuppressionReason.INCOMPLETE_SNAPSHOT ->
-                        R.string.projection_widget_incomplete
                     ProjectionSuppressionReason.STRUCTURALLY_UNUSABLE_SNAPSHOT,
                     ProjectionSuppressionReason.NO_USABLE_FIGURE,
                     -> R.string.projection_widget_no_usable_figure

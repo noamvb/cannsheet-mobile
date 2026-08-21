@@ -73,11 +73,37 @@ class ProjectionUiModelTest {
     }
 
     @Test
-    fun incompleteDataQualityIsSuppressed() {
-        val incomplete = snapshot().copy(dataQuality = DataQualityDto(complete = false, warnings = QualityWarningsDto()))
+    fun aggregateIncompleteFlagDoesNotHideOtherwiseUsableFigures() {
+        val incomplete = snapshot().copy(
+            dataQuality = DataQualityDto(
+                complete = false,
+                warnings = QualityWarningsDto(ambiguousThcCount = 1),
+            ),
+        )
+
+        listOf(ProjectionMode.RUNWAY, ProjectionMode.SPEND).forEach { mode ->
+            val ready = buildProjectionUiModel(incomplete, mode) as ProjectionUiModel.Ready
+            assertTrue(ready.figures.isNotEmpty())
+        }
+    }
+
+    @Test
+    fun modeSpecificSafetyChecksStillSuppressAnUnsafeSpendFigure() {
+        val source = snapshot()
+        val incomplete = source.copy(
+            spending = source.spending.copy(
+                byMonth = source.spending.byMonth.map {
+                    it.copy(unknownPersonalCostCount = 1)
+                },
+            ),
+            dataQuality = DataQualityDto(
+                complete = false,
+                warnings = QualityWarningsDto(unknownPersonalCostCount = 1),
+            ),
+        )
 
         assertEquals(
-            ProjectionUiModel.Suppressed(ProjectionSuppressionReason.INCOMPLETE_SNAPSHOT),
+            ProjectionUiModel.Suppressed(ProjectionSuppressionReason.NO_USABLE_FIGURE),
             buildProjectionUiModel(incomplete, ProjectionMode.SPEND),
         )
     }

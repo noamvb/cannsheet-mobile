@@ -9,6 +9,19 @@ Last updated: 2026-08-20
   `024aed09ebd941d0ab26fedb11ec3e16a4822758` (v1.5.0)
 - Current release metadata in `app/build.gradle.kts`: version name `1.5.0`,
   version code `42` (published; B1-B9 are complete).
+- Post-v1.5.0 corrective work removes the projection widget's aggregate
+  `dataQuality.complete` veto. That bit combines unrelated source warnings, so
+  it could make every Runway and Spend instance report an incomplete cached
+  snapshot even when the requested figure's own inputs were usable. The widget
+  now lets the existing runway/spend builders reject mode-specific unsafe
+  inputs and still requires a structurally usable snapshot plus an as-of date.
+  The focused projection JVM suite and the full local Android gate passed with
+  484 JVM tests and zero failures, errors, or skips; lint reported zero errors,
+  all eight checked-in Node backend suites passed, and the Python benchmark
+  suite passed all 13 tests. ADB found no attached or advertised device, so no
+  physical widget screenshot or populated-device walkthrough is claimed. No
+  Room, queue, wire, backend, endpoint, package, version, signing, or
+  published-APK change is included.
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
