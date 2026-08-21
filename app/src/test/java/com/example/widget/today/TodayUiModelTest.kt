@@ -127,7 +127,10 @@ class TodayUiModelTest {
         )
 
         assertEquals(0.0, model.todayUses, 0.0)
-        assertEquals("No logs yet today", model.todayDisplay)
+        assertEquals(
+            PenWidgetText.Resource(R.string.today_widget_no_logs),
+            model.todayDisplay,
+        )
         assertFalse(model.hasTodayEntries)
     }
 
