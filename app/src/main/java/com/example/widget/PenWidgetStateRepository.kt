@@ -269,8 +269,8 @@ class PenWidgetStateRepository internal constructor(
 
     /**
      * Reads pre-v1.5.1 configuration that may still be sitting in this (legacy) store. Only
-     * [PenWidgetConfigRepository.migrateFromLegacyStore] should call this; every other caller
-     * belongs on the new config repository.
+     * [PenWidgetConfigRepository.read] (via its injected `readLegacy` dependency) should call
+     * this; every other caller belongs on the new config repository.
      */
     suspend fun readLegacyConfig(appWidgetId: Int): PenWidgetInstanceConfig {
         requireValidWidgetId(appWidgetId)

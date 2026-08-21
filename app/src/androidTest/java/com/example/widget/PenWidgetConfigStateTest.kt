@@ -29,6 +29,7 @@ class PenWidgetConfigStateTest {
     private lateinit var legacyDataStore: DataStore<Preferences>
     private lateinit var repository: PenWidgetConfigRepository
     private lateinit var legacyRepository: PenWidgetStateRepository
+    private val extraFiles = mutableListOf<File>()
 
     @Before
     fun setUp() {
@@ -51,6 +52,7 @@ class PenWidgetConfigStateTest {
     fun tearDown() {
         configFile.delete()
         legacyFile.delete()
+        extraFiles.forEach { it.delete() }
     }
 
     @Test
@@ -84,14 +86,16 @@ class PenWidgetConfigStateTest {
 
         repository.clear(31)
 
-        assertEquals(PenWidgetInstanceConfig.DEFAULT, repository.read(31))
-        // read() returning DEFAULT is not sufficient: it would also return DEFAULT if the values
-        // were removed but the migrated flag survived. Assert on the raw keys.
+        // Check the raw keys immediately after clear(), before any read(). read() now adopts (and
+        // persists) legacy config for an unmigrated id - calling it here first would leave a fresh
+        // discreet_31/migrated_31 pair behind and make this assertion look like a leak when it
+        // isn't one.
         val remaining = configDataStore.data.first().asMap().keys.map { it.name }
         assertTrue(
             "clear left keys behind: $remaining",
             remaining.none { it.endsWith("_31") },
         )
+        assertEquals(PenWidgetInstanceConfig.DEFAULT, repository.read(31))
     }
 
     @Test
@@ -117,40 +121,84 @@ class PenWidgetConfigStateTest {
     }
 
     @Test
-    fun migrationCopiesLegacyConfigOnceAndClearsTheLegacyKeys() = runBlocking {
+    fun readAdoptsLegacyConfigOnFirstReadWithoutAnyUpdate() = runBlocking {
         val legacyConfig = PenWidgetInstanceConfig(
             pinnedProductId = "legacy-product",
             discreet = true,
             stepSecondsOverride = 20,
         )
-        seedLegacyConfig(50, legacyConfig)
+        val repo = PenWidgetConfigRepository(
+            newDataStore(),
+            readLegacy = { legacyConfig },
+            clearLegacy = { },
+        )
 
-        repository.migrateFromLegacyStore(50, legacyRepository)
-
-        assertEquals(legacyConfig, repository.read(50))
-        assertEquals(PenWidgetInstanceConfig.DEFAULT, legacyRepository.readLegacyConfig(50))
+        // No PenWidgetUpdater.update and no separate migration call - a bare read() must still see
+        // the user's pinned cart, matching what PenWidgetActionRouter.handle and
+        // PenWidgetConfigureActivity.loadConfiguration do on the very first post-upgrade call,
+        // before any update() has necessarily run for this widget id.
+        assertEquals(legacyConfig, repo.read(60))
     }
 
     @Test
-    fun migrationIsIdempotent() = runBlocking {
-        val legacyConfig = PenWidgetInstanceConfig(
-            pinnedProductId = "legacy-product",
-            discreet = true,
-            stepSecondsOverride = 20,
+    fun readClearsTheLegacyKeysAfterAdopting() = runBlocking {
+        var clearLegacyCalls = 0
+        var clearedWidgetId: Int? = null
+        val repo = PenWidgetConfigRepository(
+            newDataStore(),
+            readLegacy = { PenWidgetInstanceConfig(pinnedProductId = "legacy-product") },
+            clearLegacy = { id ->
+                clearLegacyCalls++
+                clearedWidgetId = id
+            },
         )
-        seedLegacyConfig(51, legacyConfig)
 
-        repository.migrateFromLegacyStore(51, legacyRepository)
+        repo.read(61)
 
-        // A real edit made after the first migration must survive a second migration call. If
-        // the per-widget migrated flag were not respected, this second call would read the now
-        // empty legacy store and overwrite the fresh edit with defaults.
-        val updatedConfig = legacyConfig.copy(discreet = false)
-        repository.write(51, updatedConfig)
+        assertEquals(1, clearLegacyCalls)
+        assertEquals(61, clearedWidgetId)
+    }
 
-        repository.migrateFromLegacyStore(51, legacyRepository)
+    @Test
+    fun readIsIdempotentAndDoesNotReadLegacyTwice() = runBlocking {
+        var readLegacyCalls = 0
+        val repo = PenWidgetConfigRepository(
+            newDataStore(),
+            readLegacy = {
+                readLegacyCalls++
+                PenWidgetInstanceConfig(pinnedProductId = "legacy-product")
+            },
+            clearLegacy = { },
+        )
 
-        assertEquals(updatedConfig, repository.read(51))
+        repo.read(62)
+        assertEquals(1, readLegacyCalls)
+
+        repo.read(62)
+        assertEquals(1, readLegacyCalls)
+    }
+
+    @Test
+    fun aConcurrentSaveWinsOverLegacyAdoption() = runBlocking {
+        var readLegacyCalls = 0
+        val repo = PenWidgetConfigRepository(
+            newDataStore(),
+            readLegacy = {
+                readLegacyCalls++
+                PenWidgetInstanceConfig(pinnedProductId = "legacy-product")
+            },
+            clearLegacy = { },
+        )
+        val userConfig = PenWidgetInstanceConfig(pinnedProductId = "user-product", discreet = true)
+        // Simulates a save that already completed - and therefore already set the migrated marker
+        // - before this read() runs, exactly like PenWidgetConfigureActivity.save racing the first
+        // post-upgrade read for the same widget id.
+        repo.write(63, userConfig)
+
+        val result = repo.read(63)
+
+        assertEquals(userConfig, result)
+        assertEquals(0, readLegacyCalls)
     }
 
     @Test
@@ -162,10 +210,15 @@ class PenWidgetConfigStateTest {
         val payload = legacyPayload(commitId = "commit-53")
         assertTrue(legacyRepository.submitCommit(53, payload))
 
-        repository.migrateFromLegacyStore(52, legacyRepository)
-        repository.migrateFromLegacyStore(53, legacyRepository)
+        val configBackedByLegacy = PenWidgetConfigRepository(
+            newDataStore(),
+            readLegacy = { legacyRepository.readLegacyConfig(it) },
+            clearLegacy = { legacyRepository.clearLegacyConfig(it) },
+        )
+        configBackedByLegacy.read(52)
+        configBackedByLegacy.read(53)
 
-        // The migrated config left the legacy store...
+        // Reading adopted (and cleared) the config out of the legacy store...
         assertEquals(PenWidgetInstanceConfig.DEFAULT, legacyRepository.readLegacyConfig(52))
         assertEquals(PenWidgetInstanceConfig.DEFAULT, legacyRepository.readLegacyConfig(53))
         // ...but the draft and the pending commit payload, which are not config, stayed behind.
@@ -204,4 +257,12 @@ class PenWidgetConfigStateTest {
         date = "2026-08-20",
         time = "12:00",
     )
+
+    /** A fresh file-backed DataStore for tests that wire their own readLegacy/clearLegacy fakes. */
+    private fun newDataStore(): DataStore<Preferences> {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val file = File(context.cacheDir, "pen-widget-config-extra-${UUID.randomUUID()}.preferences_pb")
+        extraFiles += file
+        return PreferenceDataStoreFactory.create { file }
+    }
 }
