@@ -1,548 +1,162 @@
-# Latest handoff
+# Current handoff
 
 Last updated: 2026-08-20
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Post-v1.5.0 projection widget correction (local branch; not released)
-
-The owner reported that every projection widget rendered `Projection unavailable`
-with `The cached snapshot is incomplete.` Source review traced that exact copy to
-`buildProjectionUiModel`: it returned before either projection builder whenever
-the response-wide `dataQuality.complete` bit was false. The backend sets that bit
-false for any warning, combining inputs unrelated to a selected mode (for example,
-THC quality) with inputs the mode-specific builder may already handle safely (for
-example, a missing usable grams value falls back to runway's per-product basis,
-and an estimated purchase date is explicitly qualified in spend copy).
-
-The local `codex/fix-projection-widget-completeness` branch removes that aggregate
-veto and its now-unreachable suppression reason/copy. A cached response must still
-be successful and structurally usable, and every ready figure still reaches the
-renderer only with the snapshot's own as-of date. The existing builders remain the
-safety boundary: the new regression test proves an unrelated aggregate warning no
-longer hides either otherwise-valid mode, while an unknown personal cost still
-suppresses the spend figure as `NO_USABLE_FIGURE`. There is no new fallback to
-names, temporary IDs, device-local dates, persisted projections, or transmitted
-derived values.
-
-Focused validation passed:
-`./gradlew --no-daemon testDebugUnitTest --tests com.example.widget.projection.ProjectionUiModelTest`.
-The exact full local gate also passed with JDK 17.0.20, Gradle 9.3.1, Android
-Platform 36.1, and Build Tools 36.0.0:
-`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`.
-After rebasing onto `origin/main` at `423a62ef24c09889d1e0a438dce0052c04b78378`,
-Gradle reported `BUILD SUCCESSFUL` in 8m40s; the JVM report contains 484 tests,
-zero failures, zero errors, and zero skips, and lint contains zero errors. All
-eight checked-in Node backend suites passed with the documented Node 22.14.0
-runtime, and `python3 -m unittest tests/test_backend_sync_benchmark.py` passed
-all 13 tests. `git diff --check` passed.
-
-ADB was explicitly authorized for read-only diagnosis, but repeated `adb devices -l`
-and `adb mdns services` checks found no attached or advertised device. No phone
-screen, package, app data, widget action, network request, or production record was
-accessed or changed, and no physical screenshot or populated-device walkthrough is
-claimed. The local ADB server was stopped afterward. The version, signing, package,
-Room, queue, wire, Apps Script, endpoint, and release surfaces are unchanged.
-
-## Current widget expansion: A7 and B9 published; implementation plan complete
-
-PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged into
-`main` as `847b184`; no version metadata or published APK changed. Its full-widget
-presets remain uses-only, use the guarded DataStore draft setter, omit fractional
-second conversions rather than flooring them, and hide below the `200dp` regular
-layout floor.
-
-A2 (`feat: scale the pen widget step size with rendered size`) is squash-merged as
-PR #110 / `e00b3bb`. Large rendered widgets carry a 30-second increment/decrement
-step through the existing broadcast intent extras; compact and base-width widgets
-carry the default 10-second step. The router clamps the extra, and the renderer
-formats the matching accessibility descriptions. The Room schema, offline queue,
-wire payloads, backend contract, endpoint, package ID, and version metadata are
-unchanged.
-
-PR #111 (`feat: add a pen widget configuration activity`) is squash-merged as
-`9749f44`. It adds optional per-instance DataStore configuration for a pinned
-selectable pen, discreet presentation, and a 5/10/30 second step override.
-Unconfigured or restored widgets read defaults and continue to follow
-`preferences.loadedPenProductId`; deleted widget IDs clear all three
-configuration keys. The Compose activity routes saving through
-`PenWidgetRuntime.withSerialized { PenWidgetUpdater.update(...) }`.
-
-The configuration activity is explicitly exported because the launcher is a
-separate Android UID and otherwise cannot invoke the `APPWIDGET_CONFIGURE` flow;
-the attached plan's `exported="false"` value was observed to make the launcher
-settings control a no-op on the API-36 emulator. This is the only intentional
-manifest deviation from the plan and is required for the requested feature to
-function.
-
-Correction (v1.5.1, PR #128): the export fix was necessary but not sufficient.
-Both `appwidget-provider` files also declared `android:configure` as a flattened
-`package/class` value, which Android parses as a bare class name, producing
-`ComponentName(providerPackage, "com.noamv.cannsheet.mobile/com.example.widget.PenWidgetConfigureActivity")`
-— a component that does not exist. The pen widget's configuration activity was
-therefore unreachable from the launcher in both published releases, and
-`configuration_optional` made adding the widget skip configuration silently
-rather than fail. PR #128 uses the bare class name and adds an instrumented test
-that guards the attribute format for every declared provider.
-
-Validation is emulator-only and green so far: A1/A2's exact local Gradle gate and
-focused API-36 renderer/router tests passed, and A3's exact local Gradle gate plus
-focused `PenWidgetConfigStateTest` instrumentation passed 4/4. Manual API-36
-evidence observed the old v1.4.4 widget surviving `adb install -r`, a readable light
-configuration screen, discreet-mode output (`Pen cart` / `Tap to log`), and
-30-second accessibility actions. The remove/re-add gesture remains unverified from
-A1 because the AVD launcher opened the app drawer; no physical phone or production
-data was used.
-
-A3's post-review focused router instrumentation passed 8/8 after adding the
-per-widget pinned-product assertion. Its refreshed remote PR gate was run
-`32350773583`, with all required jobs green. A4 is squash-merged as PR #112 /
-`1552aaf` after the exact local Android gate, emulator-only fixture evidence, and
-refreshed remote run `32354108637` all passed.
-
-A4's sync indicator is presentation-only. It reads the existing aggregate pending
-action count and `queueNonEmptySinceEpochMillis`, shows `%1$s · sync is behind`
-after the existing 24-hour threshold, and preserves the precedence
-queued → sync-behind → discreet → existing status/counts. It adds no queue fields,
-notification behavior, Room schema, or wire payload changes. Both provider-info
-XML files request the platform's minimum 30-minute periodic update, independent of
-queue-alert opt-in, so an otherwise idle widget will recompute after crossing the
-threshold. The API-36 evidence used a temporary local fixture, cleaned its
-Room/DataStore state, and made no HTTP or production-data action; no physical
-phone was used.
-
-A5 (`feat: open the cart picker directly from the pen widget`) is squash-merged
-as PR #113 / `7ca6804`. `ACTION_OPEN_CART_PICKER` is a new activity PendingIntent
-action with a distinct URI and the sibling `EXTRA_OPEN_CART_PICKER`;
-`EXTRA_START_ROUTE` remains byte-for-byte unchanged. Cold-start and warm-start
-consumption use a conflated `Channel<Unit>`, and the existing
-`ConsumptionScreen` picker is opened in the `LOADED_PEN` mode used by `Swap
-cart`. The interactive widget name announces “Double tap to choose a different
-cart,” while message-state layouts retain `ACTION_OPEN_LOG`. Its refreshed
-remote PR gate was `32357272273`, all green. The API-36 emulator showed the
-pen-only `P` category on both explicit cold and warm launches. A5 had no
-required screenshot because it changed the destination of an existing tap
-target rather than widget visuals.
-
-A6 (`fix: preserve pen widget state across restore and cut resize reload
-churn`) is squash-merged as PR #114 / `fb6a52e`. The plan-required test
-subagent added `PenWidgetRestoreTest` with the five remapping cases, while the
-separate read-only size-map subagent supplied the guarded API-31
-`RemoteViews` block. Restore remapping snapshots and rewrites draft, pending
-commit, queue watermark, pinned product, discreet, and step-override keys
-before flushing overdue commits and rendering new IDs. API 31+ maps
-compact/base/large specs at `110x110`, `140x160`, and `280x320`, preserving the
-per-widget step override; API 24–30 retain the existing live-size fallback,
-while API 31+ skips resize-triggered rebuilds so the host can select a prepared
-variant. The widget DataStore is included in cloud backup and device transfer,
-and a restored pending payload retains its stable event ID for duplicate-safe
-Room/server retry. Its refreshed PR gate was [run
-32360621693](https://github.com/noamvb/cannsheet-mobile/actions/runs/32360621693),
-and the exact post-merge `main` run was [32361027225](https://github.com/noamvb/cannsheet-mobile/actions/runs/32361027225),
-green on all six jobs including API 24 and API 36. No physical phone or
-production data action was used.
-
-A7 (`chore: bump version to 1.4.5`) is squash-merged as PR #115 / `f32f7c0`.
-The exact post-merge `main` run was `32362664715`, green on all six required
-jobs. The annotated tag `v1.4.5` resolves to the exact Release A SHA
-`f32f7c0c96690c74288bf0428b946d74716a7e81`. Historical publication workflow
-run `32420347803` passed exact-target validation, signed build, publication,
-and post-publication verification. The legacy tag-triggered run `32420325645`
-stopped before building because its historical current-tip guard correctly
-rejected `main` at `4f7ca511`. No phone installation or production data action
-was used.
-
-## Release B: B1-B9 merged and published
-
-B1 (`feat: add launcher shortcuts for log, purchase, and insights`) is
-squash-merged as PR #116 / `419d506`. The API-36 emulator showed the three
-static shortcuts and verified Log, Purchase, and Insights routing. The exact
-post-merge `main` run was `32366164663`, green on all six required jobs. Its
-menu screenshot is `docs/images/launcher-shortcuts-menu.png`.
-
-B2 (`feat: add a quick settings tile for one-tap pen logging`) is squash-merged
-as PR #117 / `1d17c3d`. It reserves
-`Int.MAX_VALUE` as the non-AppWidget tile key, writes the first preset into the
-existing draft before calling the shared `submitPenLog` helper, and retains the
-existing durable five-second undo/claim/write/complete behavior plus the
-WorkManager recovery path. The API-36 emulator showed the tile on the shade's
-third page, `Undo` immediately after tapping, automatic return to the product
-label after the window, and the corresponding product usage in the normal app
-UI. The two screenshots are `docs/images/pen-quick-tile-normal.png` and
-`docs/images/pen-quick-tile-undo.png`. The full connected API-36 suite passed
-144/144, and the final exact local gate passed. Its exact post-merge `main` run
-was `32373120078`, green on all six required jobs. No physical phone or
-production-data action was used.
-
-B3 (`feat: add a sync status home-screen widget`) is squash-merged as PR #118 /
-`45affae`. It adds a compact,
-horizontal-resizable `RemoteViews` widget with aggregate pending count, a
-relative last-sync label, a stuck-queue state, and a `Sync now` tap that calls
-`SyncScheduler.enqueueImmediate` rather than `SyncEngine` directly. The shared
-`CannsheetWidgetRefresher` now fans out independently to the pen and sync-status
-widgets. API-36 emulator evidence covered empty, pending, and stuck states,
-light/dark rendering, resize to the launcher-wide span, launcher restart
-persistence, and the WorkManager enqueue path. Evidence images are
-`docs/images/sync-status-widget-empty.png`,
-`docs/images/sync-status-widget-pending.png`, and
-`docs/images/sync-status-widget-stuck.png`. The API-31-only metadata path was
-not manually repeated on API 24; the base provider XML remains the API-24
-surface and the API-24 CI job is the compatibility check. No physical phone or
-production data action was used. The exact post-merge `main` run was
-`32379701895`, green on all six required jobs.
-
-B4 (`feat: add a multi-cart quick log widget`) is squash-merged as PR #119 /
-`f5109b7`. It adds a wide, fixed-button widget that orders up to four selectable
-pen carts by recent interaction, preserves the existing shared five-second
-durable undo path, converts display seconds with `secondsToUses` before
-Room/queue logging, and leaves the loaded-cart preference unchanged. The
-focused JVM model suite passed 7/7 and the exact local Android gate passed.
-API-36 emulator evidence observed two distinct product UUIDs and `0.5` uses in
-two distinct Room rows, full-width Undo, light/dark rendering, launcher restart
-persistence, and horizontal resize behavior. Screenshots are
-`docs/images/multi-cart-widget-grid.png`,
-`docs/images/multi-cart-widget-grid-light.png`, and
-`docs/images/multi-cart-widget-undo.png`. The emulator network remained
-disabled, exact fixture rows were removed afterward, and no physical phone or
-production data action was used. The temporary multi-cart host instance remains
-on that isolated emulator because its launcher shell has no deterministic
-widget-delete operation. The exact post-merge `main` run was `32386087534`,
-green on all six required jobs after the hosted API-24 installation timeout was
-rerun.
-
-B5 (`feat: record consumption history locally`) is squash-merged as PR #120 /
-`23b7b6d`. Room schema version 11 adds an append-only
-`consumption_history` table keyed by the stable event ID, an idempotent DAO
-insert, a bounded timestamp query, and an explicit prune method that is not
-called automatically. The exact post-merge `main` run was `32392860812`, green
-on all six required jobs. The history write is wired after the existing queue write
-through a narrow repository interface and is deliberately best-effort so a
-history failure cannot roll back a queue entry. Focused API-36 instrumentation
-passed 4/4 DAO tests and 10/10 migration tests. On the isolated, network-disabled
-API-36 emulator, the previous local v1.4.4 build logged three queued entries;
-the current v1.4.5 debug build upgraded the database from version 10 to 11,
-preserved all three legacy queue rows, left history empty during migration, and
-then recorded one new post-upgrade history row. The old APK was re-signed with
-the local debug certificate solely to make an in-place emulator upgrade
-possible; this is not production signer-continuity evidence. The app was
-stopped and the emulator was disconnected afterward. No physical phone or
-production data action was used.
-
-B6 (`feat: add a today home-screen widget`) is squash-merged as PR #121 /
-`d76d9aa`. The pure model covers today's local-date total, the seven-day
-observed-day baseline (requiring three observed days), and the consecutive
-logged-day streak. The updater reads a roughly ten-day bounded
-`consumptionHistorySince` Flow and explicitly treats pending local history as
-what the user logged, not as server confirmation. The seven requested model
-tests passed, and the exact post-merge `main` run was `32408190231`, green on
-all six required jobs including API 24 and API 36. An isolated,
-network-disabled API-36 AVD added the widget and visibly rendered
-`No logs yet today`; the AVD's System UI repeatedly became unresponsive during
-the populated fixture attempt, so no populated screenshot is claimed. The
-empty-state evidence is `docs/images/today-widget-empty.png`. The temporary
-AVD was deleted and ADB was disconnected afterward. No physical phone or
-production data action was used.
-
-B7 (`docs: allow labelled cached projections on widget surfaces`) is squash-merged
-as PR #122 / `1230cda`; its exact post-merge `main` run was `32409174518`, green
-on all six required jobs. It clarifies that in-app projections remain suppressed
-for cached, stale, changing, or incomplete snapshots, while a home-screen widget
-may display a cached projection only beside the snapshot's own as-of date and
-only when a snapshot exists. ADR-028 was already occupied, so the new decision
-is recorded as ADR-039.
-
-B8 (`feat: add runway and spend projection widgets`) is squash-merged as PR #123 /
-`a3e0ed2`. It adds one cache-only provider with per-instance
-Runway or Spend mode, a launcher configuration activity, and API-24-safe
-`TextView` RemoteViews. It reads only the cached `InsightsResponseDto`, reuses
-the existing presentation builders, and displays the source snapshot's own
-as-of date beside every figure. No cached snapshot renders an explicit
-unavailable state; in-app suppression and the existing Insights refresh
-boundaries are unchanged.
-
-The focused projection unit tests and exact local Android gate passed. On the
-existing isolated API-36 AVD, the launcher picker showed the provider and its
-preview, both configuration modes saved, the no-snapshot state rendered in
-light and dark mode, the widget survived launcher restart, a large resize did
-not clip the fixed RemoteViews content, and the action opened Insights. The
-emulator had no cached Insights snapshot, so no populated projection is claimed.
-The launcher shell's automated remove gesture opened the app drawer rather than
-the removal target; removal/re-add remains unverified. A durable Insights cache
-write now invokes the installed widget refresher after the upsert, with refresh
-failures kept best-effort, so a newly populated cache can replace the unavailable
-state. Projection mode keys are remapped atomically in `onRestored` before
-restored instances render; focused tests cover the cache-write callback and
-overlapping restore IDs. Evidence images are
-`docs/images/projection-widget-preview.png`,
-`docs/images/projection-widget-configure-spend.png`, and
-`docs/images/projection-widget-empty-light.png`. The exact post-merge `main`
-validation run `32418762081` passed all six required jobs; the published B9
-provenance is recorded below.
-
-B9 (`chore: bump version to 1.5.0`) is squash-merged as PR #126 /
-`024aed0`. Its PR gate `32423394786` and exact post-merge `main` run
-`32423802205` were green on all required jobs. The annotated `v1.5.0` tag
-resolves to `024aed09ebd941d0ab26fedb11ec3e16a4822758`, and ordinary signed
-publication workflow `32424355873` passed exact-main confirmation, signed build,
-publication, and post-publication verification. The implementation boundaries
-for the shortcuts, tile, four widget providers, local history table, and
-historical projection cache are documented in `docs/ARCHITECTURE.md`.
-
-## Current release: v1.5.0 (published and independently verified)
-
-`v1.5.0` (`versionCode 42`, `versionName 1.5.0`) is the version-only release
-after all Release B implementation PRs merged. It packages the launcher
-shortcuts, Quick Settings pen tile, sync-status, multi-cart, Today, and
-runway/spend projection widgets, plus the local `consumption_history` table.
-The public release is [Cannsheet Mobile v1.5.0](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.0)
-and contains exactly the APK and `.sha256` assets.
-
-Independent download verification passed: APK SHA-256
-`7dbc71fd3d5bc02d834133e4404312b5d22d32d33d186967c718d62699317178`;
-package `com.noamv.cannsheet.mobile`; version code `42`; version name `1.5.0`;
-min SDK `24`; target SDK `36`; APK Signature Scheme v2 true; and certificate
-SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`,
-matching the public `v1.4.5` APK. No production installation was performed.
-The owner should open Obtainium, refresh or tap **Check for updates**, and
-install Cannsheet Mobile 1.5.0.
-
-## v1.4.5 (published and independently verified)
-
-`v1.4.5` (`versionCode 41`, `versionName 1.4.5`) packages the completed
-pen-widget expansion from A1 through A7. The version-only change is merged on
-`main` at the exact requested Release A commit
-`f32f7c0c96690c74288bf0428b946d74716a7e81`, and owner authorization for
-publication was received on 2026-08-20. The annotated tag remains anchored to
-the exact Release A commit
-`f32f7c0c96690c74288bf0428b946d74716a7e81`, rather than the later Release B
-tip. The public release is [Cannsheet Mobile v1.4.5](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.4.5)
-and contains exactly the APK and `.sha256` assets. Historical workflow
-`32420347803` completed the signed build and post-publication checks.
-
-Independent download verification passed: APK SHA-256
-`c368876603a2b0ed4d92da60e51157c15e23248f47fca9e399fd90815c669d16`;
-package `com.noamv.cannsheet.mobile`; version code `41`; version name `1.4.5`;
-min SDK `24`; target SDK `36`; APK Signature Scheme v2 true; and certificate
-SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`,
-matching `v1.4.4`. No production installation was performed. The owner should
-open Obtainium, refresh or tap **Check for updates**, and install Cannsheet
-Mobile 1.4.5.
-
-### Shipped changes
-
-1. **Per-widget pen logging surfaces and controls** (PRs #109–#113)
-   - Added uses-safe quantity presets, size-scaled step controls, per-instance
-     pinned-cart/discreet/step configuration, a count-free sync-behind state,
-     and a one-tap cart-picker destination while preserving the Room, offline
-     queue, Apps Script, endpoint, package, and wire contracts.
-2. **Restore-safe state and size-mapped rendering** (PR #114, squash-merged
-   `fb6a52e`)
-   - Preserves draft, pending, queue-watermark, and configuration state across
-     widget ID remapping; retains stable pending event IDs for duplicate-safe
-     retry; and supplies guarded API 31+ compact/base/large `RemoteViews`
-     variants without resize-triggered data reloads.
-3. **Version bump to 1.4.5 (versionCode 41)**
-   - `versionCode` 40 → 41, `versionName` 1.4.4 → 1.4.5.
-
-## v1.4.4
-
-`v1.4.4` (`versionCode 40`, `versionName 1.4.4`) is a patch release with two follow-up
-refinements to the LocalLLM prewarm work.
-
-### Shipped changes
-
-1. **Unbind cleanup on failed binds** (PR #106, squashed `a8125a5`)
-   - `LocalLlmClient.warmup()` now always calls `unbindService` on close, including when
-     `bindService` returned `false`. Previously a failed bind left `close()` a no-op,
-     leaking the registered `ServiceConnection` on every Insights open where LocalLLM is
-     absent or refuses the bind.
-2. **Insights warmup gated on data availability** (PR #106, squashed `a8125a5`)
-   - `rememberNarrativeState()` now keys its warmup `DisposableEffect` on
-     `CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)`, so the binding only
-     opens when a summary generation is actually plausible. Previously it fired
-     unconditionally, so a screen with too little data to summarise still paid the cost
-     of loading the 2 GB model.
-3. **Version bump to 1.4.4 (versionCode 40)**
-   - `versionCode` 39 → 40, `versionName` 1.4.3 → 1.4.4.
-
-### Release provenance
-
-- Merged pull requests: **#106** (`a8125a5`), **#107** (`ee1e6ab`).
-- Tagged commit **`ee1e6ab075ce056fff84cf226df6a51baaa21689`**, the tip of `main`.
-- Proven by push-to-main run **`32303352218`**, event `push`, conclusion `success`, with all
-  six required jobs individually `success`: `Classify changes and scan repository`,
-  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
-  `Cannsheet Android PR validation`.
-- `v1.4.4` is an **annotated** tag pointing at exactly that commit.
-- Release workflow **`32327408818`**: all three jobs (`Confirm tested main commit`,
-  `Verify and build signed APK`, `Publish verified Cannsheet APK`) succeeded.
-- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.4.apk`
-  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.4.apk.sha256`.
-- Published APK SHA-256:
-  `c8b8365ebbe7d38c0e587e0447d3e01e65731b0905c28806197317ec50a8e14a`, independently
-  downloaded and checked with `shasum -a 256 -c` against the published asset.
-- Signing certificate SHA-256:
-  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted directly
-  from the APK's v2 signing block (parsed by hand — no `apksigner` available in this
-  session's environment) and **identical to v1.4.1 through v1.4.3**, so Obtainium updates
-  in place.
-- Package, `versionCode`, and `versionName` were asserted by the release workflow's own
-  `Verify signed APK` step, not independently re-extracted here (no `aapt`/`apksigner` in
-  this session's environment).
-
-## v1.4.3
-
-`v1.4.3` (`versionCode 39`, `versionName 1.4.3`) holds a LocalLLM warmup binding open while
-the Insights overview screen is active. This keeps LocalLLM resident and prevents the inference
-service from being terminated with a freshly loaded model in memory during the gap between the
-status check and generation.
-
-### Shipped changes
-
-1. **Hold LocalLLM warmup binding across Insights screen lifecycle** (PR #103, squashed `27d3a56`)
-   - Adopted the `LocalLlmClient.warmup(): AutoCloseable` binding handle from LocalLLM client.
-   - `rememberNarrativeState()` holds the warmup binding via `DisposableEffect` for the duration
-     the Insights Overview screen is mounted, and safely releases the binding on disposal.
-
-2. **Version bump to 1.4.3 (versionCode 39)** (PR #104, squashed `1dc4cca`)
-   - `versionCode` 38 → 39, `versionName` 1.4.2 → 1.4.3.
-
-### Release provenance
-
-- Merged pull requests: **#103** (`27d3a56`), **#104** (`1dc4cca`).
-- Tagged commit **`1dc4cca1bbe43e9dd747e5b9175db731d70fe5c9`**, the tip of `main`.
-- Proven by push-to-main run **`32292855160`**, event `push`, conclusion `success`, with all
-  six required jobs individually `success`: `Classify changes and scan repository`,
-  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
-  `Cannsheet Android PR validation`.
-- `v1.4.3` is an **annotated** tag pointing at exactly that commit.
-- Release workflow **`32293494930`**: all three jobs (`Confirm tested main commit`,
-  `Verify and build signed APK`, `Publish verified Cannsheet APK`) succeeded.
-- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.3.apk`
-  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.3.apk.sha256`.
-- Published APK SHA-256:
-  `f8cef5d38a38396fd6e527426526b7d75d66d729bc6ed5eaacaca4dd5b416f90`, independently
-  downloaded and checked with `shasum -a 256 -c` against the published asset.
-- Signing certificate SHA-256:
-  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted from the
-  APK's v2 signing block and **identical to v1.4.2 and v1.4.1**, so Obtainium updates in place.
-- Package `com.noamv.cannsheet.mobile`, `versionCode 39`, `versionName 1.4.3`, minSdk 24.
-
-## v1.4.2
-
-`v1.4.2` (`versionCode 38`, `versionName 1.4.2`) stops the Insights summary regenerating when
-it is scrolled out of view and back. A patch bump: no behaviour change beyond the card no
-longer redoing work it had already done.
-
-### Shipped changes
-
-1. **The summary no longer regenerates on scroll** (PR #100, squashed `e557894`)
-   - The card sits in a `LazyColumn` item, and `LazyColumn` disposes an off-screen item's
-     entire composition once it scrolls far enough away — discarding the `produceState`
-     that was driving generation. Scrolling back built a fresh composition and started
-     again from nothing: a visible regeneration, plus another binder request and another
-     on-device model run every round trip.
-   - `rememberNarrativeState()` is now called once above the `LazyColumn` and the resolved
-     state passed down; the card only renders. See `docs/DECISIONS.md` ADR-027.
-
-2. **Version bump** (PR #101, squashed `152d141`)
-   - `versionCode` 37 → 38, `versionName` 1.4.1 → 1.4.2.
-
-### Release provenance
-
-- Merged pull requests: **#100** (`e557894`), **#101** (`152d141`).
-- Tagged commit **`152d141b9ff27b523f4473ce8edb49b301014f3e`**, the tip of `main`.
-- Proven by push-to-main run **`32278056196`**, event `push`, conclusion `success`, with all
-  six required jobs individually `success`: `Classify changes and scan repository`,
-  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
-  `Cannsheet Android PR validation`.
-- `v1.4.2` is an **annotated** tag pointing at exactly that commit, restoring the convention
-  the ship-release skill specifies and that v1.4.1 deviated from (v1.4.1's tag is
-  lightweight; it is published and must not be re-tagged).
-- Release workflow **`32278927941`**: all three jobs succeeded.
-- Published assets on `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.4.2.apk`
-  (13,898,698 bytes) and `Cannsheet-Mobile-1.4.2.apk.sha256`.
-- Published APK SHA-256:
-  `b515500fb225c4249df44ec72f45c3671408ff08dfc72622bd37b1539b4d2236`, independently
-  downloaded and checked with `shasum -a 256 -c` against the published asset.
-- Signing certificate SHA-256:
-  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted from the
-  APK's v2 signing block and **identical to v1.4.1**, so Obtainium updates in place. The
-  debug-style DN is deliberate and documented in ADR-024.
-- Package `com.noamv.cannsheet.mobile`, `versionCode 38`, `versionName 1.4.2`, minSdk 24.
-
-## v1.4.1
-
-`v1.4.1` (`versionCode 37`, `versionName 1.4.1`) gives the Insights narrative card a loading
-state: an indeterminate progress bar and "Writing a summary on this phone…" from the moment
-generation is committed to until the first token arrives. A patch bump — it makes the v1.4.0
-feature visible while it works, without changing what the feature does.
-
-### Shipped changes
-
-1. **Loading indicator while the Insights summary generates** (PR #97, squashed `21a9fd8`)
-   - `NarrativeState` gains a `Loading` case, set only after every pre-flight gate has passed
-     and immediately before the call to `client.generate()`, so a phone with no model
-     installed still sees nothing rather than a spinner that would never resolve.
-   - Three failure modes were closed off at the same time, because a card that can appear is a
-     card that can get stuck: `terminalState()` makes the end of a generation total (a flow
-     completing having emitted nothing can no longer leave the progress bar on screen
-     indefinitely); the collection is bounded by a timeout (a wedged service emits no
-     fragment, no completion, and no error at all); and `UNSUPPORTED` is now an explicit gate,
-     since it reports its model as downloaded on purpose and would otherwise draw a spinner
-     only to have the request refused a moment later.
-   - A blank first fragment keeps the loading body rather than collapsing the card, since
-     models routinely open with a newline.
-   - `docs/DECISIONS.md` gains ADR-026, recording the same three failure modes and how each
-     was closed before this shipped. It also corrects ADR-025's "not verified" paragraph: the
-     card **has** now been observed rendering on a device (Galaxy Z Fold 7, against a live
-     account, 2026-08-19), with every figure matching the statistics below it. That correction
-     ships with this release, not with the loading-indicator code itself.
-2. **Version bump** (PR #98, squashed `1fc3959`)
-   - `docs/PROJECT_STATE.md` refreshed; it was two releases stale.
-
-### Release provenance
-
-- Merged pull requests: **#97** (`21a9fd8`), **#98** (`1fc3959`).
-- Tagged commit **`1fc3959345eae3140b77ee5c705fac3253fc9ec7`**, the tip of `main`.
-- Proven by push-to-main run **`32214781173`**, event `push`, conclusion `success`, with all
-  six required jobs individually `success` on the first attempt (no re-run needed): Classify
-  changes and scan repository, Backend validation, Android static validation, Emulator API 24,
-  Emulator API 36, Cannsheet Android PR validation.
-- Release workflow **`32244654049`** on `.github/workflows/release-apk.yml`: all three jobs
-  (`Confirm tested main commit`, `Verify and build signed APK`,
-  `Publish verified Cannsheet APK`) succeeded.
-- Published assets: `Cannsheet-Mobile-1.4.1.apk` (13,898,698 bytes) and its `.sha256`.
-- Published APK SHA-256: `9974b604d7834cc236345ad0235385aa2c896a59f907a81e66b1c2ecc2a0e8aa`,
-  independently downloaded and verified against both the published `.sha256` asset and
-  GitHub's own recorded asset digest — not copied from workflow logs.
-- Signing certificate SHA-256:
-  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, extracted directly from
-  the APK's v2 signing block and confirmed **byte-identical to v1.4.0**, so Obtainium updates
-  in place and the Room database and pending offline queue are not at risk.
-- Package `com.noamv.cannsheet.mobile`, `versionCode 37`, `versionName 1.4.1`, minSdk 24.
-
-## Not verified
-
-- The loading indicator itself (the actual progress bar and "Writing a summary on this
-  phone…" text, and the transition into and out of it) has not been observed rendering on a
-  device against a live analytics response with this release build. ADR-025's correction
-  confirms the underlying **summary card** renders correctly against real data; it predates
-  the loading-state addition and does not cover it.
-- The v1.4.2 scroll fix has not been observed on a device either. The defect it corrects
-  *was* reported from the phone by the owner, so the bug is confirmed on hardware even
-  though the fix is verified only by unit tests and CI.
-- **v1.4.3's warmup-binding adoption and v1.4.4's follow-up fixes are unverified on device.**
-  Holding the `warmup()` binding across the Insights screen lifecycle (v1.4.3), always
-  unbinding on close (v1.4.4), and gating the warmup on `shouldSummarise` (v1.4.4) are all
-  timing/lifecycle changes with no visible UI difference — verified only by unit tests, CI,
-  and (for v1.4.4) an independent re-download and signature check of the published
-  artefact. None has been observed running against LocalLLM on a physical phone.
-- No Apps Script deployment or live spreadsheet change was made in this cycle.
-
-## Companion app
-
-Requires `noamvb/local-llm` v0.1.1 or later. **LocalLLM must be installed first**, because
-Android grants a signature-level permission only if the app defining it is already present.
-This app's certificate digest is listed in that app's `known_signers.xml`; the two apps do
-not share a signing key, which is why the permission is `signature|knownSigner`.
+## Current release
+
+Cannsheet Mobile `v1.5.1` (`versionCode 43`, `versionName 1.5.1`) is
+published for Obtainium in
+[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.1).
+The release contains exactly:
+
+- `Cannsheet-Mobile-1.5.1.apk`
+- `Cannsheet-Mobile-1.5.1.apk.sha256`
+
+The annotated source tag `v1.5.1` peels to
+`96807f048297dd553beb653a06c5736928e2927f`, the version-only PR #136 squash
+commit and the exact validated `main` tip at publication time. The later
+docs-only provenance commit is deliberately not the tag target.
+
+The phone owner should open Obtainium, pull to refresh or tap **Check for
+updates**, and install Cannsheet Mobile 1.5.1. No phone installation, app
+launch, widget action, production-data read, or production backend write was
+performed during this release.
+
+## What v1.5.1 ships
+
+The runtime changes after v1.5.0 are:
+
+- PR #128 / `7372c6f`: make the pen-widget configuration component resolvable
+  from launcher configuration flows.
+- PR #129 / `5ccbd26`: exclude pending widget commits from backup and device
+  transfer so a restored device cannot replay another device's deferred entry.
+- PR #130 / `55ad366`: render every projection value together with its source
+  snapshot as-of date.
+- PR #131 / `b48a5a8`: refresh the Today widget at local-day rollover through
+  a self-rearming WorkManager job.
+- PR #132 / `78a6913`: move remaining widget copy into Android string
+  resources.
+- PR #133 / `d0b895b`: route commit-driven refreshes through the shared widget
+  surface router.
+- PR #135 / `61fec5e`: stop treating response-wide
+  `dataQuality.complete=false` as a universal projection-widget veto.
+
+PR #134 / `423a62e` checks in the widget expansion and remediation plans and
+does not change runtime behavior. PR #136 / `96807f0` changes only
+`versionCode 42 -> 43` and `versionName 1.5.0 -> 1.5.1`. The source tree
+also contains the v1.5.0 publication record from PR #127 / `b22150c`.
+
+## Projection-widget correction
+
+The reported `Projection unavailable` / `The cached snapshot is incomplete.`
+state came from an aggregate gate in `buildProjectionUiModel`. The backend
+marks `dataQuality.complete` false for any warning, including warnings
+unrelated to the selected Runway or Spend mode, so the gate could suppress
+both widgets before their own builders evaluated usable inputs.
+
+PR #135 removes only that aggregate veto and its obsolete suppression copy.
+A snapshot must still be successful and structurally usable. Each ready figure
+must still include the snapshot's own as-of date, and the existing mode-specific
+builders still reject unsafe inputs; for example, unknown personal cost still
+suppresses an unsafe Spend figure. The change adds no projection persistence,
+refresh loop, queue mutation, network payload, backend write, or synthetic
+fallback.
+
+## Validation and publication provenance
+
+Local feature validation after rebasing onto then-current `main` passed with
+JDK 17.0.20, Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
+
+- `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
+  reported `BUILD SUCCESSFUL` in 8m40s.
+- The JVM XML reports contained 484 tests, zero failures, zero errors, and zero
+  skips; lint contained zero errors.
+- All eight checked-in Node backend suites passed with Node 22.14.0.
+- `python3 -m unittest tests/test_backend_sync_benchmark.py` passed all 13
+  tests.
+- `git diff --check` passed.
+
+The same complete local gate on the isolated version branch reported
+`BUILD SUCCESSFUL` in 19m25s with the same 484/0/0/0 JVM result and zero lint
+errors. Independent `aapt` readback of that generated debug APK reported
+package `com.noamv.cannsheet.mobile`, version code `43`, version name
+`1.5.1`, min SDK `24`, and target SDK `36`. All eight Node suites and all
+13 Python tests also passed on the version branch.
+
+GitHub provenance:
+
+- Feature PR #135 head `f5811d4`: PR run `32441202819` passed its required
+  jobs; squash commit `61fec5e`.
+- Exact feature `main` run `32441499321` passed all six named jobs,
+  including Emulator API 24 and Emulator API 36.
+- Version PR #136 head `6f90526`: PR run `32443424342` passed its required
+  jobs; squash commit `96807f0`.
+- Exact tagged-`main` run `32443710327` was a completed successful
+  `push` run on `main` for `96807f0`; Classify, Backend, Android static,
+  Emulator API 24, Emulator API 36, and the aggregate validation job all
+  succeeded.
+- Annotated tag `v1.5.1` points to that exact validated commit.
+- Publication run `32444205628` passed exact-main confirmation, metadata and
+  monotonicity checks, unit tests and lint, signed build, signature verification,
+  public release creation, and post-publication verification.
+
+The successful Android jobs emitted the known non-fatal KSP/IntelliJ
+`ApplicationManager.getApplication()` null-service annotation and GitHub
+action-runtime deprecation notices. They did not fail any Gradle, lint,
+instrumentation, signing, or publication job.
+
+## Independent public-artifact verification
+
+The published APK is 14,024,579 bytes. Its independently calculated SHA-256 is:
+
+`74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`
+
+That digest matches both the 93-byte published checksum file and GitHub's asset
+digest; `shasum -a 256 -c` reported `OK`. Independent Build Tools 36.0.0
+readback confirmed:
+
+- package `com.noamv.cannsheet.mobile`
+- version code `43`; version name `1.5.1`
+- min SDK `24`; target SDK `36`
+- successful zip-alignment verification
+- one signer and APK Signature Scheme v2 true
+- certificate SHA-256
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+- public-key SHA-256
+  `2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`
+
+Both digests exactly match an independently downloaded public v1.5.0 APK, which
+proves signer continuity for an in-place update. The human-readable certificate
+subject is `C=US, O=Android, CN=Android Debug`; it was not used as continuity
+proof.
+
+## Data and device boundaries
+
+v1.5.1 introduces no Room migration, destructive fallback, queue deletion or
+acknowledgement change, event/request ID change, wire-contract change, Apps
+Script change, endpoint change, package/application-ID change, or signing
+configuration change. Projections remain presentation-only and are neither
+persisted nor transmitted.
+
+No physical-widget walkthrough is claimed. Earlier read-only ADB discovery
+found no attached or advertised phone and the ADB server was stopped. The
+current release procedure expressly leaves installation to Obtainium; do not
+sideload the local debug APK or uninstall the production app, because uninstall
+would delete the Room database and any pending offline queue rows.
+
+After the owner installs 1.5.1, the remaining useful manual check is to refresh
+Insights, then inspect both Runway and Spend widget instances. An unavailable
+state can still be correct when there is no cached snapshot, the response is
+structurally unusable, or the selected mode's own required inputs do not yield a
+safe figure. The removed response-wide incomplete-snapshot message should no
+longer suppress otherwise-usable figures.
+
+## Canonical references
+
+- `docs/PROJECT_STATE.md`: verified implementation and release state.
+- `docs/ARCHITECTURE.md`: system boundaries and data flows.
+- `docs/DECISIONS.md`: durable design and safety decisions.
+- `docs/WIDGET_EXPANSION_PLAN.md`: accepted widget expansion plan.
+- `docs/WIDGET_FIX_PLAN.md`: checked-in remediation plan.

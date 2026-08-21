@@ -6,10 +6,11 @@ Last updated: 2026-08-20
 
 - Canonical branch: `main`
 - Latest published application release source commit
-  `024aed09ebd941d0ab26fedb11ec3e16a4822758` (v1.5.0)
-- Current release metadata in `app/build.gradle.kts`: version name `1.5.0`,
-  version code `42` (published; B1-B9 are complete).
-- Post-v1.5.0 corrective work removes the projection widget's aggregate
+  `96807f048297dd553beb653a06c5736928e2927f` (v1.5.1)
+- Current release metadata in `app/build.gradle.kts`: version name `1.5.1`,
+  version code `43` (published).
+- v1.5.1 publishes post-v1.5.0 widget corrections from PRs #128-#135. The
+  projection correction removes the widget's aggregate
   `dataQuality.complete` veto. That bit combines unrelated source warnings, so
   it could make every Runway and Spend instance report an incomplete cached
   snapshot even when the requested figure's own inputs were usable. The widget
@@ -18,10 +19,13 @@ Last updated: 2026-08-20
   The focused projection JVM suite and the full local Android gate passed with
   484 JVM tests and zero failures, errors, or skips; lint reported zero errors,
   all eight checked-in Node backend suites passed, and the Python benchmark
-  suite passed all 13 tests. ADB found no attached or advertised device, so no
-  physical widget screenshot or populated-device walkthrough is claimed. No
-  Room, queue, wire, backend, endpoint, package, version, signing, or
-  published-APK change is included.
+  suite passed all 13 tests. Exact tagged-main run `32443710327` passed all six
+  required jobs, and signed publication run `32444205628` completed. The
+  public APK SHA-256 is
+  `74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`;
+  package/version/SDK/alignment/v2-signature readback passed and its certificate
+  and public-key digests match public v1.5.0. No physical widget walkthrough or
+  phone installation is claimed.
 - `LocalLlmClient.warmup()` always unbinds on close, including on a failed bind, and the
   Insights warmup binding is gated on `CannsheetLlmFacts.shouldSummarise`
   ([PR #106](https://github.com/noamvb/cannsheet-mobile/pull/106), squash-merged as
@@ -55,10 +59,10 @@ Last updated: 2026-08-20
   was squash-merged as `0462e3895e54d588523c932dcbbfaebca014ef04`. Its PR gate
   passed in [run 31859344672](https://github.com/noamvb/cannsheet-mobile/actions/runs/31859344672).
 
-## Pen widget expansion (A1-A7 merged; release A tag pending)
+## Pen widget expansion (A1-A7 published in v1.4.5)
 
 - PR #109 (`feat: surface quantity presets on the pen widget`) is squash-merged
-  into `main` as `847b184`; it is not part of a published APK or a version bump.
+  into `main` as `847b184`; it was first published in v1.4.5.
 - The full pen widget exposes up to three fixed preset buttons. Presets remain
   stored and transmitted as uses; `usesToSeconds` supplies the display/input
   conversion, and only durations that are exact whole seconds in `1..600` are
@@ -72,8 +76,8 @@ Last updated: 2026-08-20
   The default/unreported layout remains preset-capable, while the full layout
   shows the row when its reported height is sufficient.
 - PR #110 (`feat: scale the pen widget step size with rendered size`) is
-  squash-merged into `main` as `e00b3bb`; it is not part of a published APK or a
-  version bump. `PenWidgetLayoutSpec` resolves a 10-second step for compact/base
+  squash-merged into `main` as `e00b3bb`; it was first published in v1.4.5.
+  `PenWidgetLayoutSpec` resolves a 10-second step for compact/base
   widths and a 30-second step when rendered growth reaches the large-widget
   threshold. The selected step travels in the broadcast `PendingIntent` extras,
   is clamped by the router, and is used in the renderer's accessibility
@@ -84,7 +88,7 @@ Last updated: 2026-08-20
   launcher restart. No physical phone or production data action was used;
   remove/re-add remains unverified from the earlier A1 walkthrough.
 - PR #111 (`feat: add a pen widget configuration activity`) is squash-merged
-  into `main` as `9749f44`; it is not part of a published APK or a version bump.
+  into `main` as `9749f44`; it was first published in v1.4.5.
   Each widget now has optional DataStore-backed pinned product, discreet-mode,
   and step-override settings; absent settings reproduce the pre-configuration
   loaded-cart behavior. The Compose configuration activity filters selectable pen
@@ -129,7 +133,7 @@ Last updated: 2026-08-20
   32350773583](https://github.com/noamvb/cannsheet-mobile/actions/runs/32350773583)
   passed all required jobs.
 - A4 (`feat: show sync trouble in the pen widget subtitle`) is squash-merged as
-  PR #112 / `1552aaf`; it is not part of a published APK or a version bump. The
+  PR #112 / `1552aaf`; it was first published in v1.4.5. The
   pen widget derives a count-free `sync is behind` subtitle when the aggregate
   durable queue has remained non-empty for at least
   `QUEUE_STUCK_THRESHOLD_MILLIS` (24 hours), using the existing sync watermark.
@@ -144,7 +148,7 @@ Last updated: 2026-08-20
   passed all required jobs. The emulator fixture and queue watermark were
   cleaned afterward; remove/re-add remains unverified.
 - A5 (`feat: open the cart picker directly from the pen widget`) is squash-merged
-  as PR #113 / `7ca6804`; it is not part of a published APK or a version bump.
+  as PR #113 / `7ca6804`; it was first published in v1.4.5.
   The interactive widget's product-name PendingIntent preserves
   `EXTRA_START_ROUTE` and adds a one-shot `EXTRA_OPEN_CART_PICKER` activity
   extra. `MainActivity` consumes it on both cold and warm starts through a
@@ -164,9 +168,11 @@ Last updated: 2026-08-20
   size-mapped `RemoteViews` entries (`110x110`, `140x160`, `280x320`) with the
   A3 step override applied to each; API 24–30 retain the live-size fallback,
   while API 31+ skips resize-triggered rebuilds so the host can select a
-  prepared variant. The widget DataStore is included in cloud backup and
-  device transfer; pending payloads retain stable event IDs for duplicate-safe
-  Room/server retry after restore. Its refreshed PR gate [run
+  prepared variant. At A6, the widget DataStore was included in cloud backup
+  and device transfer and pending payloads retained stable event IDs for
+  duplicate-safe Room/server retry after restore. PR #129 later split
+  configuration from transient arbitration state and excluded the latter from
+  backup and transfer; see the v1.5.1 section. Its refreshed PR gate [run
   32360621693](https://github.com/noamvb/cannsheet-mobile/actions/runs/32360621693)
   passed all required PR jobs, and the exact post-merge `main` run [32361027225](https://github.com/noamvb/cannsheet-mobile/actions/runs/32361027225)
   passed all six jobs, including API 24 and API 36. No physical phone or
@@ -335,6 +341,46 @@ Last updated: 2026-08-20
   contains exactly the APK and `.sha256` assets; independent verification is
   recorded in the v1.5.0 section below. No physical phone or production data
   action was used.
+
+## v1.5.1 widget corrections (published)
+
+`v1.5.1` (`versionCode 43`, `versionName 1.5.1`) publishes PRs #128-#135
+after v1.5.0. It repairs launcher resolution for pen-widget configuration,
+keeps pending widget commits out of backup/device transfer, makes projection
+values and as-of dates an indivisible presentation invariant, refreshes Today
+at local midnight, moves remaining widget copy into resources, centralizes
+commit refresh routing, and removes the response-wide projection completeness
+veto while preserving the existing mode-specific safety checks. It adds no
+Room migration, wire/backend contract, endpoint, package ID, or signing
+configuration change.
+
+Feature PR #135 squash-merged as `61fec5e`; exact feature-`main` run
+`32441499321` passed all six required jobs. Version-only PR #136
+squash-merged as `96807f048297dd553beb653a06c5736928e2927f`.
+Exact tagged-`main` run `32443710327` was a completed successful push run
+on that SHA and all six named jobs succeeded. The annotated `v1.5.1` tag
+peels to the same commit. Publication run `32444205628` passed exact-main,
+version, monotonicity, test/lint, signed-build, signature, publication, and
+post-publication checks.
+
+The public release is [Cannsheet Mobile v1.5.1](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.1)
+and contains exactly:
+
+- `Cannsheet-Mobile-1.5.1.apk`
+- `Cannsheet-Mobile-1.5.1.apk.sha256`
+
+Independent download verification passed with APK SHA-256
+`74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`.
+The checksum file and GitHub asset digest match. Build Tools 36.0.0 readback
+confirmed package `com.noamv.cannsheet.mobile`, version code `43`, version
+name `1.5.1`, min SDK `24`, target SDK `36`, valid zip alignment, one
+signer, and APK Signature Scheme v2. Certificate SHA-256
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+and public-key SHA-256
+`2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`
+match an independently downloaded public v1.5.0 APK. No phone installation or
+physical widget walkthrough was performed; the owner should update through
+Obtainium.
 
 ## v1.4.5 widget expansion (published)
 
@@ -1103,9 +1149,9 @@ Repository code and validation show:
 - The correction sheet remained exact-header and otherwise empty during
   rollout. Codex did not send a valid production correction request.
 
-## Release and validation status
+## Historical release and validation status
 
-v1.3.0 evidence (current release):
+v1.3.0 evidence (historical release):
 
 - Source PRs #64 through #71 and documentation PR #72 are listed in the v1.3
   feature-work section above with exact merge commits and exact-main runs.
@@ -1313,15 +1359,14 @@ Local and device evidence:
 
 ## Current priorities
 
-1. If physical v1.3 UI coverage is needed, use an isolated sandbox/debug
-   package and verify notification permission/channel states, queue-alert
-   routing, fresh/stale/pending runway suppression, compact/medium/expanded
-   navigation, and both Insights/History detail surfaces. Do not manufacture a
-   production queue alert or spreadsheet write.
-2. If physical widget visual/action coverage is needed, build a separate
-   sandbox/debug package with a non-production endpoint and verify light/dark
-   rendering, 2x2 sizing, +/- controls, reset, countdown/undo, and message
-   states without creating production data.
+1. Update the production phone to v1.5.1 through Obtainium, refresh Insights,
+   and inspect both Runway and Spend widgets. Do not uninstall or sideload the
+   local debug APK.
+2. If synthetic physical widget coverage is needed beyond normal owner use,
+   build a separate sandbox/debug package with a non-production endpoint and
+   verify configuration, light/dark rendering, launcher sizing, rollover,
+   projections, countdown/undo, and message states without creating production
+   data.
 3. Use the next genuine production purchase to validate default persistence and
    restart/autofill behavior without fabricating data.
 4. Continue analytics prefetch and correction-safe usage-total checks; CI does
@@ -1338,7 +1383,8 @@ Local and device evidence:
 - Does the main Fold display provide enough useful width for the 40/60
   Insights and History panes in portrait and landscape, and is the
   width-only divider acceptable near the physical crease?
-- Obtainium's post-install refresh was not observed in this session. The full
+- Obtainium's v1.5.1 install and post-install refresh were not observed in this
+  release session. The full
   History UI plan remains partially unverified: the offline error inside the
   detail sheet, correction save, rotation, and missing-entry dialog.
 - Does the widget render and behave correctly on the intended physical device
