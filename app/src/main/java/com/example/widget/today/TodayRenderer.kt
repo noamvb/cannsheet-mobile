@@ -4,6 +4,7 @@ import android.content.Context
 import android.widget.RemoteViews
 import com.example.R
 import com.example.widget.ACTION_OPEN_LOG
+import com.example.widget.PenWidgetText
 import com.example.widget.pendingIntent
 
 /** Builds the glanceable today summary shown by the home-screen widget. */
@@ -19,7 +20,7 @@ object TodayRenderer {
         )
         setTextViewText(
             R.id.widget_today_total,
-            model.todayDisplay,
+            model.todayDisplay.resolve(context),
         )
         setTextViewText(
             R.id.widget_today_average,
@@ -55,4 +56,9 @@ object TodayRenderer {
             pendingIntent(context, appWidgetId, ACTION_OPEN_LOG),
         )
     }
+}
+
+private fun PenWidgetText.resolve(context: Context): String = when (this) {
+    is PenWidgetText.Literal -> value
+    is PenWidgetText.Resource -> context.getString(resourceId, *arguments.toTypedArray())
 }

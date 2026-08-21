@@ -1,6 +1,8 @@
 package com.example.widget.today
 
+import com.example.R
 import com.example.data.ConsumptionHistoryEntry
+import com.example.widget.PenWidgetText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,7 +24,7 @@ class TodayUiModelTest {
         )
 
         assertEquals(3.5, model.todayUses, 0.0)
-        assertEquals("3.5", model.todayDisplay)
+        assertEquals(PenWidgetText.Literal("3.5"), model.todayDisplay)
         assertTrue(model.hasTodayEntries)
     }
 
@@ -125,7 +127,10 @@ class TodayUiModelTest {
         )
 
         assertEquals(0.0, model.todayUses, 0.0)
-        assertEquals("No logs yet today", model.todayDisplay)
+        assertEquals(
+            PenWidgetText.Resource(R.string.today_widget_no_logs),
+            model.todayDisplay,
+        )
         assertFalse(model.hasTodayEntries)
     }
 
@@ -154,7 +159,7 @@ class TodayUiModelTest {
         )
 
         assertEquals(0.0, model.todayUses, 0.0)
-        assertEquals("No logs yet today", model.todayDisplay)
+        assertEquals(PenWidgetText.Resource(R.string.today_widget_no_logs), model.todayDisplay)
         assertNull(model.baselineUses)
         assertNull(model.baselineDisplay)
         assertEquals(TodayComparison.UNAVAILABLE, model.comparison)

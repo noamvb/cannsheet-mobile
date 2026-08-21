@@ -1,9 +1,7 @@
 package com.example.widget
 
 import android.content.ComponentName
-import android.service.quicksettings.Tile
 import android.service.quicksettings.TileService
-import com.example.R
 import com.example.domain.PenQuickLogState
 import java.lang.ref.WeakReference
 
@@ -63,12 +61,7 @@ class PenQuickTileService : TileService() {
         val instanceConfig = config.read(PEN_TILE_WIDGET_ID)
         val penState = PenWidgetDataSource.loadPenState(context, instanceConfig.pinnedProductId)
         val model = penTileState(penState, stored.pendingCommit)
-        val label = when (model.state) {
-            Tile.STATE_ACTIVE -> getString(R.string.pen_tile_undo)
-            Tile.STATE_UNAVAILABLE -> getString(R.string.pen_tile_no_cart)
-            else -> model.label
-        }
-        applyTile(label, model.state)
+        applyTile(model.label.resolve(context), model.state)
     }
 
     private suspend fun submitDefaultPreset(
@@ -121,4 +114,9 @@ class PenQuickTileService : TileService() {
             )
         }
     }
+}
+
+private fun PenWidgetText.resolve(context: android.content.Context): String = when (this) {
+    is PenWidgetText.Literal -> value
+    is PenWidgetText.Resource -> context.getString(resourceId, *arguments.toTypedArray())
 }
