@@ -113,6 +113,39 @@ class TodayUiModelTest {
     }
 
     @Test
+    fun todayTotalIsZeroWhenTheDateAdvancesPastEveryEntry() {
+        val model = buildTodayUiModel(
+            entries = listOf(
+                entry("yesterday-one", "2026-08-19", 1.5),
+                entry("yesterday-two", "2026-08-19", 2.0),
+                entry("two-days-ago", "2026-08-18", 3.0),
+            ),
+            todayDate = "2026-08-20",
+            secondsPerUse = null,
+        )
+
+        assertEquals(0.0, model.todayUses, 0.0)
+        assertEquals("No logs yet today", model.todayDisplay)
+        assertFalse(model.hasTodayEntries)
+    }
+
+    @Test
+    fun streakEndsYesterdayWhenTodayHasNoEntries() {
+        val model = buildTodayUiModel(
+            entries = listOf(
+                entry("yesterday", "2026-08-19", 1.0),
+                entry("two-days-ago", "2026-08-18", 1.0),
+                entry("three-days-ago", "2026-08-17", 1.0),
+            ),
+            todayDate = "2026-08-20",
+            secondsPerUse = null,
+        )
+
+        assertFalse(model.hasTodayEntries)
+        assertEquals(3, model.streakDays)
+    }
+
+    @Test
     fun emptyHistoryProducesTheEmptyState() {
         val model = buildTodayUiModel(
             entries = emptyList(),

@@ -29,6 +29,19 @@ object TodayUpdater {
         }
     }
 
+    /**
+     * Suspending sibling of [updateAll] for callers already running inside a coroutine, such as
+     * [TodayWidgetProvider.onReceive] via [PenWidgetRuntime.launchReceiver]. [updateAll] launches
+     * its own coroutine and returns immediately, which would finish `goAsync()` before the refresh
+     * completed if called from there instead.
+     */
+    suspend fun updateAllSuspending(context: Context) {
+        val appContext = context.applicationContext
+        val manager = AppWidgetManager.getInstance(appContext)
+        val component = ComponentName(appContext, TodayWidgetProvider::class.java)
+        manager.getAppWidgetIds(component).forEach { update(appContext, it) }
+    }
+
     suspend fun update(context: Context, appWidgetId: Int) {
         if (appWidgetId < 0) return
 
