@@ -1,162 +1,126 @@
 # Current handoff
 
-Last updated: 2026-08-20
+Last updated: 2026-08-21
 
 Repository: public `noamvb/cannsheet-mobile`
 
 ## Current release
 
-Cannsheet Mobile `v1.5.1` (`versionCode 43`, `versionName 1.5.1`) is
-published for Obtainium in
+Cannsheet Mobile `v1.5.1` (`versionCode 43`, `versionName 1.5.1`) remains the
+latest published Obtainium release in
 [`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.5.1).
-The release contains exactly:
+Its annotated source tag peels to
+`96807f048297dd553beb653a06c5736928e2927f`, the exact version-only `main`
+commit validated before publication. The published APK SHA-256 is
+`74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`.
 
-- `Cannsheet-Mobile-1.5.1.apk`
-- `Cannsheet-Mobile-1.5.1.apk.sha256`
+Independent v1.5.1 verification reported package
+`com.noamv.cannsheet.mobile`, version code `43`, version name `1.5.1`, min SDK
+`24`, target SDK `36`, zip alignment, one signer, and APK Signature Scheme v2.
+Its certificate SHA-256 is
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e` and
+its public-key SHA-256 is
+`2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`;
+both matched the independently downloaded v1.5.0 APK.
 
-The annotated source tag `v1.5.1` peels to
-`96807f048297dd553beb653a06c5736928e2927f`, the version-only PR #136 squash
-commit and the exact validated `main` tip at publication time. The later
-docs-only provenance commit is deliberately not the tag target.
+## Runway correction in release preparation
 
-The phone owner should open Obtainium, pull to refresh or tap **Check for
-updates**, and install Cannsheet Mobile 1.5.1. No phone installation, app
-launch, widget action, production-data read, or production backend write was
-performed during this release.
+Feature PR #138 fixes the reported generic "No reliable Pen runway estimate"
+behavior and carries the implementation, regression coverage, and durable
+documentation. Its behavior is:
 
-## What v1.5.1 ships
+- For an active product with valid grams, prefer the median recorded finish
+  total from at least three finished products with the same normalized type and
+  canonical gram amount. Other sizes cannot affect that exact cohort.
+- If the exact-size cohort has fewer than three observations, retain the
+  broader same-type grams-adjusted fallback, then the legacy same-type
+  per-product fallback. Visible copy identifies the selected basis and its
+  actual finished-product count.
+- Compute remaining recorded uses separately from the burn-rate pace. A new
+  active product with zero recorded uses can show its full estimated comparison
+  immediately. Days remaining still requires positive selected-range use, a
+  usable first-log date, and at least seven effective response-time-zone days.
+- Preserve the existing in-app non-cache, non-stale, non-transitioning snapshot
+  and real zero-pending-action gates. Projection-widget cache/as-of rules are
+  unchanged.
 
-The runtime changes after v1.5.0 are:
+The change is presentation-only. It adds no Room migration, analytics or cache
+field, queue mutation, wire payload, Apps Script/backend behavior, spreadsheet
+write, endpoint, application ID, signing, or stored/transmitted-unit change.
+ADR-043 records the owner-selected exact-size preference, labeled fallback,
+and immediate zero-use capacity policy.
 
-- PR #128 / `7372c6f`: make the pen-widget configuration component resolvable
-  from launcher configuration flows.
-- PR #129 / `5ccbd26`: exclude pending widget commits from backup and device
-  transfer so a restored device cannot replay another device's deferred entry.
-- PR #130 / `55ad366`: render every projection value together with its source
-  snapshot as-of date.
-- PR #131 / `b48a5a8`: refresh the Today widget at local-day rollover through
-  a self-rearming WorkManager job.
-- PR #132 / `78a6913`: move remaining widget copy into Android string
-  resources.
-- PR #133 / `d0b895b`: route commit-driven refreshes through the shared widget
-  surface router.
-- PR #135 / `61fec5e`: stop treating response-wide
-  `dataQuality.complete=false` as a universal projection-widget veto.
+## Validation completed for PR #138
 
-PR #134 / `423a62e` checks in the widget expansion and remediation plans and
-does not change runtime behavior. PR #136 / `96807f0` changes only
-`versionCode 42 -> 43` and `versionName 1.5.0 -> 1.5.1`. The source tree
-also contains the v1.5.0 publication record from PR #127 / `b22150c`.
-
-## Projection-widget correction
-
-The reported `Projection unavailable` / `The cached snapshot is incomplete.`
-state came from an aggregate gate in `buildProjectionUiModel`. The backend
-marks `dataQuality.complete` false for any warning, including warnings
-unrelated to the selected Runway or Spend mode, so the gate could suppress
-both widgets before their own builders evaluated usable inputs.
-
-PR #135 removes only that aggregate veto and its obsolete suppression copy.
-A snapshot must still be successful and structurally usable. Each ready figure
-must still include the snapshot's own as-of date, and the existing mode-specific
-builders still reject unsafe inputs; for example, unknown personal cost still
-suppresses an unsafe Spend figure. The change adds no projection persistence,
-refresh loop, queue mutation, network payload, backend write, or synthetic
-fallback.
-
-## Validation and publication provenance
-
-Local feature validation after rebasing onto then-current `main` passed with
-JDK 17.0.20, Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
+The complete local gate ran from the isolated feature worktree with JDK 17,
+Gradle 9.3.1, Android Platform 36.1, and Build Tools 36.0.0:
 
 - `./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
-  reported `BUILD SUCCESSFUL` in 8m40s.
-- The JVM XML reports contained 484 tests, zero failures, zero errors, and zero
-  skips; lint contained zero errors.
+  passed. JVM XML totals were 495 tests, zero failures, zero errors, and zero
+  skips; lint reported zero errors and the debug APK assembled.
 - All eight checked-in Node backend suites passed with Node 22.14.0.
 - `python3 -m unittest tests/test_backend_sync_benchmark.py` passed all 13
   tests.
-- `git diff --check` passed.
+- `git diff --check` passed, and independent diff review found no remaining
+  correctness or data-safety issue.
 
-The same complete local gate on the isolated version branch reported
-`BUILD SUCCESSFUL` in 19m25s with the same 484/0/0/0 JVM result and zero lint
-errors. Independent `aapt` readback of that generated debug APK reported
-package `com.noamv.cannsheet.mobile`, version code `43`, version name
-`1.5.1`, min SDK `24`, and target SDK `36`. All eight Node suites and all
-13 Python tests also passed on the version branch.
+The first PR run, `32447738171`, correctly failed one newly added Insights
+Compose assertion. The UI row tag is on a parent container, while the rendered
+copy lives on descendant text nodes; the failure was a test-selector defect,
+not a product-code failure. Commit `74bef32` changed that assertion to inspect
+descendants and recompiled the instrumentation suite locally. PR run
+`32448073354` then passed repository scan, backend validation, Android static
+validation, all 162 API 24 instrumentation tests, and the aggregate validation
+job. The handoff-only follow-up commit must still receive its own final PR gate
+before merge.
 
-GitHub provenance:
+No screenshot or production-data walkthrough is claimed. The visible state
+requires a fresh Insights snapshot with the owner's matching product history,
+and this checkout has no safe seeded end-to-end sandbox fixture for that
+screen. The new Compose tests render and assert the exact-size capacity-only
+state in both Insights and Pen Quick Log, including the absence of fabricated
+days/rate copy.
 
-- Feature PR #135 head `f5811d4`: PR run `32441202819` passed its required
-  jobs; squash commit `61fec5e`.
-- Exact feature `main` run `32441499321` passed all six named jobs,
-  including Emulator API 24 and Emulator API 36.
-- Version PR #136 head `6f90526`: PR run `32443424342` passed its required
-  jobs; squash commit `96807f0`.
-- Exact tagged-`main` run `32443710327` was a completed successful
-  `push` run on `main` for `96807f0`; Classify, Backend, Android static,
-  Emulator API 24, Emulator API 36, and the aggregate validation job all
-  succeeded.
-- Annotated tag `v1.5.1` points to that exact validated commit.
-- Publication run `32444205628` passed exact-main confirmation, metadata and
-  monotonicity checks, unit tests and lint, signed build, signature verification,
-  public release creation, and post-publication verification.
+## Release work still required
 
-The successful Android jobs emitted the known non-fatal KSP/IntelliJ
-`ApplicationManager.getApplication()` null-service annotation and GitHub
-action-runtime deprecation notices. They did not fail any Gradle, lint,
-instrumentation, signing, or publication job.
+Do not describe the correction as shipped yet. The remaining release sequence
+is:
 
-## Independent public-artifact verification
+1. Let the updated feature PR #138 pass and squash-merge it.
+2. Wait for that feature merge's `main` run to complete before merging anything
+   else.
+3. Reconfirm the public latest release, then use a separate version-only PR for
+   the next monotonic version (expected `versionCode 44`, `versionName 1.5.2`).
+4. Wait for the exact version commit's successful `push` run on `main` and
+   verify all six named jobs individually, including API 24 and API 36.
+5. Annotate and push the matching tag, wait for signed publication, then
+   independently download and verify the APK/checksum, package metadata,
+   alignment, v2 signature, and signer continuity against v1.5.1.
+6. Replace this handoff with the final PR/SHA/run/tag/asset provenance and tell
+   the owner to update through Obtainium.
 
-The published APK is 14,024,579 bytes. Its independently calculated SHA-256 is:
-
-`74d362ffd5b40eda8a89f09257db7f83251a8f4c9c0f7d994bec4b76948ea56f`
-
-That digest matches both the 93-byte published checksum file and GitHub's asset
-digest; `shasum -a 256 -c` reported `OK`. Independent Build Tools 36.0.0
-readback confirmed:
-
-- package `com.noamv.cannsheet.mobile`
-- version code `43`; version name `1.5.1`
-- min SDK `24`; target SDK `36`
-- successful zip-alignment verification
-- one signer and APK Signature Scheme v2 true
-- certificate SHA-256
-  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
-- public-key SHA-256
-  `2de7a08db8c185ec727b77a3f1f7afd3b159c03f8efc6eb2d20c51d3a7043e7c`
-
-Both digests exactly match an independently downloaded public v1.5.0 APK, which
-proves signer continuity for an in-place update. The human-readable certificate
-subject is `C=US, O=Android, CN=Android Debug`; it was not used as continuity
-proof.
+The tag must point to the exact current `origin/main` commit whose push run
+passed all six jobs. Do not merge another PR between that validation and tag
+publication.
 
 ## Data and device boundaries
 
-v1.5.1 introduces no Room migration, destructive fallback, queue deletion or
-acknowledgement change, event/request ID change, wire-contract change, Apps
-Script change, endpoint change, package/application-ID change, or signing
-configuration change. Projections remain presentation-only and are neither
-persisted nor transmitted.
+A read-only `adb devices -l` check on 2026-08-21 found the owner's physical
+Samsung phone connected. The ADB server was immediately stopped. No APK was
+installed, no app was launched, and no phone data or state was changed; the
+phone was explicitly declared safe to resume using. Local instrumentation was
+not run because Gradle could have targeted the physical phone. Isolated GitHub
+emulators are the device-level evidence for this release.
 
-No physical-widget walkthrough is claimed. Earlier read-only ADB discovery
-found no attached or advertised phone and the ADB server was stopped. The
-current release procedure expressly leaves installation to Obtainium; do not
-sideload the local debug APK or uninstall the production app, because uninstall
-would delete the Room database and any pending offline queue rows.
-
-After the owner installs 1.5.1, the remaining useful manual check is to refresh
-Insights, then inspect both Runway and Spend widget instances. An unavailable
-state can still be correct when there is no cached snapshot, the response is
-structurally unusable, or the selected mode's own required inputs do not yield a
-safe figure. The removed response-wide incomplete-snapshot message should no
-longer suppress otherwise-usable figures.
+Never install a local debug APK over the production app or uninstall the
+production app. Debug signing cannot update the release build, and uninstalling
+would delete the Room database and any pending offline queue rows. Final phone
+installation remains owner-performed through Obtainium.
 
 ## Canonical references
 
 - `docs/PROJECT_STATE.md`: verified implementation and release state.
 - `docs/ARCHITECTURE.md`: system boundaries and data flows.
-- `docs/DECISIONS.md`: durable design and safety decisions.
-- `docs/WIDGET_EXPANSION_PLAN.md`: accepted widget expansion plan.
-- `docs/WIDGET_FIX_PLAN.md`: checked-in remediation plan.
+- `docs/DECISIONS.md`: durable design and safety decisions, including ADR-043.
+- `.agents/skills/ship-release/SKILL.md`: exact branch, PR, main-proof, tag,
+  publication, artifact-verification, and Obtainium workflow.
