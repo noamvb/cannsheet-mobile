@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
     <!--
       Lets this app ask the LocalLLM app to write a summary of analytics this app has
       already received. The permission is signature|knownSigner and is granted because this
@@ -45,6 +49,27 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+        <activity
+            android:name=".nfc.NfcQuickLogActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTop"
+            android:noHistory="true"
+            android:theme="@style/Theme.MyApplication.NfcResult">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data
+                    android:scheme="vnd.android.nfc"
+                    android:host="ext"
+                    android:path="/com.noamv.cannsheet.mobile:pen-quick-log" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".nfc.NfcTagWriterActivity"
+            android:exported="false"
+            android:label="NFC quick-log tags"
+            android:theme="@style/Theme.MyApplication" />
         <activity
             android:name=".widget.PenWidgetConfigureActivity"
             android:exported="true"

@@ -2,7 +2,9 @@
 <!--
     Cannsheet Mobile backup policy (API 24-30).
 
-    Included: user settings and pen_widget_config. Per-instance widget
+    Included: user settings, NFC quick-log registry, and pen_widget_config. The
+    registry is user authorization/label configuration and contains no queue or
+    server identity. Per-instance widget
     configuration carries no synchronization identity and is safe to restore
     onto any install; AppWidgetProvider.onRestored remaps its IDs.
 

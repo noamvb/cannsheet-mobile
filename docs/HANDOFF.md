@@ -4,6 +4,30 @@ Last updated: 2026-08-21
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Unreleased NFC quick-log work
+
+The current working branch is `codex/nfc-quick-log-tags`; the durable-core parent
+is `codex/nfc-deferred-core`. These are implementation workspaces, not merged PRs
+or a release. They contain the approved uses-based NFC
+contract, private registry, scan/result and tag-writer activities, Settings
+integration, and the v3 direct-uses deferred outbox. The feature resolves the
+current Pen cart at tap time, captures product/event/time before a fixed
+five-second Undo window, and preserves the existing Room/sync claim boundary.
+The local durable-core branch is based at `786ee86`; the current NFC feature
+branch is local-only. Neither branch has been pushed or opened as a remote PR.
+
+Validation completed so far: the serialized local gate
+`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
+passed with 523 JVM tests and zero failures/errors/skips; Android-test Kotlin
+compilation, lint, and debug assembly also passed. All eight checked-in Node
+backend suites, the 13-test Python benchmark, and `git diff --check` passed.
+Full emulator instrumentation, physical Samsung feasibility/sandbox evidence,
+CI/PR integration, signed release, and Obtainium handoff remain outstanding.
+No ADB/device or production NFC action was performed. Do not infer screen-off
+dispatch, signed-package RF behavior, or release readiness from source, local
+JVM tests, or the debug APK. Before splitting or merging, review the complete
+diff and preserve the untracked `docs/images/multi-cart-widget-grid-after-commit.png`.
+
 ## Current release
 
 Cannsheet Mobile `v1.5.2` (`versionCode 44`, `versionName 1.5.2`) is the latest

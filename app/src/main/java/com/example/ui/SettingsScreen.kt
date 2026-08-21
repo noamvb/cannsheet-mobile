@@ -28,6 +28,8 @@ import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.ProductTypeKey
 import com.example.domain.formatQuantityInInputUnit
+import com.example.domain.PenQuickLogState
+import com.example.nfc.NfcQuickLogSettingsCoordinator
 import java.math.BigDecimal
 import java.net.URI
 import androidx.compose.ui.semantics.contentDescription
@@ -53,6 +55,8 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val productTypeOptions by viewModel.productTypeOptions.collectAsState()
     val timerValue by viewModel.submissionTimer.collectAsState()
     val backgroundSyncPreferences by viewModel.backgroundSyncPreferences.collectAsState()
+    val penQuickLogState by viewModel.penQuickLogState.collectAsState()
+    val loadedPenProductId by viewModel.loadedPenProductId.collectAsState()
     val context = LocalContext.current
     var runtimePermissionResult by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -110,6 +114,14 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             secondsPerUseOverrides = secondsPerUseOverrides,
             onSaveSecondsPerUse = viewModel::updateSecondsPerUseForType,
             onClearSecondsPerUse = viewModel::clearSecondsPerUseForType,
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+        NfcQuickLogSettingsCoordinator(
+            resolverDescription = nfcQuickLogResolverDescription(
+                state = penQuickLogState,
+                explicitLoadedPenProductId = loadedPenProductId,
+            ),
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -187,6 +199,21 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         if (syncStatus != null) {
             Text("Status: $syncStatus", color = MaterialTheme.colorScheme.primary)
         }
+    }
+}
+
+internal fun nfcQuickLogResolverDescription(
+    state: PenQuickLogState,
+    explicitLoadedPenProductId: String?,
+): String = when (state) {
+    PenQuickLogState.Unavailable ->
+        "Current tap target: unavailable because there is no selectable Pen cart."
+    PenQuickLogState.NoCartLoaded ->
+        "Current tap target: none. Choose or use a Pen cart before tapping a tag."
+    is PenQuickLogState.Loaded -> if (state.product.id == explicitLoadedPenProductId) {
+        "Current tap target: ${state.product.name} (loaded Pen cart)."
+    } else {
+        "Current tap target: ${state.product.name} (most recently logged Pen fallback)."
     }
 }
 

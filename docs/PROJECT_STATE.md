@@ -2,6 +2,29 @@
 
 Last updated: 2026-08-21
 
+## NFC quick-log implementation status (unreleased)
+
+The local feature branches `codex/nfc-deferred-core` and
+`codex/nfc-quick-log-tags` contain the approved NFC quick-log implementation in
+progress; the latter is currently checked out. The durable direct-uses outbox is implemented as
+payload version 3 with v1/v2 decoding, atomic direct submission, claim/write/
+complete retry behavior, and a cold-start-safe `PenQuickLogDataSource`. The NFC
+branch adds the exact version-1 two-record NDEF contract, fail-closed registry,
+dedicated scan/result activity, foreground writer, Settings section, optional NFC
+manifest feature, and the reserved `Int.MAX_VALUE - 1` surface.
+
+The serialized local gate
+`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
+passed after the final fixes: 523 JVM tests, zero failures/errors/skips, Android-test
+Kotlin compilation, lint, and debug assembly all succeeded. All eight checked-in
+Node suites and the 13-test Python backend benchmark also passed; `git diff --check`
+is clean. Emulator instrumentation, the owner's Samsung screen-off feasibility
+probe, physical sandbox RF/write/readback, CI/PR merges, signed publication, and
+Obtainium installation have not been run or claimed in this working session. No
+production NFC tag has been written or tapped, and no production APK/version/
+signing/endpoint/backend contract has been changed. The pre-existing untracked
+widget image remains untouched.
+
 ## Repository state
 
 - Canonical branch: `main`
