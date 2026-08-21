@@ -86,6 +86,24 @@ Last updated: 2026-08-20
   `exported="false"` value prevented the launcher from starting it on the API-36
   emulator. This is a required Android host-boundary correction, not a data or
   package-surface expansion.
+- Correction recorded in v1.5.1 (PR #128): despite the export fix, the
+  configuration activity was still unreachable from the launcher in the
+  published v1.4.5 and v1.5.0 APKs. Both `appwidget-provider` files declared
+  `android:configure="com.noamv.cannsheet.mobile/com.example.widget.PenWidgetConfigureActivity"`,
+  but Android parses that attribute as a bare class name and builds
+  `ComponentName(providerPackage, value)`. Read back from
+  `AppWidgetProviderInfo.configure` on an API 36 emulator running the v1.5.0
+  build, the pen widget resolved to
+  `ComponentInfo{com.noamv.cannsheet.mobile/com.noamv.cannsheet.mobile/com.example.widget.PenWidgetConfigureActivity}`
+  — a class name containing a slash, naming no real component — while the later
+  projection widget, which used the bare class name, resolved correctly. Because
+  `widgetFeatures="reconfigurable|configuration_optional"` is set, adding the
+  widget silently skipped configuration instead of failing, so pinned cart,
+  discreet mode, and step override were unreachable in both published releases.
+  PR #128 switches both files to the bare class name and adds
+  `app/src/androidTest/java/com/example/widget/PenWidgetProviderInfoTest.kt`,
+  which asserts for every declared provider that the configuration component is
+  in-package, contains no `/`, and resolves through `PackageManager`.
 - A3 local validation passed with JDK 17.0.20, Gradle 9.3.1, Android Platform
   36.1, and Build Tools 36.0.0: the exact Android gate, focused
   `PenWidgetConfigStateTest` instrumentation (4/4), and API-36 manual evidence.
