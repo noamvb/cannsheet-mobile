@@ -37,17 +37,16 @@ sealed interface ProjectionUiModel {
 }
 
 /**
- * A complete render unit. Keeping [asOfDate] with [valueText] prevents a renderer from showing a
- * projection without the snapshot date required by the widget-projection decision.
+ * A complete render unit. [valueText] and [asOfDate] are plain data here; the invariant ADR-039
+ * requires — that a cached projection is never shown without its as-of date — is enforced where
+ * this figure actually reaches a view, by `ProjectionWidgetRenderer`'s private `setFigure`
+ * helper, the single place both fields are written into the widget's views together.
  */
 data class ProjectionFigure(
     val key: String,
     val valueText: String,
     val asOfDate: String,
-) {
-    val renderedText: String
-        get() = "$valueText — as of $asOfDate"
-}
+)
 
 /**
  * Builds the pure projection-widget state from one cached snapshot.

@@ -53,20 +53,20 @@ object ProjectionWidgetRenderer {
     ) {
         val figure = model.figures.firstOrNull()
         if (figure == null) {
-            setViewVisibility(R.id.widget_projection_primary, View.GONE)
-            setViewVisibility(R.id.widget_projection_supporting, View.GONE)
-            setViewVisibility(R.id.widget_projection_as_of, View.GONE)
-            setTextViewText(
-                R.id.widget_projection_primary,
-                context.getString(R.string.projection_widget_unavailable),
+            // Ready.figures is not statically guaranteed non-empty, even though
+            // buildProjectionUiModel never constructs one this way in practice. Route
+            // through renderSuppressed rather than writing the primary/as-of ids here
+            // directly, so setFigure stays the only place a figure's value and its
+            // as-of date are written together.
+            renderSuppressed(
+                context,
+                ProjectionUiModel.Suppressed(ProjectionSuppressionReason.NO_USABLE_FIGURE),
             )
             return
         }
 
-        setViewVisibility(R.id.widget_projection_primary, View.VISIBLE)
+        setFigure(context, figure)
         setViewVisibility(R.id.widget_projection_supporting, View.VISIBLE)
-        setViewVisibility(R.id.widget_projection_as_of, View.VISIBLE)
-        setTextViewText(R.id.widget_projection_primary, figure.valueText)
         setTextViewText(
             R.id.widget_projection_supporting,
             if (model.figures.size > 1) {
@@ -75,6 +75,17 @@ object ProjectionWidgetRenderer {
                 context.getString(R.string.projection_widget_cached_note)
             },
         )
+    }
+
+    /**
+     * The one place a figure reaches the view. Value and as-of date are written
+     * together so no future edit can render a projection without its date, which
+     * ADR-039 requires for any cached figure.
+     */
+    private fun RemoteViews.setFigure(context: Context, figure: ProjectionFigure) {
+        setViewVisibility(R.id.widget_projection_primary, View.VISIBLE)
+        setTextViewText(R.id.widget_projection_primary, figure.valueText)
+        setViewVisibility(R.id.widget_projection_as_of, View.VISIBLE)
         setTextViewText(
             R.id.widget_projection_as_of,
             context.getString(R.string.projection_as_of, figure.asOfDate),

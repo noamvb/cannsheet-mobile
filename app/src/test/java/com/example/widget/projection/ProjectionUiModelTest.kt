@@ -40,20 +40,20 @@ class ProjectionUiModelTest {
         val ready = model as ProjectionUiModel.Ready
 
         assertEquals(ProjectionMode.RUNWAY, ready.mode)
-        assertTrue(ready.figures.single().renderedText.contains("days"))
-        assertTrue(ready.figures.single().renderedText.contains("as of 2026-07-14"))
+        assertTrue(ready.figures.single().valueText.contains("days"))
+        assertEquals("2026-07-14", ready.figures.single().asOfDate)
     }
 
     @Test
     fun spendModeShowsMonthToDateAndProjectionWithAnAsOfDate() {
         val model = buildProjectionUiModel(snapshot(), ProjectionMode.SPEND)
         val ready = model as ProjectionUiModel.Ready
-        val rendered = ready.figures.single().renderedText
+        val figure = ready.figures.single()
 
         assertEquals(ProjectionMode.SPEND, ready.mode)
-        assertTrue(rendered.contains("this month"))
-        assertTrue(rendered.contains("personal spending through"))
-        assertTrue(rendered.contains("as of 2026-07-14"))
+        assertTrue(figure.valueText.contains("this month"))
+        assertTrue(figure.valueText.contains("personal spending through"))
+        assertEquals("2026-07-14", figure.asOfDate)
     }
 
     @Test
@@ -64,7 +64,10 @@ class ProjectionUiModelTest {
             val ready = buildProjectionUiModel(snapshot, mode) as ProjectionUiModel.Ready
             ready.figures.forEach { figure ->
                 assertEquals(snapshot.range.to, figure.asOfDate)
-                assertTrue(figure.renderedText.contains("as of ${snapshot.range.to}"))
+                assertTrue(
+                    "asOfDate must be non-blank and ISO-formatted (yyyy-MM-dd), was <${figure.asOfDate}>",
+                    figure.asOfDate.isNotBlank() && isIsoFormattedDate(figure.asOfDate),
+                )
             }
         }
     }
@@ -85,7 +88,12 @@ class ProjectionUiModelTest {
         val ready = buildProjectionUiModel(snapshot, ProjectionMode.SPEND) as ProjectionUiModel.Ready
 
         assertEquals("2026-07-14", ready.figures.single().asOfDate)
-        assertTrue(ready.figures.single().renderedText.endsWith("as of 2026-07-14"))
+    }
+
+    /** Mirrors the ISO-date shape `buildProjectionUiModel` requires of a snapshot's `range.to`. */
+    private fun isIsoFormattedDate(value: String): Boolean {
+        if (value.length != 10 || value[4] != '-' || value[7] != '-') return false
+        return value.indices.filterNot { it == 4 || it == 7 }.all { value[it].isDigit() }
     }
 
     private fun snapshot(rangeTo: String = "2026-07-14"): com.example.data.InsightsResponseDto {
