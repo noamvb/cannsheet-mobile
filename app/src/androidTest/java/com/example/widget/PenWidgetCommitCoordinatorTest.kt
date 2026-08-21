@@ -103,6 +103,31 @@ class PenWidgetCommitCoordinatorTest {
     }
 
     @Test
+    fun startupFlushPathCommitsDirectUsesWithoutAWorkerId() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val surfaceId = 73
+        val direct = payload().copy(
+            commitId = "direct-commit",
+            eventId = "direct-event",
+            commitAtEpochMillis = 1_000L,
+            inputKind = DeferredPenInputKind.DIRECT_USES,
+            seconds = null,
+            secondsPerUse = null,
+            restoreDraftSeconds = null,
+            uses = 2.0,
+        )
+        stateRepository.submitDirectCommit(surfaceId) { direct }
+
+        coordinator.flushOverdue(context, nowMillis = 1_000L)
+
+        val pending = repository.getPendingConsumptions().single()
+        assertEquals("direct-event", pending.eventId)
+        assertEquals(2.0, pending.uses, 0.0)
+        assertEquals(null, stateRepository.read(surfaceId).pendingCommit)
+        assertEquals(1, syncCalls)
+    }
+
+    @Test
     fun failedRoomWriteKeepsPayloadAndRetryUsesTheSameEventId() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val failingRepository = ThrowOnceRepository()
@@ -112,8 +137,13 @@ class PenWidgetCommitCoordinatorTest {
             enqueueSync = { syncCalls += 1 },
             updateWidget = { _, _ -> updateCalls += 1 },
         )
-        val payload = payload()
-        stateRepository.submitCommit(51, payload)
+        val payload = payload().copy(
+            inputKind = DeferredPenInputKind.DIRECT_USES,
+            seconds = null,
+            secondsPerUse = null,
+            restoreDraftSeconds = null,
+        )
+        stateRepository.submitDirectCommit(51) { payload }
 
         val failure = runCatching {
             retryingCoordinator.commit(context, 51, payload.commitId, nowMillis = 5_000L)
@@ -162,8 +192,10 @@ class PenWidgetCommitCoordinatorTest {
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = "uuid-1",
+        inputKind = DeferredPenInputKind.DURATION_SECONDS,
         seconds = 30,
         secondsPerUse = 10.0,
+        restoreDraftSeconds = 30,
         uses = 3.0,
         date = "2026-08-12",
         time = "12:00",

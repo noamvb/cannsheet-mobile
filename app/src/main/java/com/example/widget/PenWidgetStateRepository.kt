@@ -102,18 +102,21 @@ class PenWidgetStateRepository internal constructor(
     }
 
     /**
-     * Test-only. Production must use the [submitCommit] overload that builds the payload inside
-     * the edit, so a concurrent increment cannot be applied and then discarded.
+     * Test-only duration seeding. Production duration inputs must use the [submitCommit] builder
+     * overload, while direct uses inputs must use [submitDirectCommit].
      */
     @VisibleForTesting(otherwise = VisibleForTesting.NONE)
     suspend fun submitCommit(appWidgetId: Int, payload: PenWidgetCommitPayload): Boolean {
         requireValidWidgetId(appWidgetId)
+        require(
+            payload.inputKind == DeferredPenInputKind.DURATION_SECONDS &&
+                payload.seconds != null &&
+                payload.restoreDraftSeconds == payload.seconds,
+        ) { "A widget test payload must contain matching duration and undo seconds." }
         var accepted = false
         dataStore.edit { preferences ->
             val rawPending = preferences[pendingKey(appWidgetId)]
-            val pending = PenWidgetPayloadCodec.decode(rawPending)
-            if (pending != null) return@edit
-            if (rawPending != null) preferences.remove(pendingKey(appWidgetId))
+            if (rawPending != null) return@edit
             preferences[pendingKey(appWidgetId)] = PenWidgetPayloadCodec.encode(payload)
             preferences.remove(draftKey(appWidgetId))
             accepted = true
@@ -124,7 +127,8 @@ class PenWidgetStateRepository internal constructor(
     /**
      * Captures the current draft and constructs its immutable payload inside the same edit. A
      * concurrent increment is therefore either included in [buildPayload] or observes the pending
-     * commit and becomes a no-op; it can never be applied and then discarded.
+     * commit and becomes a no-op; it can never be applied and then discarded. An undecodable raw
+     * pending value also blocks submission so future-version or corrupt state remains diagnosable.
      */
     suspend fun submitCommit(
         appWidgetId: Int,
@@ -134,18 +138,56 @@ class PenWidgetStateRepository internal constructor(
         var accepted: PenWidgetCommitPayload? = null
         dataStore.edit { preferences ->
             val rawPending = preferences[pendingKey(appWidgetId)]
-            if (PenWidgetPayloadCodec.decode(rawPending) != null) return@edit
+            if (rawPending != null) return@edit
 
             val seconds = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0
             if (seconds <= 0) return@edit
             val payload = buildPayload(seconds) ?: return@edit
+            require(payload.inputKind == DeferredPenInputKind.DURATION_SECONDS) {
+                "A draft submission must use duration input."
+            }
             require(payload.seconds == seconds) {
                 "Widget payload seconds must match the atomically captured draft."
             }
+            require(payload.restoreDraftSeconds == seconds) {
+                "Widget payload undo must restore the atomically captured draft."
+            }
 
-            if (rawPending != null) preferences.remove(pendingKey(appWidgetId))
             preferences[pendingKey(appWidgetId)] = PenWidgetPayloadCodec.encode(payload)
             preferences.remove(draftKey(appWidgetId))
+            accepted = payload
+        }
+        return accepted
+    }
+
+    /**
+     * Atomically stores a uses-native deferred submission for a non-widget producer. Direct
+     * submissions have no editable seconds draft: neither submit nor undo mutates a draft key. Any
+     * existing raw pending value blocks the builder and remains untouched.
+     */
+    suspend fun submitDirectCommit(
+        surfaceId: Int,
+        buildPayload: () -> PenWidgetCommitPayload?,
+    ): PenWidgetCommitPayload? {
+        requireValidWidgetId(surfaceId)
+        var accepted: PenWidgetCommitPayload? = null
+        dataStore.edit { preferences ->
+            val rawPending = preferences[pendingKey(surfaceId)]
+            if (rawPending != null) return@edit
+
+            val payload = buildPayload() ?: return@edit
+            require(payload.inputKind == DeferredPenInputKind.DIRECT_USES) {
+                "A direct submission must use uses input."
+            }
+            require(
+                payload.seconds == null &&
+                    payload.secondsPerUse == null &&
+                    payload.restoreDraftSeconds == null,
+            ) {
+                "A direct submission cannot carry duration or draft state."
+            }
+
+            preferences[pendingKey(surfaceId)] = PenWidgetPayloadCodec.encode(payload)
             accepted = payload
         }
         return accepted
@@ -161,7 +203,7 @@ class PenWidgetStateRepository internal constructor(
         nowMillis: Long = System.currentTimeMillis(),
     ): Boolean {
         requireValidWidgetId(appWidgetId)
-        var restored = false
+        var undone = false
         dataStore.edit { preferences ->
             when (val resolution = resolveUndo(
                 PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]),
@@ -171,13 +213,18 @@ class PenWidgetStateRepository internal constructor(
                 is PenWidgetUndoResolution.Restored -> {
                     preferences.remove(pendingKey(appWidgetId))
                     preferences[draftKey(appWidgetId)] = resolution.seconds
-                    restored = true
+                    undone = true
+                }
+
+                PenWidgetUndoResolution.Removed -> {
+                    preferences.remove(pendingKey(appWidgetId))
+                    undone = true
                 }
 
                 PenWidgetUndoResolution.NoOp -> Unit
             }
         }
-        return restored
+        return undone
     }
 
     /**

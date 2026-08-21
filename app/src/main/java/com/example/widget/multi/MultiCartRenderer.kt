@@ -25,7 +25,10 @@ object MultiCartRenderer {
             if (model.pending == null) {
                 context.getString(R.string.multi_cart_widget_label)
             } else {
-                context.getString(R.string.pen_widget_undo_seconds, model.pending.seconds)
+                context.getString(
+                    R.string.pen_widget_undo_seconds,
+                    model.pending.restoreDraftSeconds ?: 0,
+                )
             },
         )
 
@@ -96,7 +99,10 @@ object MultiCartRenderer {
             )
             setContentDescription(
                 R.id.widget_multi_cart_undo,
-                context.getString(R.string.pen_widget_undo_seconds, pending.seconds),
+                context.getString(
+                    R.string.pen_widget_undo_seconds,
+                    pending.restoreDraftSeconds ?: 0,
+                ),
             )
             setOnClickPendingIntent(
                 R.id.widget_multi_cart_undo,

@@ -1,7 +1,11 @@
 package com.example.widget
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import java.io.File
@@ -10,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,15 +26,15 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class PenWidgetStateRepositoryTest {
     private lateinit var dataStoreFile: File
+    private lateinit var dataStore: DataStore<Preferences>
     private lateinit var repository: PenWidgetStateRepository
 
     @Before
     fun setUp() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         dataStoreFile = File(context.cacheDir, "pen-widget-${UUID.randomUUID()}.preferences_pb")
-        repository = PenWidgetStateRepository(
-            PreferenceDataStoreFactory.create { dataStoreFile },
-        )
+        dataStore = PreferenceDataStoreFactory.create { dataStoreFile }
+        repository = PenWidgetStateRepository(dataStore)
     }
 
     @After
@@ -84,7 +89,11 @@ class PenWidgetStateRepositoryTest {
         repository.adjustDraftSeconds(8, STEP_SECONDS)
 
         val submitted = repository.submitCommit(8) { seconds ->
-            payload().copy(seconds = seconds, uses = seconds / 10.0)
+            payload().copy(
+                seconds = seconds,
+                restoreDraftSeconds = seconds,
+                uses = seconds / 10.0,
+            )
         }
 
         assertEquals(20, submitted?.seconds)
@@ -128,7 +137,11 @@ class PenWidgetStateRepositoryTest {
         repository.setDraftSeconds(PEN_TILE_WIDGET_ID, 30)
         val submitted = requireNotNull(
             repository.submitCommit(PEN_TILE_WIDGET_ID) { seconds ->
-                payload().copy(seconds = seconds, uses = seconds / 10.0)
+                payload().copy(
+                    seconds = seconds,
+                    restoreDraftSeconds = seconds,
+                    uses = seconds / 10.0,
+                )
             },
         )
 
@@ -151,6 +164,59 @@ class PenWidgetStateRepositoryTest {
         assertEquals(null, repository.read(PEN_TILE_WIDGET_ID).pendingCommit)
     }
 
+    @Test
+    fun directSubmitIsAtomicRefusesAnExistingPendingCommitAndLeavesDraftUntouched() = runBlocking {
+        val surfaceId = 73
+        repository.setDraftSeconds(surfaceId, 50)
+        val direct = payload().copy(
+            commitId = "direct-commit",
+            eventId = "direct-event",
+            inputKind = DeferredPenInputKind.DIRECT_USES,
+            seconds = null,
+            secondsPerUse = null,
+            restoreDraftSeconds = null,
+            uses = 1.0,
+        )
+
+        var rejectedBuilderCalls = 0
+        val accepted = repository.submitDirectCommit(surfaceId) { direct }
+        val rejected = repository.submitDirectCommit(surfaceId) {
+            rejectedBuilderCalls += 1
+            direct.copy(commitId = "second", eventId = "second")
+        }
+
+        assertEquals(direct, accepted)
+        assertEquals(null, rejected)
+        assertEquals(0, rejectedBuilderCalls)
+        assertEquals(50, repository.read(surfaceId).draftSeconds)
+        assertTrue(repository.undo(surfaceId, direct.commitId, nowMillis = 1_000L))
+        assertEquals(null, repository.read(surfaceId).pendingCommit)
+        assertEquals(50, repository.read(surfaceId).draftSeconds)
+    }
+
+    @Test
+    fun directSubmitPreservesUnknownRawPendingStateWithoutCallingTheBuilder() = runBlocking {
+        val surfaceId = 73
+        val key = stringPreferencesKey("pending_commit_$surfaceId")
+        val unknown = """{"version":99,"future":"opaque"}"""
+        dataStore.edit { preferences -> preferences[key] = unknown }
+        var builderCalls = 0
+
+        val accepted = repository.submitDirectCommit(surfaceId) {
+            builderCalls += 1
+            payload().copy(
+                inputKind = DeferredPenInputKind.DIRECT_USES,
+                seconds = null,
+                secondsPerUse = null,
+                restoreDraftSeconds = null,
+            )
+        }
+
+        assertEquals(null, accepted)
+        assertEquals(0, builderCalls)
+        assertEquals(unknown, dataStore.data.first()[key])
+    }
+
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",
@@ -159,8 +225,10 @@ class PenWidgetStateRepositoryTest {
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = "uuid-1",
+        inputKind = DeferredPenInputKind.DURATION_SECONDS,
         seconds = 30,
         secondsPerUse = 10.0,
+        restoreDraftSeconds = 30,
         uses = 3.0,
         date = "2026-08-12",
         time = "12:00",

@@ -12,6 +12,7 @@ import com.example.domain.secondsToUses
 import com.example.widget.ACTION_OPEN_LOG
 import com.example.widget.ACTION_UNDO
 import com.example.widget.COMMIT_DELAY_MILLIS
+import com.example.widget.DeferredPenInputKind
 import com.example.widget.EXTRA_APP_WIDGET_ID
 import com.example.widget.EXTRA_COMMIT_ID
 import com.example.widget.PEN_WIDGET_PAYLOAD_VERSION
@@ -145,8 +146,10 @@ class MultiCartWidgetProvider : AppWidgetProvider() {
                 commitAtEpochMillis = submittedAt + COMMIT_DELAY_MILLIS,
                 productId = entry.productId,
                 productUuid = entry.productUuid,
+                inputKind = DeferredPenInputKind.DURATION_SECONDS,
                 seconds = seconds,
                 secondsPerUse = entry.secondsPerUse,
+                restoreDraftSeconds = seconds,
                 uses = secondsToUses(seconds.toDouble(), entry.secondsPerUse),
                 date = at.date,
                 time = at.time,
