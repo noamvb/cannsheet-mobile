@@ -1,6 +1,7 @@
 package com.example.widget
 
 import android.service.quicksettings.Tile
+import com.example.R
 import com.example.data.Product
 import com.example.domain.PenQuickLogState
 import org.junit.Assert.assertEquals
@@ -9,7 +10,7 @@ import org.junit.Test
 class PenTileStateTest {
     @Test
     fun noLoadedCartIsUnavailable() {
-        val expected = PenTileModel("No cart loaded", Tile.STATE_UNAVAILABLE)
+        val expected = PenTileModel(PenWidgetText.Resource(R.string.pen_tile_no_cart), Tile.STATE_UNAVAILABLE)
 
         assertEquals(expected, penTileState(PenQuickLogState.Unavailable, null))
         assertEquals(expected, penTileState(PenQuickLogState.NoCartLoaded, null))
@@ -18,7 +19,7 @@ class PenTileStateTest {
     @Test
     fun missingRateIsUnavailable() {
         assertEquals(
-            PenTileModel("No cart loaded", Tile.STATE_UNAVAILABLE),
+            PenTileModel(PenWidgetText.Resource(R.string.pen_tile_no_cart), Tile.STATE_UNAVAILABLE),
             penTileState(loaded(rate = null), null),
         )
     }
@@ -26,7 +27,10 @@ class PenTileStateTest {
     @Test
     fun loadedCartShowsNameAndFirstPreset() {
         assertEquals(
-            PenTileModel("Loaded cart · 10s", Tile.STATE_INACTIVE),
+            PenTileModel(
+                PenWidgetText.Resource(R.string.pen_tile_loaded, listOf("Loaded cart", 10)),
+                Tile.STATE_INACTIVE,
+            ),
             penTileState(
                 loaded(presetUses = listOf(3.0, 1.0, 2.0)),
                 null,
@@ -37,7 +41,7 @@ class PenTileStateTest {
     @Test
     fun pendingCommitShowsUndoAndActiveState() {
         assertEquals(
-            PenTileModel("Undo", Tile.STATE_ACTIVE),
+            PenTileModel(PenWidgetText.Resource(R.string.pen_tile_undo), Tile.STATE_ACTIVE),
             penTileState(PenQuickLogState.Unavailable, payload()),
         )
     }
@@ -45,7 +49,10 @@ class PenTileStateTest {
     @Test
     fun emptyPresetsFallsBackToTheDefaultStep() {
         assertEquals(
-            PenTileModel("Loaded cart · ${STEP_SECONDS}s", Tile.STATE_INACTIVE),
+            PenTileModel(
+                PenWidgetText.Resource(R.string.pen_tile_loaded, listOf("Loaded cart", STEP_SECONDS)),
+                Tile.STATE_INACTIVE,
+            ),
             penTileState(loaded(presetUses = emptyList()), null),
         )
     }

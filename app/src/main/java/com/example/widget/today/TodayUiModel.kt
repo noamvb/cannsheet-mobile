@@ -1,7 +1,9 @@
 package com.example.widget.today
 
+import com.example.R
 import com.example.data.ConsumptionHistoryEntry
 import com.example.domain.formatQuantityInInputUnit
+import com.example.widget.PenWidgetText
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -10,7 +12,7 @@ import java.util.TimeZone
 
 data class TodayUiModel(
     val todayUses: Double,
-    val todayDisplay: String,
+    val todayDisplay: PenWidgetText,
     val baselineUses: Double?,
     val baselineDisplay: String?,
     val comparison: TodayComparison,
@@ -67,9 +69,9 @@ fun buildTodayUiModel(
     return TodayUiModel(
         todayUses = todayUses,
         todayDisplay = if (hasTodayEntries) {
-            formatQuantityInInputUnit(todayUses, secondsPerUse)
+            PenWidgetText.Literal(formatQuantityInInputUnit(todayUses, secondsPerUse))
         } else {
-            EMPTY_TODAY_DISPLAY
+            PenWidgetText.Resource(R.string.today_widget_no_logs)
         },
         baselineUses = baselineUses,
         baselineDisplay = baselineUses?.let { formatQuantityInInputUnit(it, secondsPerUse) },
@@ -78,8 +80,6 @@ fun buildTodayUiModel(
         hasTodayEntries = hasTodayEntries,
     )
 }
-
-private const val EMPTY_TODAY_DISPLAY = "No logs yet today"
 
 private val ISO_DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
 
@@ -115,7 +115,7 @@ private fun isoDateMinusDays(value: String, days: Int): String? {
 
 private fun emptyTodayUiModel() = TodayUiModel(
     todayUses = 0.0,
-    todayDisplay = EMPTY_TODAY_DISPLAY,
+    todayDisplay = PenWidgetText.Resource(R.string.today_widget_no_logs),
     baselineUses = null,
     baselineDisplay = null,
     comparison = TodayComparison.UNAVAILABLE,

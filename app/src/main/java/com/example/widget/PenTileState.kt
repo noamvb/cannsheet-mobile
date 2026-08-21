@@ -1,6 +1,7 @@
 package com.example.widget
 
 import android.service.quicksettings.Tile
+import com.example.R
 import com.example.domain.PenQuickLogState
 
 /**
@@ -12,7 +13,7 @@ import com.example.domain.PenQuickLogState
 const val PEN_TILE_WIDGET_ID: Int = Int.MAX_VALUE
 
 internal data class PenTileModel(
-    val label: String,
+    val label: PenWidgetText,
     val state: Int,
 )
 
@@ -21,19 +22,25 @@ internal fun penTileState(
     pending: PenWidgetCommitPayload?,
 ): PenTileModel {
     if (pending != null) {
-        return PenTileModel(label = "Undo", state = Tile.STATE_ACTIVE)
+        return PenTileModel(label = PenWidgetText.Resource(R.string.pen_tile_undo), state = Tile.STATE_ACTIVE)
     }
 
     val loaded = penState as? PenQuickLogState.Loaded
-        ?: return PenTileModel(label = "No cart loaded", state = Tile.STATE_UNAVAILABLE)
+        ?: return PenTileModel(
+            label = PenWidgetText.Resource(R.string.pen_tile_no_cart),
+            state = Tile.STATE_UNAVAILABLE,
+        )
 
     if (loaded.secondsPerUse == null) {
-        return PenTileModel(label = "No cart loaded", state = Tile.STATE_UNAVAILABLE)
+        return PenTileModel(
+            label = PenWidgetText.Resource(R.string.pen_tile_no_cart),
+            state = Tile.STATE_UNAVAILABLE,
+        )
     }
 
     val seconds = penWidgetPresetSeconds(loaded).firstOrNull() ?: STEP_SECONDS
     return PenTileModel(
-        label = "${loaded.product.name} · ${seconds}s",
+        label = PenWidgetText.Resource(R.string.pen_tile_loaded, listOf(loaded.product.name, seconds)),
         state = Tile.STATE_INACTIVE,
     )
 }

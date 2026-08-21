@@ -1,5 +1,6 @@
 package com.example.widget.sync
 
+import com.example.R
 import com.example.data.sync.QUEUE_STUCK_THRESHOLD_MILLIS
 import com.example.widget.PenWidgetText
 
@@ -16,11 +17,9 @@ fun buildSyncStatusUiModel(
     nowMillis: Long,
 ): SyncStatusUiModel = SyncStatusUiModel(
     pendingCount = pendingCount.coerceAtLeast(0),
-    lastSyncLabel = PenWidgetText.Literal(
-        formatLastSyncLabel(
-            lastMeaningfulSyncAtEpochMillis = lastMeaningfulSyncAtEpochMillis,
-            nowMillis = nowMillis,
-        ),
+    lastSyncLabel = formatLastSyncLabel(
+        lastMeaningfulSyncAtEpochMillis = lastMeaningfulSyncAtEpochMillis,
+        nowMillis = nowMillis,
     ),
     stuck = queueNonEmptySinceEpochMillis?.let { since ->
         nowMillis >= since && nowMillis - since >= QUEUE_STUCK_THRESHOLD_MILLIS
@@ -30,16 +29,21 @@ fun buildSyncStatusUiModel(
 private fun formatLastSyncLabel(
     lastMeaningfulSyncAtEpochMillis: Long?,
     nowMillis: Long,
-): String {
-    val lastSync = lastMeaningfulSyncAtEpochMillis ?: return "Never synced"
-    val ageMillis = (nowMillis - lastSync).coerceAtLeast(0L)
-    val ageMinutes = ageMillis / MINUTE_MILLIS
+): PenWidgetText {
+    val lastSync = lastMeaningfulSyncAtEpochMillis
+        ?: return PenWidgetText.Resource(R.string.sync_status_last_sync_never)
+    val ageMinutes = (nowMillis - lastSync).coerceAtLeast(0L) / MINUTE_MILLIS
     return when {
-        ageMinutes < 1L -> "Synced just now"
-        ageMinutes < MINUTES_PER_HOUR -> "Synced ${ageMinutes}m ago"
-        ageMinutes < MINUTES_PER_DAY -> "Synced ${ageMinutes / MINUTES_PER_HOUR}h ago"
-        ageMinutes < MINUTES_PER_DAY * 2L -> "Synced yesterday"
-        else -> "Synced ${ageMinutes / MINUTES_PER_DAY}d ago"
+        ageMinutes < 1L ->
+            PenWidgetText.Resource(R.string.sync_status_last_sync_just_now)
+        ageMinutes < MINUTES_PER_HOUR ->
+            PenWidgetText.Resource(R.string.sync_status_last_sync_minutes, listOf(ageMinutes.toInt()))
+        ageMinutes < MINUTES_PER_DAY ->
+            PenWidgetText.Resource(R.string.sync_status_last_sync_hours, listOf((ageMinutes / MINUTES_PER_HOUR).toInt()))
+        ageMinutes < MINUTES_PER_DAY * 2L ->
+            PenWidgetText.Resource(R.string.sync_status_last_sync_yesterday)
+        else ->
+            PenWidgetText.Resource(R.string.sync_status_last_sync_days, listOf((ageMinutes / MINUTES_PER_DAY).toInt()))
     }
 }
 
