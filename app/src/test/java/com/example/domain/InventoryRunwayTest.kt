@@ -174,9 +174,11 @@ class InventoryRunwayTest {
         )
 
         assertEquals(RunwayBasis.PER_GRAM, runway.basis)
+        assertEquals(1.0, checkNotNull(runway.targetGrams), 0.0)
         assertEquals(3, runway.sampleSize)
         assertEquals(RunwayConfidence.LOW, runway.confidence)
         assertEquals(10.0, runway.estimatedTypicalFinishedUses, 0.0)
+        assertTrue(runway.pace is RunwayPace.Ready)
     }
 
     @Test
@@ -192,9 +194,142 @@ class InventoryRunwayTest {
         )
 
         assertEquals(RunwayBasis.PER_GRAM, runway.basis)
+        assertEquals(2.0, checkNotNull(runway.targetGrams), 0.0)
         assertEquals(8, runway.sampleSize)
         assertEquals(RunwayConfidence.HIGH, runway.confidence)
         assertEquals(20.0, runway.estimatedTypicalFinishedUses, 0.0)
+    }
+
+    @Test
+    fun exactSameTypeAndGramCohortWinsOverMixedSizeOutliers() {
+        val products = listOf(
+            product("one-gram-10", type = " p ", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product("one-gram-12", type = "P", status = "FINISHED", allQuantity = 12.0, grams = 1.0),
+            product("one-gram-14", type = "p", status = "FINISHED", allQuantity = 14.0, grams = 1.0),
+            product("two-gram-100", type = "P", status = "FINISHED", allQuantity = 100.0, grams = 2.0),
+            product("two-gram-120", type = "P", status = "FINISHED", allQuantity = 120.0, grams = 2.0),
+            product("two-gram-140", type = "P", status = "FINISHED", allQuantity = 140.0, grams = 2.0),
+        )
+
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(allQuantity = 4.0, rangeQuantity = 2.0, grams = 1.0),
+                buildTypeCapacityModels(products),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+
+        assertEquals(RunwayBasis.MATCHED_GRAMS, runway.basis)
+        assertEquals(1.0, checkNotNull(runway.targetGrams), 0.0)
+        assertEquals(3, runway.sampleSize)
+        assertEquals(12.0, runway.estimatedTypicalFinishedUses, 0.0)
+        assertEquals(8.0, runway.estimatedRemainingToTypicalUses, 0.0)
+        assertTrue(runway.pace is RunwayPace.Ready)
+    }
+
+    @Test
+    fun canonicalGramEqualityJoinsEquivalentValuesButNotNearbyValues() {
+        val products = listOf(
+            product("one", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product("one-point-zero", status = "FINISHED", allQuantity = 12.0, grams = 1.00),
+            product("one-point-zero-zero", status = "FINISHED", allQuantity = 14.0, grams = 1.000),
+            product(
+                "nearby",
+                status = "FINISHED",
+                allQuantity = 999.0,
+                grams = 1.0000001,
+            ),
+        )
+
+        val model = checkNotNull(buildTypeCapacityModels(products)["P"])
+
+        assertEquals(3, model.matchedGrams["1"]?.sampleSize)
+        assertEquals(1, model.matchedGrams["1.0000001"]?.sampleSize)
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(grams = 1.0),
+                mapOf("P" to model),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+        assertEquals(RunwayBasis.MATCHED_GRAMS, runway.basis)
+        assertEquals(12.0, runway.estimatedTypicalFinishedUses, 0.0)
+    }
+
+    @Test
+    fun undersizedExactCohortFallsBackToBroadPerGramEvidence() {
+        val products = listOf(
+            product("one-gram-10", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product("two-gram-100", status = "FINISHED", allQuantity = 100.0, grams = 2.0),
+            product("two-gram-120", status = "FINISHED", allQuantity = 120.0, grams = 2.0),
+        )
+
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(grams = 1.0),
+                buildTypeCapacityModels(products),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+
+        assertEquals(RunwayBasis.PER_GRAM, runway.basis)
+        assertEquals(3, runway.sampleSize)
+        assertEquals(50.0, runway.estimatedTypicalFinishedUses, 0.0)
+    }
+
+    @Test
+    fun undersizedGramEvidenceFallsBackToSameTypePerProductEvidence() {
+        val products = listOf(
+            product("one-gram-10", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product("two-gram-20", status = "FINISHED", allQuantity = 20.0, grams = 2.0),
+            product("unknown-size-30", status = "FINISHED", allQuantity = 30.0, grams = null),
+        )
+
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(grams = 1.0),
+                buildTypeCapacityModels(products),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+
+        assertEquals(RunwayBasis.PER_PRODUCT, runway.basis)
+        assertNull(runway.targetGrams)
+        assertEquals(3, runway.sampleSize)
+        assertEquals(20.0, runway.estimatedTypicalFinishedUses, 0.0)
+    }
+
+    @Test
+    fun wrongTypeNearbyGramsAndInvalidInputsDoNotContaminateExactCohort() {
+        val products = listOf(
+            product("p-one-10", type = "P", status = "FINISHED", allQuantity = 10.0, grams = 1.0),
+            product("p-one-11", type = "P", status = "FINISHED", allQuantity = 11.0, grams = 1.0),
+            product("p-nearby", type = "P", status = "FINISHED", allQuantity = 999.0, grams = 1.01),
+            product("other-type", type = "F", status = "FINISHED", allQuantity = 777.0, grams = 1.0),
+            product("invalid-grams", type = "P", status = "FINISHED", allQuantity = 888.0, grams = 0.0),
+            product("invalid-uses", type = "P", status = "FINISHED", allQuantity = Double.NaN, grams = 1.0),
+        )
+
+        val model = checkNotNull(buildTypeCapacityModels(products)["P"])
+        assertEquals(4, model.sampleSize)
+        assertEquals(3, model.perGramSampleSize)
+        assertEquals(2, model.matchedGrams["1"]?.sampleSize)
+        assertNull(buildTypeCapacityModels(products)["F"])
+
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(grams = 1.0),
+                mapOf("P" to model),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+        assertEquals(RunwayBasis.PER_GRAM, runway.basis)
+        assertEquals(11.0, runway.estimatedTypicalFinishedUses, 0.0)
     }
 
     @Test
@@ -299,11 +434,12 @@ class InventoryRunwayTest {
             ),
         )
 
-        assertEquals(7, runway.effectiveBurnRateDays)
-        assertEquals(1.0, runway.usesPerDay, 0.0)
+        val pace = runway.pace as RunwayPace.Ready
+        assertEquals(7, pace.effectiveBurnRateDays)
+        assertEquals(1.0, pace.usesPerDay, 0.0)
         assertEquals(20.0, runway.estimatedTypicalFinishedUses, 0.0)
         assertEquals(10.0, runway.estimatedRemainingToTypicalUses, 0.0)
-        assertEquals(10.0, runway.estimatedDaysRemaining, 0.0)
+        assertEquals(10.0, pace.estimatedDaysRemaining, 0.0)
     }
 
     @Test
@@ -320,16 +456,17 @@ class InventoryRunwayTest {
             ),
         )
 
-        assertEquals(30, runway.effectiveBurnRateDays)
-        assertEquals(1.0, runway.usesPerDay, 0.0)
+        val pace = runway.pace as RunwayPace.Ready
+        assertEquals(30, pace.effectiveBurnRateDays)
+        assertEquals(1.0, pace.usesPerDay, 0.0)
     }
 
     @Test
-    fun runwayRequiresSevenEffectiveDays() {
+    fun runwayRequiresSevenEffectiveDaysOnlyForPace() {
         val models = mapOf("P" to capacityModel())
         val selectedRange = range("2026-07-01", "2026-07-30", 30)
 
-        assertNull(
+        val tooFew = checkNotNull(
             buildProductRunway(
                 activeProduct(firstLogAt = utcEpoch(2026, 7, 25, 16)),
                 models,
@@ -337,14 +474,35 @@ class InventoryRunwayTest {
                 NEW_YORK,
             ),
         )
-        assertTrue(
+        assertEquals(RunwayPace.TooFewEffectiveDays(6), tooFew.pace)
+        assertEquals(20.0, tooFew.estimatedTypicalFinishedUses, 0.0)
+
+        val exactlySeven = checkNotNull(
             buildProductRunway(
                 activeProduct(firstLogAt = utcEpoch(2026, 7, 24, 16)),
                 models,
                 selectedRange,
                 NEW_YORK,
-            ) != null,
+            ),
         )
+        assertTrue(exactlySeven.pace is RunwayPace.Ready)
+    }
+
+    @Test
+    fun brandNewActiveProductShowsItsFullEstimatedCapacityWithoutAPace() {
+        val runway = checkNotNull(
+            buildProductRunway(
+                activeProduct(allQuantity = 0.0, rangeQuantity = 0.0, firstLogAt = null),
+                mapOf("P" to capacityModel()),
+                range("2026-07-01", "2026-07-07", 7),
+                NEW_YORK,
+            ),
+        )
+
+        assertEquals(0.0, runway.usesSoFar, 0.0)
+        assertEquals(20.0, runway.estimatedTypicalFinishedUses, 0.0)
+        assertEquals(20.0, runway.estimatedRemainingToTypicalUses, 0.0)
+        assertEquals(RunwayPace.NoUseInRange, runway.pace)
     }
 
     @Test
@@ -355,8 +513,8 @@ class InventoryRunwayTest {
         listOf("UNOPENED", "FINISHED", "UNKNOWN").forEach { status ->
             assertNull(buildProductRunway(activeProduct(status = status), models, validRange, NEW_YORK))
         }
-        listOf(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { quantity ->
-            assertNull(
+        listOf(-1.0, Double.NaN, Double.POSITIVE_INFINITY).forEach { quantity ->
+            val runway = checkNotNull(
                 buildProductRunway(
                     activeProduct(rangeQuantity = quantity),
                     models,
@@ -364,9 +522,19 @@ class InventoryRunwayTest {
                     NEW_YORK,
                 ),
             )
+            assertEquals(RunwayPace.InvalidSnapshot, runway.pace)
         }
-        assertNull(buildProductRunway(activeProduct(firstLogAt = null), models, validRange, NEW_YORK))
-        assertNull(
+        val noUse = checkNotNull(
+            buildProductRunway(activeProduct(rangeQuantity = 0.0), models, validRange, NEW_YORK),
+        )
+        assertEquals(RunwayPace.NoUseInRange, noUse.pace)
+        assertEquals(20.0, noUse.estimatedTypicalFinishedUses, 0.0)
+        val missingFirstLog = checkNotNull(
+            buildProductRunway(activeProduct(firstLogAt = null), models, validRange, NEW_YORK),
+        )
+        assertEquals(RunwayPace.MissingFirstLog, missingFirstLog.pace)
+        assertEquals(20.0, missingFirstLog.estimatedTypicalFinishedUses, 0.0)
+        val firstLogAfterRange = checkNotNull(
             buildProductRunway(
                 activeProduct(firstLogAt = utcEpoch(2026, 7, 8)),
                 models,
@@ -374,14 +542,16 @@ class InventoryRunwayTest {
                 NEW_YORK,
             ),
         )
-        assertNull(
+        assertEquals(RunwayPace.InvalidSnapshot, firstLogAfterRange.pace)
+        val shortRange = checkNotNull(
             buildProductRunway(
                 activeProduct(),
                 models,
-                range("2026-07-01", "2026-07-07", 6),
+                range("2026-07-01", "2026-07-06", 6),
                 NEW_YORK,
             ),
         )
+        assertEquals(RunwayPace.SelectedRangeTooShort, shortRange.pace)
         assertNull(
             buildProductRunway(
                 activeProduct(),
@@ -405,14 +575,15 @@ class InventoryRunwayTest {
         )
 
         assertEquals(0.0, runway.estimatedRemainingToTypicalUses, 0.0)
-        assertEquals(0.0, runway.estimatedDaysRemaining, 0.0)
+        val pace = runway.pace as RunwayPace.Ready
+        assertEquals(0.0, pace.estimatedDaysRemaining, 0.0)
         assertTrue(
             listOf(
                 runway.usesSoFar,
                 runway.estimatedTypicalFinishedUses,
                 runway.estimatedRemainingToTypicalUses,
-                runway.usesPerDay,
-                runway.estimatedDaysRemaining,
+                pace.usesPerDay,
+                pace.estimatedDaysRemaining,
             ).all(Double::isFinite),
         )
     }
@@ -859,7 +1030,10 @@ class InventoryRunwayTest {
         assertEquals(eastProjection, westProjection)
         assertTrue(eastProjection != null)
         assertEquals(eastRunway, westRunway)
-        assertEquals(8, checkNotNull(eastRunway).effectiveBurnRateDays)
+        assertEquals(
+            8,
+            (checkNotNull(eastRunway).pace as RunwayPace.Ready).effectiveBurnRateDays,
+        )
     }
 
     @Test

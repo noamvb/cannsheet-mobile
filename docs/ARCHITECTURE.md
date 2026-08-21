@@ -381,12 +381,21 @@ contract, only additional reads of the existing endpoint. Runway-only refreshes
 are additionally floored at two minutes; the Insights tab is never floored.
 
 Capacity evidence is a median over the user's own finished products, with at
-least three eligible observations. Per-gram evidence is preferred only when at
-least three finished products have valid gram data; its evidence count and
-confidence are independent of the broader per-product sample. An active
-product needs at least seven effective calendar days from the later of the
-selected range start or its first recorded use. Those civil-date calculations
-use the response time zone.
+least three eligible observations. For an active product with valid grams, an
+exact normalized-type and canonical-gram cohort is preferred when it contains
+at least three finished products; products at other gram amounts cannot affect
+that median. When the exact-size cohort is smaller, the model retains the
+broader same-type median uses-per-gram fallback, and it falls back to the
+same-type per-product median when gram evidence is unavailable. Presentation
+copy names the selected basis and its actual sample count.
+
+Capacity and pace are separate evidence boundaries. A fresh snapshot can show
+the estimated recorded uses remaining for an active product with zero recorded
+uses. Estimated days remaining appears only after there is positive use in the
+selected range and at least seven effective calendar days from the later of the
+range start or the product's first recorded use. A shorter or absent pace is an
+explicit capacity-only state, never a fabricated time estimate. All civil-date
+calculations use the response time zone.
 
 Month projection is available only for a response that covers the real current
 month through today in the response time zone. It uses personal spend cents and

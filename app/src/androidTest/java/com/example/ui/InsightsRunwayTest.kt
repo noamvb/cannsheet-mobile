@@ -32,6 +32,7 @@ import com.example.data.SyncHealthDto
 import com.example.domain.ProductRunway
 import com.example.domain.RunwayBasis
 import com.example.domain.RunwayConfidence
+import com.example.domain.RunwayPace
 import com.example.domain.SpendRunRate
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -114,6 +115,41 @@ class InsightsRunwayTest {
         composeRule.onNode(hasText("7 finished Pen products", substring = true)).assertIsDisplayed()
         composeRule.onNode(hasText("recorded grams", substring = true)).assertIsDisplayed()
         composeRule.onNode(hasText("14-day recorded-use rate", substring = true)).assertIsDisplayed()
+    }
+
+    @Test
+    fun matchedGramCapacityOnlyRowNamesExactEvidenceAndExplainsMissingPace() {
+        val product = analyticsProduct("matched-pen", "Matched-size cart")
+        val estimate = runway(
+            productId = product.productId,
+            days = 10.0,
+            basis = RunwayBasis.MATCHED_GRAMS,
+            confidence = RunwayConfidence.LOW,
+            sampleSize = 3,
+            paceOverride = RunwayPace.TooFewEffectiveDays(effectiveBurnRateDays = 4),
+        ).copy(
+            usesSoFar = 8.0,
+            estimatedTypicalFinishedUses = 20.0,
+            estimatedRemainingToTypicalUses = 12.0,
+        )
+
+        composeRule.setContent {
+            MaterialTheme {
+                RunwaySection(
+                    estimates = ready(listOf(estimate)),
+                    products = listOf(product),
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(InsightsRunwayTestTags.row(product.productId))
+            .assertIsDisplayed()
+            .assert(hasText("3 finished Pen products at 1 g", substring = true))
+            .assert(hasText("~12 uses to the typical ~20 uses recorded at finish", substring = true))
+            .assert(hasText("4 days available", substring = true))
+        composeRule.onAllNodes(hasText("recorded-use rate", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("to the usual recorded finish amount", substring = true))
+            .assertCountEquals(0)
     }
 
     @Test
@@ -352,16 +388,20 @@ class InsightsRunwayTest {
         basis: RunwayBasis = RunwayBasis.PER_PRODUCT,
         confidence: RunwayConfidence = RunwayConfidence.MEDIUM,
         sampleSize: Int = 5,
+        paceOverride: RunwayPace? = null,
     ) = ProductRunway(
         productId = productId,
         type = "P",
         usesSoFar = 8.0,
         estimatedTypicalFinishedUses = 20.0,
         estimatedRemainingToTypicalUses = 12.0,
-        usesPerDay = 12.0 / days,
-        effectiveBurnRateDays = 14,
-        estimatedDaysRemaining = days,
+        pace = paceOverride ?: RunwayPace.Ready(
+            usesPerDay = 12.0 / days,
+            effectiveBurnRateDays = 14,
+            estimatedDaysRemaining = days,
+        ),
         basis = basis,
+        targetGrams = if (basis == RunwayBasis.PER_PRODUCT) null else 1.0,
         confidence = confidence,
         sampleSize = sampleSize,
     )

@@ -20,6 +20,7 @@ const val MIN_CAPACITY_SAMPLE: Int = 3
 const val MIN_BURN_RATE_DAYS: Int = 7
 
 enum class RunwayBasis {
+    MATCHED_GRAMS,
     PER_GRAM,
     PER_PRODUCT,
 }
@@ -53,7 +54,34 @@ data class TypeCapacityModel(
     val medianRecordedUsesPerGramAtFinish: Double?,
     /** Number of observations actually used by the per-gram median. */
     val perGramSampleSize: Int,
+    /** Exact recorded gram amounts mapped to their finished-product evidence. */
+    val matchedGrams: Map<String, MatchedGramsCapacityModel> = emptyMap(),
 )
+
+data class MatchedGramsCapacityModel(
+    val grams: Double,
+    val sampleSize: Int,
+    val medianRecordedUsesAtFinish: Double,
+)
+
+sealed interface RunwayPace {
+    data class Ready(
+        val usesPerDay: Double,
+        /** Inclusive calendar days in the product-specific burn-rate window. */
+        val effectiveBurnRateDays: Int,
+        val estimatedDaysRemaining: Double,
+    ) : RunwayPace
+
+    data object SelectedRangeTooShort : RunwayPace
+
+    data object NoUseInRange : RunwayPace
+
+    data object MissingFirstLog : RunwayPace
+
+    data class TooFewEffectiveDays(val effectiveBurnRateDays: Int) : RunwayPace
+
+    data object InvalidSnapshot : RunwayPace
+}
 
 data class ProductRunway(
     val productId: String,
@@ -62,11 +90,10 @@ data class ProductRunway(
     /** Estimated typical recorded amount at finish, not literal product capacity. */
     val estimatedTypicalFinishedUses: Double,
     val estimatedRemainingToTypicalUses: Double,
-    val usesPerDay: Double,
-    /** Inclusive calendar days in the product-specific burn-rate window. */
-    val effectiveBurnRateDays: Int,
-    val estimatedDaysRemaining: Double,
+    val pace: RunwayPace,
     val basis: RunwayBasis,
+    /** The active product's grams when the selected basis uses gram evidence. */
+    val targetGrams: Double?,
     val confidence: RunwayConfidence,
     /** Evidence used by the selected basis. */
     val sampleSize: Int,
@@ -112,6 +139,14 @@ fun buildTypeCapacityModels(
                     .takeIf { it.size >= MIN_CAPACITY_SAMPLE }
                     ?.let(::median),
                 perGramSampleSize = samples.recordedUsesPerGram.size,
+                matchedGrams = samples.recordedUsesByGram
+                    .mapValues { (_, gramSamples) ->
+                        MatchedGramsCapacityModel(
+                            grams = gramSamples.grams,
+                            sampleSize = gramSamples.recordedUses.size,
+                            medianRecordedUsesAtFinish = median(gramSamples.recordedUses),
+                        )
+                    },
             )
         }
     }
@@ -132,41 +167,39 @@ fun buildProductRunway(
     val usesSoFar = product.allTime.quantity
     if (!usesSoFar.isFinite() || usesSoFar < 0.0) return null
 
-    val rangeUses = product.range.quantity
-    if (!rangeUses.isFinite() || rangeUses <= 0.0) return null
-
     val validatedRange = validateRange(range) ?: return null
     val timeZone = analyticsTimeZone.toValidatedTimeZone() ?: return null
-    val firstLogAt = product.allTime.firstLogAtEpochMillis ?: return null
-    val firstLogDate = civilDateAt(firstLogAt, timeZone) ?: return null
-    if (firstLogDate > validatedRange.to) return null
 
-    val effectiveStart = maxOf(validatedRange.from, firstLogDate)
-    val effectiveDaysLong = validatedRange.to.ordinal - effectiveStart.ordinal + 1L
-    if (effectiveDaysLong !in MIN_BURN_RATE_DAYS.toLong()..Int.MAX_VALUE.toLong()) {
-        return null
-    }
-    val effectiveBurnRateDays = effectiveDaysLong.toInt()
-
-    val targetGrams = product.grams
+    val targetGrams = product.grams.validGramsOrNull()
+    val matchedGramsModel = targetGrams
+        ?.let(::canonicalGramsKey)
+        ?.let(model.matchedGrams::get)
+        ?.takeIf { it.sampleSize >= MIN_CAPACITY_SAMPLE }
     val perGramEstimate = model.medianRecordedUsesPerGramAtFinish
+        ?.takeIf { matchedGramsModel == null }
         ?.takeIf { model.perGramSampleSize >= MIN_CAPACITY_SAMPLE }
-        ?.takeIf {
-            targetGrams != null && targetGrams.isFinite() && targetGrams > 0.0
-        }
+        ?.takeIf { targetGrams != null }
         ?.let { it * requireNotNull(targetGrams) }
 
     val basis: RunwayBasis
     val estimatedTypicalFinishedUses: Double
     val evidenceSampleSize: Int
-    if (perGramEstimate != null) {
-        basis = RunwayBasis.PER_GRAM
-        estimatedTypicalFinishedUses = perGramEstimate
-        evidenceSampleSize = model.perGramSampleSize
-    } else {
-        basis = RunwayBasis.PER_PRODUCT
-        estimatedTypicalFinishedUses = model.medianRecordedUsesAtFinish
-        evidenceSampleSize = model.sampleSize
+    when {
+        matchedGramsModel != null -> {
+            basis = RunwayBasis.MATCHED_GRAMS
+            estimatedTypicalFinishedUses = matchedGramsModel.medianRecordedUsesAtFinish
+            evidenceSampleSize = matchedGramsModel.sampleSize
+        }
+        perGramEstimate != null -> {
+            basis = RunwayBasis.PER_GRAM
+            estimatedTypicalFinishedUses = perGramEstimate
+            evidenceSampleSize = model.perGramSampleSize
+        }
+        else -> {
+            basis = RunwayBasis.PER_PRODUCT
+            estimatedTypicalFinishedUses = model.medianRecordedUsesAtFinish
+            evidenceSampleSize = model.sampleSize
+        }
     }
     if (evidenceSampleSize < MIN_CAPACITY_SAMPLE) return null
     if (!estimatedTypicalFinishedUses.isFinite() || estimatedTypicalFinishedUses <= 0.0) {
@@ -175,13 +208,18 @@ fun buildProductRunway(
 
     val estimatedRemaining =
         (estimatedTypicalFinishedUses - usesSoFar).coerceAtLeast(0.0)
-    val usesPerDay = rangeUses / effectiveBurnRateDays.toDouble()
-    if (!usesPerDay.isFinite() || usesPerDay <= 0.0) return null
-    val estimatedDaysRemaining = estimatedRemaining / usesPerDay
-    if (!estimatedRemaining.isFinite() || !estimatedDaysRemaining.isFinite()) return null
+    if (!estimatedRemaining.isFinite()) return null
+
+    val pace = buildRunwayPace(
+        product = product,
+        range = range,
+        validatedRange = validatedRange,
+        timeZone = timeZone,
+        estimatedRemaining = estimatedRemaining,
+    )
 
     val confidence = when {
-        basis == RunwayBasis.PER_GRAM && evidenceSampleSize >= HIGH_CONFIDENCE_SAMPLE ->
+        basis != RunwayBasis.PER_PRODUCT && evidenceSampleSize >= HIGH_CONFIDENCE_SAMPLE ->
             RunwayConfidence.HIGH
         evidenceSampleSize >= MEDIUM_CONFIDENCE_SAMPLE -> RunwayConfidence.MEDIUM
         else -> RunwayConfidence.LOW
@@ -193,10 +231,9 @@ fun buildProductRunway(
         usesSoFar = usesSoFar,
         estimatedTypicalFinishedUses = estimatedTypicalFinishedUses,
         estimatedRemainingToTypicalUses = estimatedRemaining,
-        usesPerDay = usesPerDay,
-        effectiveBurnRateDays = effectiveBurnRateDays,
-        estimatedDaysRemaining = estimatedDaysRemaining,
+        pace = pace,
         basis = basis,
+        targetGrams = targetGrams.takeIf { basis != RunwayBasis.PER_PRODUCT },
         confidence = confidence,
         sampleSize = evidenceSampleSize,
     )
@@ -322,6 +359,12 @@ internal fun median(values: List<Double>): Double {
 private data class FinishSamples(
     val recordedUses: MutableList<Double> = mutableListOf(),
     val recordedUsesPerGram: MutableList<Double> = mutableListOf(),
+    val recordedUsesByGram: MutableMap<String, GramFinishSamples> = sortedMapOf(),
+)
+
+private data class GramFinishSamples(
+    val grams: Double,
+    val recordedUses: MutableList<Double> = mutableListOf(),
 )
 
 private fun collectFinishSamples(
@@ -337,16 +380,64 @@ private fun collectFinishSamples(
 
         val samples = samplesByType.getOrPut(type, ::FinishSamples)
         samples.recordedUses += recordedUses
-        val grams = product.grams
-        if (grams != null && grams.isFinite() && grams > 0.0) {
+        val grams = product.grams.validGramsOrNull()
+        if (grams != null) {
             val ratio = recordedUses / grams
             if (ratio.isFinite() && ratio > 0.0) {
                 samples.recordedUsesPerGram += ratio
             }
+            samples.recordedUsesByGram
+                .getOrPut(canonicalGramsKey(grams)) { GramFinishSamples(grams = grams) }
+                .recordedUses += recordedUses
         }
     }
     return samplesByType
 }
+
+private fun buildRunwayPace(
+    product: AnalyticsProductDto,
+    range: AnalyticsRangeDto,
+    validatedRange: ValidatedRange,
+    timeZone: TimeZone,
+    estimatedRemaining: Double,
+): RunwayPace {
+    if (range.dayCount < MIN_BURN_RATE_DAYS) return RunwayPace.SelectedRangeTooShort
+
+    val rangeUses = product.range.quantity
+    if (!rangeUses.isFinite() || rangeUses < 0.0) return RunwayPace.InvalidSnapshot
+    if (rangeUses == 0.0) return RunwayPace.NoUseInRange
+
+    val firstLogAt = product.allTime.firstLogAtEpochMillis ?: return RunwayPace.MissingFirstLog
+    val firstLogDate = civilDateAt(firstLogAt, timeZone) ?: return RunwayPace.InvalidSnapshot
+    if (firstLogDate > validatedRange.to) return RunwayPace.InvalidSnapshot
+
+    val effectiveStart = maxOf(validatedRange.from, firstLogDate)
+    val effectiveDaysLong = validatedRange.to.ordinal - effectiveStart.ordinal + 1L
+    if (effectiveDaysLong !in 1L..Int.MAX_VALUE.toLong()) {
+        return RunwayPace.InvalidSnapshot
+    }
+    val effectiveBurnRateDays = effectiveDaysLong.toInt()
+    if (effectiveBurnRateDays < MIN_BURN_RATE_DAYS) {
+        return RunwayPace.TooFewEffectiveDays(effectiveBurnRateDays)
+    }
+
+    val usesPerDay = rangeUses / effectiveBurnRateDays.toDouble()
+    if (!usesPerDay.isFinite() || usesPerDay <= 0.0) return RunwayPace.InvalidSnapshot
+    val estimatedDaysRemaining = estimatedRemaining / usesPerDay
+    if (!estimatedDaysRemaining.isFinite()) return RunwayPace.InvalidSnapshot
+
+    return RunwayPace.Ready(
+        usesPerDay = usesPerDay,
+        effectiveBurnRateDays = effectiveBurnRateDays,
+        estimatedDaysRemaining = estimatedDaysRemaining,
+    )
+}
+
+private fun Double?.validGramsOrNull(): Double? =
+    this?.takeIf { it.isFinite() && it > 0.0 }
+
+private fun canonicalGramsKey(grams: Double): String =
+    BigDecimal.valueOf(grams).stripTrailingZeros().toPlainString()
 
 private fun String.isEligibleRunwayType(): Boolean = isNotBlank() && this != TYPE_UNKNOWN
 
