@@ -144,9 +144,18 @@ class InsightsRunwayTest {
 
         composeRule.onNodeWithTag(InsightsRunwayTestTags.row(product.productId))
             .assertIsDisplayed()
-            .assert(hasText("3 finished Pen products at 1 g", substring = true))
-            .assert(hasText("~12 uses to the typical ~20 uses recorded at finish", substring = true))
-            .assert(hasText("4 days available", substring = true))
+            .assert(
+                hasAnyDescendant(hasText("3 finished Pen products at 1 g", substring = true)),
+            )
+            .assert(
+                hasAnyDescendant(
+                    hasText(
+                        "~12 uses to the typical ~20 uses recorded at finish",
+                        substring = true,
+                    ),
+                ),
+            )
+            .assert(hasAnyDescendant(hasText("4 days available", substring = true)))
         composeRule.onAllNodes(hasText("recorded-use rate", substring = true)).assertCountEquals(0)
         composeRule.onAllNodes(hasText("to the usual recorded finish amount", substring = true))
             .assertCountEquals(0)
