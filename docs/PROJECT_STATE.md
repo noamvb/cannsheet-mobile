@@ -2,6 +2,55 @@
 
 Last updated: 2026-08-21
 
+## NFC quick-log implementation status (unreleased)
+
+The local feature branches `codex/nfc-deferred-core` and
+`codex/nfc-quick-log-tags` contain the approved NFC quick-log implementation in
+progress; the latter is currently checked out. The durable direct-uses outbox is implemented as
+payload version 3 with v1/v2 decoding, atomic direct submission, claim/write/
+complete retry behavior, and a cold-start-safe `PenQuickLogDataSource`. The NFC
+branch adds the exact version-1 two-record NDEF contract, fail-closed registry,
+dedicated scan/result activity, foreground writer, Settings section, optional NFC
+manifest feature, and the reserved `Int.MAX_VALUE - 1` surface.
+
+The serialized local gate
+`./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`
+passed after the final fixes: 523 JVM tests, zero failures/errors/skips, Android-test
+Kotlin compilation, lint, and debug assembly all succeeded. All eight checked-in
+Node suites and the 13-test Python backend benchmark also passed; `git diff --check`
+is clean. Emulator instrumentation, the owner's Samsung screen-off feasibility
+probe, physical sandbox RF/write/readback, CI/PR merges, signed publication, and
+Obtainium installation have not been run or claimed in this working session. No
+production NFC tag has been written or tapped, and no production APK/version/
+signing/endpoint/backend contract has been changed. The pre-existing untracked
+widget image remains untouched.
+
+A post-implementation review pass corrected six defects in the NFC surfaces
+before any release. Both Compose entry points now supply their own `Surface`:
+`MyApplicationTheme` wraps `MaterialTheme` only, so a bare `Column` inherited
+Material 3's `Color.Black` `LocalContentColor` and rendered black text on the
+translucent result window and the dark DeviceDefault writer window. "Adopt
+compatible tag" previously launched the writer in `WRITE` mode with a freshly
+minted UUID and a hardcoded single use, so a blank tag was silently written
+instead of adopted; adoption is now a dedicated inspect-only `WriterMode.ADOPT`
+that never writes and reports `NoCompatibleTagToAdopt` when a tag carries no
+Cannsheet content. The result Activity now reports `DuplicatePresentation`
+instead of stalling on "Reading NFC tag…" when the process-wide presentation
+gate suppresses a re-tap on a fresh `noHistory` instance, and Retry recovers the
+durable pending payload rather than no-opping. A writer intent carrying an
+invalid UUID or quantity is now rejected up front instead of throwing out of a
+`Dispatchers.IO` coroutine, and that rejection survives `onResume`. The vestigial
+`Saved.offline` flag and its unverifiable "saved offline" copy were removed.
+
+The legibility regression and its fix are captured on the API 36 emulator in
+`docs/images/nfc-tag-writer-dark-before.png` versus
+`docs/images/nfc-tag-writer-dark-after.png`, and
+`docs/images/nfc-result-dark-before.png` versus
+`docs/images/nfc-result-dark-after.png`; the light-mode writer is in
+`docs/images/nfc-tag-writer-light-after.png`. These are emulator renders of the
+no-NFC-hardware states, which exercise the theme and layout but prove nothing
+about RF behavior.
+
 ## Repository state
 
 - Canonical branch: `main`

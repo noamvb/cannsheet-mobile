@@ -67,6 +67,21 @@ flowchart LR
   than introducing duplicate network contracts. The same package contains the
   `PenQuickTileService` Quick Settings entry point, which delegates to the
   existing pen draft, undo, durable queue, and sync path.
+- `app/src/main/java/com/example/nfc` contains the optional NFC quick-log
+  boundary. `NfcQuickLogContract` is the durable two-record external-type/AAR
+  protocol; `NfcQuickLogRegistryRepository` is the version-1, fail-closed,
+  backup-included Preferences DataStore allowlist; and
+  `NfcQuickLogActivity` is the only exported NFC receiver. The receiver validates
+  the action, canonical URI, exact records, package AAR, registry UUID, and
+  registered quantity before it loads a Pen state through the cold-start-safe
+  `PenQuickLogDataSource`. It captures product identity, uses, event identity, and
+  tap time into the direct-uses v3 deferred payload at acceptance time. NFC uses
+  `PEN_NFC_SURFACE_ID` (`Int.MAX_VALUE - 1`) and never shares a widget ID or
+  countdown with the tile, pen widget, multi-cart widgets, or in-app submission.
+  `NfcTagWriterActivity` uses framework reader mode only while explicitly waiting
+  for a tag; it verifies exact readback, requires an explicit second presentation
+  for foreign content, and never locks or erases a tag. Labels remain private
+  registry data and are never written to NDEF.
 - `app/src/main/java/com/example/notifications` contains the Android channel,
   permission/availability, stable-card, and Settings-route intent details for
   queue alerts. It implements `QueueAlertPresenter`; queue-health and sync code
@@ -75,6 +90,33 @@ flowchart LR
 - `app/src/main/java/com/example/domain` contains the pen-state, quantity-unit,
   submit-time, out-of-app route, and inventory-runway helpers shared across
   presentation boundaries without creating UI/widget/notification cycles.
+
+### NFC quick-log scan and persistence flow
+
+NFC dispatch is a routing aid, not authorization. The dedicated exported activity
+sanitizes the incoming intent immediately and fails closed on every contract or
+registry mismatch. On a valid intentional presentation it resolves the current
+Pen cart using the existing explicit-then-most-recent rule, ignores the
+seconds-per-use rate, and atomically writes a direct-uses pending payload before
+showing the small result surface. The fixed five-second Undo decision happens in
+DataStore before any Room write. A commit claims the exact payload, calls the
+existing `ConsumptionLogger`, and removes the payload only after Room durability;
+sync remains the existing `SyncEngine`/`SyncScheduler` path. A Room failure releases
+the claim and leaves the same event UUID pending for retry. Delayed commit passes
+`updateLoadedCart = false`, so a tap cannot change the loaded-cart preference.
+
+The logical tag UUID gates duplicate dispatch while a tag remains present. The
+platform `NfcAdapter.ignore` callback and tag-removal callback are best-effort
+rediscovery suppression; stable event IDs and the durable direct outbox remain the
+correctness boundary. A remove-and-retap may therefore create a second event, but
+an active pending event is committed or reported busy before another NFC payload
+can occupy the NFC surface. No NFC code calls the ViewModel or sends the network
+directly.
+
+The registry is included user configuration in both backup-rule files. The shared
+`pen_widget_state` DataStore remains excluded because it contains queue/request
+identity and transient drafts; the NFC registry contains only private labels,
+UUID allowlist entries, quantities, and registration timestamps.
 
 ### Background queue synchronization
 
@@ -266,7 +308,8 @@ validation paths. It displays the shared loaded-cart state and uses the same
   seconds, rate, and converted `uses`. Draft capture and payload construction
   are one atomic transaction.
 - Version 3 also admits `inputKind = DIRECT_USES` for a producer that already
-  knows a whole quantity and has no editable draft. A direct payload carries
+  knows a whole quantity and has no editable draft, which is how a registered
+  NFC quick-log tap enters this outbox. A direct payload carries
   `uses` natively and leaves `seconds`, `secondsPerUse`, and
   `restoreDraftSeconds` null; it is staged through `submitDirectCommit`, which
   neither reads nor writes a draft key, and its Undo removes the payload without
@@ -299,7 +342,7 @@ The deferred commit is represented by the following boundary sequence:
 ```mermaid
 flowchart LR
     Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture v3 payload\nDURATION_SECONDS: secondsToUses"]
-    Direct["Direct producer\nwhole uses, no draft"] --> Capture2["DataStore edit\ncapture v3 payload\nDIRECT_USES: no conversion"]
+    Direct["NFC tap\nregistered whole uses"] --> Capture2["DataStore edit\ncapture v3 payload\nDIRECT_USES: no conversion"]
     Capture2 --> Window
     Capture --> Window["AwaitingCommit\n5-second window + grace"]
     Window --> Tiers["Process timer primary\nWorkManager backstop\nlazy flush recovery"]

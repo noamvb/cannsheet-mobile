@@ -1838,3 +1838,67 @@ permanently dead chain.
   `app/src/main/java/com/example/ui/InsightsScreen.kt`,
   `app/src/main/java/com/example/widget/projection/ProjectionUiModel.kt`,
   `docs/ARCHITECTURE.md`
+
+## ADR-044: Registered, uses-based NFC quick-log tags with a durable direct outbox
+
+- Status: Accepted
+- Date: 2026-08-21
+- Context: The owner wanted a physical NFC shortcut building on the Pen quick-log
+  flow. A passive tag is replayable and Android NFC dispatch is platform- and
+  device-dependent, so the feature needs a narrow durable protocol, local
+  authorization, a cold-start-safe product resolver, and the same Room/sync
+  durability boundary as the existing widgets without changing any backend or
+  Room contract.
+- Decision:
+  1. Use exactly two NDEF records: an external type
+     `com.noamv.cannsheet.mobile:pen-quick-log` followed by an AAR for the running
+     package. The first payload is exactly 18 bytes: version `0x01`, a canonical
+     RFC-4122 UUID in network byte order, and an unsigned whole uses value from
+     `1..10`. Labels, products, dates, endpoints, seconds, rates, and event IDs
+     never enter the tag. Future releases must continue to parse version 1 unless
+     an owner-approved migration and recovery plan exists.
+  2. Treat the tag UUID plus exact registered quantity as a private local
+     allowlist, stored in one versioned `nfc_quick_log_registry` Preferences
+     DataStore. The registry supports at most 50 entries, optional trimmed labels
+     up to 40 Unicode code points, Verify/Adopt/Rename/Rewrite/Repair/Revoke, and
+     explicit corrupt-state reset. A clone that reproduces the UUID and quantity
+     is accepted as an inherent passive-tag limitation.
+  3. Resolve whichever selectable Pen cart the existing resolver identifies at
+     tap time: a valid explicit loaded ID first, then the most recent selectable
+     Pen interaction. Capture product ID/UUID, uses, event UUID, and local date/time
+     at acceptance. NFC never consults the Pen seconds-per-use rate and never
+     changes the loaded-cart preference at delayed commit.
+  4. Extend the existing deferred payload to version 3 with
+     `DeferredPenInputKind.DIRECT_USES` and nullable duration metadata. Reserve
+     `Int.MAX_VALUE - 1` for NFC, leaving the tile ID unchanged. A direct payload
+     has no draft; its five-second Undo removes only the DataStore payload and can
+     never delete a Room row. Claim, Room durability, stable event IDs, retry, and
+     shared sync remain the existing boundaries.
+  5. Use a dedicated exported `singleTop` NFC result activity and a separate
+     non-exported foreground reader-mode writer. The result UI is lock-safe and
+     generic while locked; navigation to the cart picker or Settings requires
+     unlock. No HTTP/HTTPS NFC record, generic deep-link filter, browser fallback,
+     iPhone behavior, tag erasure, or read-only operation is supported.
+  6. Treat Android 16 Launch-via-NFC preference and the owner's Samsung screen-off
+     behavior as availability evidence, not authorization. A bounded sandbox probe
+     may establish device-specific locked dispatch; if it fails, unlocked support
+     remains the approved portable fallback. The probe and physical sandbox RF
+     evidence never prove behavior of the signed production APK and must remain
+     separate from JVM, instrumentation, CI, artifact, and Obtainium evidence.
+- Rationale: Direct uses preserve the app's only stored/transmitted quantity and
+  avoid silently changing meaning when a Pen rate is edited. A registry narrows
+  accidental or unsolicited dispatch without pretending to defeat cloning. The
+  existing claim/write/complete path prevents Undo, process death, Room failure,
+  and retries from creating duplicate or lost events.
+- Consequences: NFC is optional and adds no migration or backend field. Users must
+  register each physical tag and keep Launch-via-NFC allowed on Android 16. A
+  missing cart requires a fresh tap after choosing one. The tag writer can safely
+  rewrite a tag only after inspection, confirmation, same-tag retap, and exact
+  readback; formatting a blank tag requires a verification retap before activation.
+- Related files: `app/src/main/java/com/example/nfc/`,
+  `app/src/main/java/com/example/data/PenQuickLogDataSource.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetPayloadCodec.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetStateRepository.kt`,
+  `app/src/main/res/xml/backup_rules.xml`,
+  `app/src/main/res/xml/data_extraction_rules.xml`,
+  `docs/NFC_QUICK_LOG_IMPLEMENTATION_PLAN.md`

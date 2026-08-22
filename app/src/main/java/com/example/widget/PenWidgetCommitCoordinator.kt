@@ -103,6 +103,9 @@ class PenWidgetCommitCoordinator(
     }
 
     companion object {
+        /** Shared durable coordinator for non-widget surfaces such as NFC. */
+        fun forNfc(context: Context): PenWidgetCommitCoordinator = forContext(context)
+
         suspend fun commit(
             context: Context,
             appWidgetId: Int,

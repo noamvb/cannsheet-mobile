@@ -1,5 +1,6 @@
 package com.example.widget
 
+import com.example.nfc.PEN_NFC_SURFACE_ID
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -33,6 +34,14 @@ class PenWidgetSurfaceRouterTest {
         assertEquals(
             PenWidgetSurface.TILE,
             resolveSurface(PEN_TILE_WIDGET_ID, intArrayOf(PEN_TILE_WIDGET_ID, 3, 7)),
+        )
+    }
+
+    @Test
+    fun nfcSurfaceIdIsNotTreatedAsARealWidget() {
+        assertEquals(
+            PenWidgetSurface.NFC,
+            resolveSurface(PEN_NFC_SURFACE_ID, intArrayOf(PEN_NFC_SURFACE_ID, 3, 7)),
         )
     }
 }
