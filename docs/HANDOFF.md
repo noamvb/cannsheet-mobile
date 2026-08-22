@@ -6,60 +6,80 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Current release
 
-Cannsheet Mobile `v1.6.0` (`versionCode 45`, `versionName 1.6.0`) is the latest
+Cannsheet Mobile `v1.6.1` (`versionCode 46`, `versionName 1.6.1`) is the latest
 published Obtainium release in
-[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.6.0).
-It ships registered NFC quick-log tags.
+[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.6.1).
+It repairs the NFC tag writer shipped broken in `v1.6.0`.
 
-Three pull requests landed for this release, each squash-merged into `main`:
+Two pull requests landed for this release, each squash-merged into `main`:
 
-- [#142](https://github.com/noamvb/cannsheet-mobile/pull/142) direct-uses
-  deferred pen commits, squash-merged as
-  `c6092730b56b8485ccf9c4bce446eb5d7d91c7a9`;
-- [#143](https://github.com/noamvb/cannsheet-mobile/pull/143) registered NFC
-  quick-log tags, squash-merged as
-  `32baa52066cd773c3a8bb39573b28075588ca77d`; and
-- [#144](https://github.com/noamvb/cannsheet-mobile/pull/144) the version-only
-  bump, squash-merged as `6887647cea0c65723ff55ac0b78e03b3a822aa5c`.
+- [#146](https://github.com/noamvb/cannsheet-mobile/pull/146) keep NFC reader
+  mode enabled for the whole tag operation, squash-merged as
+  `f62c0966`; and
+- [#147](https://github.com/noamvb/cannsheet-mobile/pull/147) the version-only
+  bump, squash-merged as `d1d5f6cb67afe25a6f0d6f155f588714ec1c46f6`.
 
-The annotated source tag `v1.6.0` peels to
-`6887647cea0c65723ff55ac0b78e03b3a822aa5c`, the exact version commit that was
-the tip of `origin/main` when the tag was pushed. A later documentation-only
-commit may advance `main`; the release tag intentionally remains on the exact
-validated version commit.
+The annotated source tag `v1.6.1` peels to
+`d1d5f6cb67afe25a6f0d6f155f588714ec1c46f6`, the exact version commit that was
+the tip of `origin/main` when the tag was pushed.
 
 That commit's `push`-event run of "Cannsheet PR checks" on `main` is
-[`32546306052`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32546306052),
-completed with conclusion `success`. All six required jobs individually
-succeeded: `Classify changes and scan repository`, `Backend validation`,
-`Android static validation`, `Emulator API 24`, `Emulator API 36`, and
-`Cannsheet Android PR validation`. No `main` run in this release sequence was
-cancelled by a back-to-back merge; the runs for `c6092730` and `32baa520` also
-completed successfully.
-
+[`32549097733`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32549097733),
+conclusion `success`, with all six required jobs individually green.
 Publication ran as
-[`32546649850`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32546649850),
-with `Confirm tested main commit`, `Verify and build signed APK`, and
-`Publish verified Cannsheet APK` all green.
+[`32549434212`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32549434212),
+all three jobs green.
 
 The public release contains exactly:
 
-- `Cannsheet-Mobile-1.6.0.apk` (14,123,411 bytes)
-- `Cannsheet-Mobile-1.6.0.apk.sha256`
+- `Cannsheet-Mobile-1.6.1.apk` (14,123,411 bytes)
+- `Cannsheet-Mobile-1.6.1.apk.sha256`
 
 The independently calculated APK SHA-256 is
-`e571fc631f45ac8cded2a1946ac9a704923e70752319aa60cd0b4327e2c0e901`, which
-matches the published checksum file (`shasum -a 256 -c` reported `OK`).
-Independent `aapt dump badging` confirms package `com.noamv.cannsheet.mobile`,
-`versionCode 45`, `versionName 1.6.0`, `sdkVersion 24`, and
-`targetSdkVersion 36`. `apksigner verify` reports APK Signature Scheme v2.
+`0c3a21f9b9af59b82e1e199dd1622306c928e742ade5a44226f54a01faad7e37`, matching the
+published checksum file. `aapt dump badging` confirms package
+`com.noamv.cannsheet.mobile`, `versionCode 46`, `versionName 1.6.1`,
+`sdkVersion 24`, `targetSdkVersion 36`; `apksigner verify` reports APK Signature
+Scheme v2. The signer certificate SHA-256 is
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, **identical**
+to both `v1.6.0` and `v1.5.2`, so the phone updates in place.
 
-The signer certificate SHA-256 is
-`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`. It was
-compared directly against the previously published `Cannsheet-Mobile-1.5.2.apk`
-and is **identical**, so the phone can update in place. A changed certificate
-would have forced an uninstall and destroyed the Room database including pending
-offline queue rows.
+## Incident: v1.6.0 shipped an NFC writer that could not read any tag
+
+The owner reported that every tag returned "Could not read this tag" on first
+physical use. It reproduced on every tag, and would have on every device.
+
+`NfcTagWriterActivity.handleTag` called `disableReader()` before performing any
+tag I/O. `NfcAdapter.disableReaderMode` restores the adapter to normal polling,
+which resets the controller's discovery loop and deactivates the tag just handed
+to the reader callback. The `Tag` handle was dead from that point, so the
+`Ndef.connect()` inside `NfcTagWriter.inspect` always threw `IOException` and
+every inspection resolved to `Failed`. The teardown was intended to prevent a
+second callback re-entering an in-flight operation, which `tagIoMutex` and the
+immediate state flip already guaranteed.
+
+The same error disabled the reader in every state that asks the owner to retap,
+so the two-presentation overwrite and verification flows would have been the next
+wall. `WaitingToWrite` renders no action button, making that path a hard dead
+end. Reader mode now stays enabled while a state awaits a presentation or an
+operation is in flight, and `handleTag` releases it in a `finally` once the
+outcome is settled.
+
+**Why nothing caught it.** No automated check in this repository can execute a
+single line of the tag I/O path: the JVM suites have no Android framework and the
+API 24/36 emulators have no NFC radio. `v1.6.0` was released with that boundary
+stated explicitly in this document, and the defect landed squarely inside it. The
+`acceptsTagPresentation` predicate is now a pure function with direct coverage,
+but the reader-lifetime half of the rule remains a review invariant that CI
+cannot verify.
+
+**The standing lesson: do not treat green CI as evidence about the NFC radio
+path.** Any future change to `NfcTagWriter`, `NfcTagWriterActivity`, or
+`NfcQuickLogActivity`'s intent handling needs a physical tap before release. The
+safe way to get one is a temporary build type with an `applicationIdSuffix`, so
+the test build installs alongside the release app; a plain debug build shares the
+release `applicationId` with debug signing and could only install after an
+uninstall, which would delete the Room database and pending offline queue rows.
 
 ## NFC quick-log behavior shipped in v1.6.0
 
