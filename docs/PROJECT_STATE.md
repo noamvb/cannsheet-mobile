@@ -2,11 +2,13 @@
 
 Last updated: 2026-08-21
 
-## NFC quick-log implementation status (unreleased)
+## NFC quick-log implementation status (released in v1.6.0)
 
-The local feature branches `codex/nfc-deferred-core` and
-`codex/nfc-quick-log-tags` contain the approved NFC quick-log implementation in
-progress; the latter is currently checked out. The durable direct-uses outbox is implemented as
+Shipped in `v1.6.0` (`versionCode 45`). The work landed as pull requests #142
+(`c6092730b56b8485ccf9c4bce446eb5d7d91c7a9`) and #143
+(`32baa52066cd773c3a8bb39573b28075588ca77d`), with the version-only bump #144
+(`6887647cea0c65723ff55ac0b78e03b3a822aa5c`) as the tagged commit. See
+`docs/HANDOFF.md` for full release provenance. The durable direct-uses outbox is implemented as
 payload version 3 with v1/v2 decoding, atomic direct submission, claim/write/
 complete retry behavior, and a cold-start-safe `PenQuickLogDataSource`. The NFC
 branch adds the exact version-1 two-record NDEF contract, fail-closed registry,
@@ -18,12 +20,12 @@ The serialized local gate
 passed after the final fixes: 523 JVM tests, zero failures/errors/skips, Android-test
 Kotlin compilation, lint, and debug assembly all succeeded. All eight checked-in
 Node suites and the 13-test Python backend benchmark also passed; `git diff --check`
-is clean. Emulator instrumentation, the owner's Samsung screen-off feasibility
-probe, physical sandbox RF/write/readback, CI/PR merges, signed publication, and
-Obtainium installation have not been run or claimed in this working session. No
-production NFC tag has been written or tapped, and no production APK/version/
-signing/endpoint/backend contract has been changed. The pre-existing untracked
-widget image remains untouched.
+is clean. CI validation, the exact-SHA `main` gate, signed publication, and independent
+artifact verification are complete and recorded in `docs/HANDOFF.md`. Still not
+run or claimed: the owner's Samsung screen-off feasibility probe, physical
+sandbox RF/write/readback, and Obtainium installation. **No production or
+sandbox NFC tag has been written or tapped.** No endpoint or backend contract
+was changed.
 
 A post-implementation review pass corrected six defects in the NFC surfaces
 before any release. Both Compose entry points now supply their own `Surface`:
@@ -55,9 +57,9 @@ about RF behavior.
 
 - Canonical branch: `main`
 - Latest published application release source commit
-  `ae9a4ebbc6509cd3b0ad3450dd4964574990f915` (v1.5.2)
-- Current release metadata in `app/build.gradle.kts`: version name `1.5.2`,
-  version code `44` (published).
+  `6887647cea0c65723ff55ac0b78e03b3a822aa5c` (v1.6.0)
+- Current release metadata in `app/build.gradle.kts`: version name `1.6.0`,
+  version code `45` (published).
 - v1.5.2 publishes the Runway same-size capacity correction from feature PR
   [#138](https://github.com/noamvb/cannsheet-mobile/pull/138), squash-merged as
   `9b1f0d7c120790565ea3764082bef7b305e5792d`, and version-only PR
