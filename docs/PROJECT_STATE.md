@@ -42,6 +42,15 @@ invalid UUID or quantity is now rejected up front instead of throwing out of a
 `Dispatchers.IO` coroutine, and that rejection survives `onResume`. The vestigial
 `Saved.offline` flag and its unverifiable "saved offline" copy were removed.
 
+The legibility regression and its fix are captured on the API 36 emulator in
+`docs/images/nfc-tag-writer-dark-before.png` versus
+`docs/images/nfc-tag-writer-dark-after.png`, and
+`docs/images/nfc-result-dark-before.png` versus
+`docs/images/nfc-result-dark-after.png`; the light-mode writer is in
+`docs/images/nfc-tag-writer-light-after.png`. These are emulator renders of the
+no-NFC-hardware states, which exercise the theme and layout but prove nothing
+about RF behavior.
+
 ## Repository state
 
 - Canonical branch: `main`
