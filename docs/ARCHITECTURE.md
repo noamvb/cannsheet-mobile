@@ -308,7 +308,8 @@ validation paths. It displays the shared loaded-cart state and uses the same
   seconds, rate, and converted `uses`. Draft capture and payload construction
   are one atomic transaction.
 - Version 3 also admits `inputKind = DIRECT_USES` for a producer that already
-  knows a whole quantity and has no editable draft. A direct payload carries
+  knows a whole quantity and has no editable draft, which is how a registered
+  NFC quick-log tap enters this outbox. A direct payload carries
   `uses` natively and leaves `seconds`, `secondsPerUse`, and
   `restoreDraftSeconds` null; it is staged through `submitDirectCommit`, which
   neither reads nor writes a draft key, and its Undo removes the payload without
@@ -341,7 +342,7 @@ The deferred commit is represented by the following boundary sequence:
 ```mermaid
 flowchart LR
     Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture v3 payload\nDURATION_SECONDS: secondsToUses"]
-    Direct["Direct producer\nwhole uses, no draft"] --> Capture2["DataStore edit\ncapture v3 payload\nDIRECT_USES: no conversion"]
+    Direct["NFC tap\nregistered whole uses"] --> Capture2["DataStore edit\ncapture v3 payload\nDIRECT_USES: no conversion"]
     Capture2 --> Window
     Capture --> Window["AwaitingCommit\n5-second window + grace"]
     Window --> Tiers["Process timer primary\nWorkManager backstop\nlazy flush recovery"]
