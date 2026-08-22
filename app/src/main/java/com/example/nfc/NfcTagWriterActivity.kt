@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -141,22 +142,52 @@ class NfcTagWriterActivity : ComponentActivity() {
         runCatching { adapter?.disableReaderMode(this) }
     }
 
+    /**
+     * Runs one tag operation and then releases the reader unless the resulting state still needs
+     * it. Centralizing this keeps the lifetime correct on every path, including the terminal
+     * branches that used to depend on the incorrect pre-I/O teardown.
+     */
     private suspend fun handleTag(tag: Tag) {
+        try {
+            handleTagOperation(tag)
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) { releaseReaderIfSettled() }
+        }
+    }
+
+    /**
+     * Reader mode must stay enabled while a tag operation is in flight and while a state is
+     * waiting for a presentation. Anything else is settled, so the foreground reader is released
+     * rather than left polling and discarding discoveries behind a result screen.
+     */
+    private fun releaseReaderIfSettled() {
+        val current = state
+        val stillNeedsTheReader = acceptsTagPresentation(current) ||
+            current is NfcTagWriterState.Inspecting ||
+            current is NfcTagWriterState.Verifying ||
+            current is NfcTagWriterState.Writing
+        if (!stillNeedsTheReader) disableReader()
+    }
+
+    private suspend fun handleTagOperation(tag: Tag) {
         val configuredTarget = target
         // Every mode but ADOPT requires a pre-known target; ADOPT discovers its target from the
         // physical tag, so it proceeds into inspection even when none is known yet.
         if (configuredTarget == null && mode != WriterMode.ADOPT) return
         val shouldProcess = withContext(Dispatchers.Main) {
-            val waiting = state == NfcTagWriterState.WaitingToInspect ||
-                state == NfcTagWriterState.WaitingToWrite ||
-                state == NfcTagWriterState.WaitingToVerify
+            val waiting = acceptsTagPresentation(state)
             if (waiting) {
                 state = if (verificationRequired) {
                     NfcTagWriterState.Verifying
                 } else {
                     NfcTagWriterState.Inspecting
                 }
-                disableReader()
+                // Reader mode must stay enabled for the whole operation. disableReaderMode()
+                // restores normal polling, which resets the controller's discovery loop and
+                // deactivates the tag we were just handed, so every subsequent Ndef.connect()
+                // on this handle fails. Re-entrancy is already prevented by tagIoMutex plus the
+                // state flip above; a tag left in the field does not re-fire onTagDiscovered,
+                // so only a genuine remove-and-retap produces another callback.
             }
             waiting
         }
@@ -271,7 +302,8 @@ class NfcTagWriterActivity : ComponentActivity() {
                             state = NfcTagWriterState.WaitingToWrite
                             overwriteArmed = true
                             overwriteFingerprint = current.fingerprint
-                            disableReader()
+                            // Keep the reader running: this state is waiting for the confirming
+                            // retap, and disabling it would mean that retap is never delivered.
                         }
                     } else {
                         writeVerifiedTag(tag, current, configuredTarget)
@@ -350,7 +382,8 @@ class NfcTagWriterActivity : ComponentActivity() {
                     verificationRequired = true
                     overwriteArmed = false
                     state = NfcTagWriterState.NeedsVerificationRetap
-                    disableReader()
+                    // Keep the reader running: the verification retap must be delivered
+                    // automatically, without the user first having to press Retry.
                 }
                 NfcTagWriteResult.ReadOnly -> state = NfcTagWriterState.ReadOnlyIncompatible
                 is NfcTagWriteResult.TooSmall -> state = NfcTagWriterState.TooSmall(
@@ -374,7 +407,7 @@ class NfcTagWriterActivity : ComponentActivity() {
                 state = NfcTagWriterState.WaitingToWrite
                 overwriteArmed = true
                 overwriteFingerprint = current.fingerprint
-                disableReader()
+                // Keep the reader running: this state is waiting for the confirming retap.
             }
             return
         }
@@ -403,7 +436,8 @@ class NfcTagWriterActivity : ComponentActivity() {
                 NfcTagWriteResult.WrittenAwaitingRetap -> {
                     verificationRequired = true
                     state = NfcTagWriterState.NeedsVerificationRetap
-                    disableReader()
+                    // Keep the reader running: the verification retap must be delivered
+                    // automatically, without the user first having to press Retry.
                 }
                 NfcTagWriteResult.ReadOnly -> state = NfcTagWriterState.ReadOnlyIncompatible
                 is NfcTagWriteResult.TooSmall -> state = NfcTagWriterState.TooSmall(
@@ -585,6 +619,25 @@ object NfcTagWriterActivityContract {
         android.content.Intent(context, NfcTagWriterActivity::class.java)
             .putExtra(NfcTagWriterActivity.EXTRA_MODE, NfcTagWriterActivity.WriterMode.ADOPT.name)
             .putExtra(NfcTagWriterActivity.EXTRA_LABEL, label)
+}
+
+/**
+ * Whether a tag presented in [state] should be processed.
+ *
+ * Every state that asks the owner to present or re-present a tag must be listed here, and the
+ * writer must keep reader mode enabled while in one of them. Both halves of that rule have been
+ * broken before: `disableReaderMode` restores normal polling, which resets the controller's
+ * discovery loop, deactivates the current tag handle, and makes every later `Ndef.connect()` fail
+ * with "Could not read this tag" — and a retap-awaiting state missing from this set silently
+ * swallows the retap it just asked for.
+ */
+internal fun acceptsTagPresentation(state: NfcTagWriterState): Boolean = when (state) {
+    NfcTagWriterState.WaitingToInspect,
+    NfcTagWriterState.WaitingToWrite,
+    NfcTagWriterState.WaitingToVerify,
+    NfcTagWriterState.NeedsVerificationRetap,
+    -> true
+    else -> false
 }
 
 sealed interface NfcTagWriterState {
