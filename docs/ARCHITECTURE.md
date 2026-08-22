@@ -78,10 +78,18 @@ flowchart LR
   tap time into the direct-uses v3 deferred payload at acceptance time. NFC uses
   `PEN_NFC_SURFACE_ID` (`Int.MAX_VALUE - 1`) and never shares a widget ID or
   countdown with the tile, pen widget, multi-cart widgets, or in-app submission.
-  `NfcTagWriterActivity` uses framework reader mode only while explicitly waiting
-  for a tag; it verifies exact readback, requires an explicit second presentation
-  for foreign content, and never locks or erases a tag. Labels remain private
-  registry data and are never written to NDEF.
+  `NfcTagWriterActivity` holds framework reader mode for its entire resumed
+  lifetime, including behind a settled result screen; only `onPause` releases it.
+  Holding it is what suppresses platform tag dispatch, so it is a correctness
+  requirement rather than a polling choice: a tag this app wrote carries its own
+  Application Record, so releasing the field while the tag is still present lets
+  the platform launch `NfcQuickLogActivity` over the writer and report a
+  not-yet-registered tag as unregistered, pausing the writer before it can
+  finish. `NfcWriterSession` covers the pause/resume gap reader mode cannot, by
+  making the scan handler withdraw while the writer owns the field. The writer
+  verifies exact readback, requires an explicit second presentation for foreign
+  content, and never locks or erases a tag. Labels remain private registry data
+  and are never written to NDEF.
 - `app/src/main/java/com/example/notifications` contains the Android channel,
   permission/availability, stable-card, and Settings-route intent details for
   queue alerts. It implements `QueueAlertPresenter`; queue-health and sync code

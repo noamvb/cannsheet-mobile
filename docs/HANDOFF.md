@@ -61,9 +61,12 @@ immediate state flip already guaranteed.
 The same error disabled the reader in every state that asks the owner to retap,
 so the two-presentation overwrite and verification flows would have been the next
 wall. `WaitingToWrite` renders no action button, making that path a hard dead
-end. Reader mode now stays enabled while a state awaits a presentation or an
-operation is in flight, and `handleTag` releases it in a `finally` once the
-outcome is settled.
+end.
+
+v1.6.1 fixed the read failure but still released the reader once an outcome was
+settled, which caused a second incident; see below. The rule that actually holds
+is that the writer keeps reader mode for its entire resumed lifetime, and only
+`onPause` releases it.
 
 **Why nothing caught it.** No automated check in this repository can execute a
 single line of the tag I/O path: the JVM suites have no Android framework and the
@@ -72,6 +75,36 @@ stated explicitly in this document, and the defect landed squarely inside it. Th
 `acceptsTagPresentation` predicate is now a pure function with direct coverage,
 but the reader-lifetime half of the rule remains a review invariant that CI
 cannot verify.
+
+## Incident: v1.6.1 handed the tag back to the platform mid-registration
+
+Presenting a tag in the writer popped up "This NFC tag is not registered" and
+killed the writer while the owner was trying to register that very tag.
+
+Tags already carrying Cannsheet content from the earlier failed attempts resolved
+to `CompatibleUnregistered`, which offered Adopt and then called
+`disableReader()`. With reader mode off and the tag still in the field, the
+platform owned dispatch, matched the Application Record this app had written to
+the tag itself, and launched `NfcQuickLogActivity` over the writer. The tag is
+not in the registry until the writer finishes, so the scan surface truthfully
+reported it unregistered — and bringing it to the front paused the writer, whose
+`onPause` disabled its reader in turn.
+
+That teardown came from a review comment on the v1.6.1 pull request asking the
+reader to be released after terminal outcomes, to avoid polling behind a result
+screen. The concern was cosmetic; the cost was this incident. Holding reader mode
+is what suppresses platform dispatch, so for this Activity it is a correctness
+requirement. Fixed in v1.6.2 (#149), which also preserves result states across a
+resume and adds `NfcWriterSession` for the pause/resume gap.
+
+**This is the first part of the feature ever confirmed on hardware.** Verified on
+the owner's SM-F966W with the `sandbox` build type, which installs alongside
+production under `com.noamv.cannsheet.mobile.sandbox` with its own database and a
+sandbox endpoint. A 26,886-line logcat capture shows reader mode held across all
+tag I/O (`flags: 15`, with `flags: 0` only at activity pauses),
+**`NfcQuickLogActivity` appearing zero times**, a real registry entry persisted
+after exact readback, and the registration timestamp landing immediately after
+the final tap — the adopt path that originally failed. No crashes.
 
 **The standing lesson: do not treat green CI as evidence about the NFC radio
 path.** Any future change to `NfcTagWriter`, `NfcTagWriterActivity`, or

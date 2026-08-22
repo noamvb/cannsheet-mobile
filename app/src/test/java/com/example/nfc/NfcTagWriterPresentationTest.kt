@@ -50,4 +50,38 @@ class NfcTagWriterPresentationTest {
         assertFalse(acceptsTagPresentation(NfcTagWriterState.TooSmall(required = 40, available = 32)))
         assertFalse(acceptsTagPresentation(NfcTagWriterState.Failed("any")))
     }
+
+    @Test
+    fun resumingTheWriterPreservesAnyOutcomeTheOwnerStillHasToActOn() {
+        // v1.6.1 reset these to WaitingToInspect on every resume, silently discarding the button
+        // that was on screen.
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.CompatibleUnregistered))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.ForeignContentFound))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.RegistryMismatch))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.RegistrySaveFailed))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.NoCompatibleTagToAdopt))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.AlreadyVerified))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.Verified))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.RegistryCorrupt))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.InvalidConfiguration))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.ReadOnlyIncompatible))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.TooSmall(required = 40, available = 32)))
+        assertFalse(shouldArmWaitingState(NfcTagWriterState.Writing))
+    }
+
+    @Test
+    fun resumingArmsStatesThatCarryNoOutcome() {
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.Editing))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.NfcDisabled))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.UnavailableNoAdapter))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.LaunchPermissionBlocked))
+        // An operation interrupted by a pause has no result to preserve.
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.Inspecting))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.Verifying))
+        // Anything already awaiting a tap simply re-arms.
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.WaitingToInspect))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.WaitingToWrite))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.WaitingToVerify))
+        assertTrue(shouldArmWaitingState(NfcTagWriterState.NeedsVerificationRetap))
+    }
 }
