@@ -110,13 +110,30 @@ class NfcQuickLogActivity : ComponentActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        val awaiting = resultState as? NfcQuickLogResultState.AwaitingUndo
-        awaiting?.let {
+        // Every state must survive recreation, not just AwaitingUndo: rotating while showing a
+        // failure or a completed save would otherwise leave the recreated Activity on its default
+        // Parsing state with no pending payload to recover and no way forward.
+        outState.putString(KEY_STATE_ID, stateId(resultState))
+        val state = resultState
+        val uses = when (state) {
+            is NfcQuickLogResultState.AwaitingUndo -> state.uses
+            is NfcQuickLogResultState.Saving -> state.uses
+            is NfcQuickLogResultState.Saved -> state.uses
+            is NfcQuickLogResultState.Undone -> state.uses
+            else -> null
+        }
+        uses?.let { outState.putInt(KEY_USES, it) }
+        val cartName = when (state) {
+            is NfcQuickLogResultState.AwaitingUndo -> state.cartName
+            is NfcQuickLogResultState.Saving -> state.cartName
+            is NfcQuickLogResultState.Saved -> state.cartName
+            else -> null
+        }
+        // Do not copy private product/cart data into recreation state while the keyguard is
+        // active. The locked result surface intentionally carries quantity only.
+        if (!locked) cartName?.let { outState.putString(KEY_CART_NAME, it) }
+        (state as? NfcQuickLogResultState.AwaitingUndo)?.let {
             outState.putString(KEY_COMMIT_ID, it.commitId)
-            outState.putInt(KEY_USES, it.uses)
-            // Do not copy private product/cart data into recreation state while the keyguard is
-            // active. The locked result surface intentionally carries quantity only.
-            if (!locked) outState.putString(KEY_CART_NAME, it.cartName)
         }
     }
 
@@ -211,9 +228,74 @@ class NfcQuickLogActivity : ComponentActivity() {
                 savedCommitId != null &&
                 savedUses in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES
             ) {
+                // A payload that was awaiting Undo before recreation is gone from the outbox, so
+                // it committed while the Activity was being rebuilt.
                 resultState = NfcQuickLogResultState.Saved(savedUses, savedCartName)
+            } else {
+                // No pending payload and nothing awaiting: restore whatever the Activity was
+                // actually showing, rather than stranding it on Parsing.
+                resultState = restoredState(
+                    stateId = saved.getString(KEY_STATE_ID),
+                    uses = savedUses.takeIf {
+                        it in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES
+                    },
+                    cartName = savedCartName,
+                )
             }
         }
+    }
+
+    /**
+     * Stable recreation key for [state]. Only the identity is persisted; any quantity or cart name
+     * travels in its own key so the keyguard privacy rule in [onSaveInstanceState] still applies.
+     */
+    private fun stateId(state: NfcQuickLogResultState): String = when (state) {
+        NfcQuickLogResultState.Parsing -> "parsing"
+        NfcQuickLogResultState.DuplicatePresentation -> "duplicate"
+        NfcQuickLogResultState.Staging -> "staging"
+        is NfcQuickLogResultState.AwaitingUndo -> "awaiting"
+        is NfcQuickLogResultState.Saving -> "saving"
+        is NfcQuickLogResultState.Saved -> "saved"
+        is NfcQuickLogResultState.Undone -> "undone"
+        NfcQuickLogResultState.UnregisteredTag -> "unregistered"
+        NfcQuickLogResultState.RegistryMismatch -> "mismatch"
+        NfcQuickLogResultState.RegistryCorrupt -> "corrupt"
+        NfcQuickLogResultState.NoCart -> "no-cart"
+        NfcQuickLogResultState.PreviousTapBusy -> "busy"
+        NfcQuickLogResultState.StorageFailure -> "storage-failure"
+        NfcQuickLogResultState.InvalidTag -> "invalid-tag"
+        NfcQuickLogResultState.NfcLaunchDisabled -> "launch-disabled"
+        NfcQuickLogResultState.NfcUnavailable -> "nfc-unavailable"
+        is NfcQuickLogResultState.UnexpectedFailure -> "unexpected"
+    }
+
+    /**
+     * Inverse of [stateId] for the states that can outlive recreation. `Parsing`, `Staging`, and
+     * `AwaitingUndo` are deliberately absent: the first two describe work this instance is no
+     * longer doing, and a genuine `AwaitingUndo` is recovered from the durable payload instead.
+     */
+    private fun restoredState(
+        stateId: String?,
+        uses: Int?,
+        cartName: String?,
+    ): NfcQuickLogResultState = when (stateId) {
+        "duplicate" -> NfcQuickLogResultState.DuplicatePresentation
+        "saving", "saved" -> uses
+            ?.let { NfcQuickLogResultState.Saved(it, cartName) }
+            ?: NfcQuickLogResultState.UnexpectedFailure()
+        "undone" -> uses
+            ?.let { NfcQuickLogResultState.Undone(it) }
+            ?: NfcQuickLogResultState.UnexpectedFailure()
+        "unregistered" -> NfcQuickLogResultState.UnregisteredTag
+        "mismatch" -> NfcQuickLogResultState.RegistryMismatch
+        "corrupt" -> NfcQuickLogResultState.RegistryCorrupt
+        "no-cart" -> NfcQuickLogResultState.NoCart
+        "busy" -> NfcQuickLogResultState.PreviousTapBusy
+        "storage-failure" -> NfcQuickLogResultState.StorageFailure
+        "invalid-tag" -> NfcQuickLogResultState.InvalidTag
+        "launch-disabled" -> NfcQuickLogResultState.NfcLaunchDisabled
+        "nfc-unavailable" -> NfcQuickLogResultState.NfcUnavailable
+        else -> NfcQuickLogResultState.UnexpectedFailure()
     }
 
     /**
@@ -371,6 +453,10 @@ class NfcQuickLogActivity : ComponentActivity() {
 
     private fun establishRemovalCallback(adapter: NfcAdapter, tag: Tag?, tagId: String): Boolean {
         if (tag == null || Build.VERSION.SDK_INT < 24) return false
+        // ignore() returns false when the controller could not begin ignoring the tag, in which
+        // case no removal callback is ever delivered. Returning the platform result keeps the
+        // caller's fallback expiry scheduled, so an intentional remove-and-retap is not discarded
+        // as a duplicate for the full eight-second timestamp window.
         return runCatching {
             adapter.ignore(
                 tag,
@@ -383,7 +469,6 @@ class NfcQuickLogActivity : ComponentActivity() {
                 },
                 Handler(Looper.getMainLooper()),
             )
-            true
         }.getOrDefault(false)
     }
 
@@ -408,6 +493,7 @@ class NfcQuickLogActivity : ComponentActivity() {
     }
 
     companion object {
+        private const val KEY_STATE_ID = "nfc_state_id"
         private const val KEY_COMMIT_ID = "nfc_commit_id"
         private const val KEY_USES = "nfc_uses"
         private const val KEY_CART_NAME = "nfc_cart_name"

@@ -47,6 +47,7 @@ class NfcTagWriterActivity : ComponentActivity() {
     private var overwriteArmed = false
     private var overwriteIdentityWarning by mutableStateOf(false)
     private var verificationRequired = false
+    private var repairPending = false
     private var launchAllowed by mutableStateOf(true)
     private val tagIoMutex = Mutex()
 
@@ -465,6 +466,10 @@ class NfcTagWriterActivity : ComponentActivity() {
 
     private fun repair() {
         val physical = observedPhysical ?: return
+        // A failed repair must retry the repair, not the verification path: the physical tag
+        // deliberately disagrees with its registration here, so re-proving readback against the
+        // registered bytes could only ever report a mismatch.
+        repairPending = true
         lifecycleScope.launch {
             val mutation = runCatching { registry.alignRegistryToVerifiedPhysicalTag(physical) }
                 .getOrElse {
@@ -478,12 +483,21 @@ class NfcTagWriterActivity : ComponentActivity() {
                 NfcQuickLogRegistryMutationResult.StorageFailure -> NfcTagWriterState.RegistrySaveFailed
                 else -> NfcTagWriterState.RegistrySaveFailed
             }
+            if (state is NfcTagWriterState.Verified) repairPending = false
             disableReader()
         }
     }
 
     private fun retry() {
-        verificationRequired = state is NfcTagWriterState.NeedsVerificationRetap
+        if (repairPending && state is NfcTagWriterState.RegistrySaveFailed) {
+            repair()
+            return
+        }
+        // RegistrySaveFailed otherwise means the tag carries the exact bytes but the registry
+        // mutation did not land. Recovering through the verification path re-proves the readback
+        // before reapplying the mutation, so activation still requires exact physical proof.
+        verificationRequired = state is NfcTagWriterState.NeedsVerificationRetap ||
+            state is NfcTagWriterState.RegistrySaveFailed
         enableReader()
     }
 
@@ -697,6 +711,10 @@ private fun NfcTagWriterContent(
                 NfcTagWriterState.TagLost,
                 NfcTagWriterState.WriteUncertain,
                 NfcTagWriterState.NeedsVerificationRetap,
+                // The physical write already verified; retry re-reads the tag and reapplies only
+                // the registry mutation, so this documented failure path stays actionable here
+                // instead of sending the user to find Adopt/Verify in Settings.
+                NfcTagWriterState.RegistrySaveFailed,
                 -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
                 else -> Unit
             }
