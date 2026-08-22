@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -141,7 +142,34 @@ class NfcTagWriterActivity : ComponentActivity() {
         runCatching { adapter?.disableReaderMode(this) }
     }
 
+    /**
+     * Runs one tag operation and then releases the reader unless the resulting state still needs
+     * it. Centralizing this keeps the lifetime correct on every path, including the terminal
+     * branches that used to depend on the incorrect pre-I/O teardown.
+     */
     private suspend fun handleTag(tag: Tag) {
+        try {
+            handleTagOperation(tag)
+        } finally {
+            withContext(NonCancellable + Dispatchers.Main) { releaseReaderIfSettled() }
+        }
+    }
+
+    /**
+     * Reader mode must stay enabled while a tag operation is in flight and while a state is
+     * waiting for a presentation. Anything else is settled, so the foreground reader is released
+     * rather than left polling and discarding discoveries behind a result screen.
+     */
+    private fun releaseReaderIfSettled() {
+        val current = state
+        val stillNeedsTheReader = acceptsTagPresentation(current) ||
+            current is NfcTagWriterState.Inspecting ||
+            current is NfcTagWriterState.Verifying ||
+            current is NfcTagWriterState.Writing
+        if (!stillNeedsTheReader) disableReader()
+    }
+
+    private suspend fun handleTagOperation(tag: Tag) {
         val configuredTarget = target
         // Every mode but ADOPT requires a pre-known target; ADOPT discovers its target from the
         // physical tag, so it proceeds into inspection even when none is known yet.
