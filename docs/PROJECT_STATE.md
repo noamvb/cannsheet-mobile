@@ -25,6 +25,23 @@ production NFC tag has been written or tapped, and no production APK/version/
 signing/endpoint/backend contract has been changed. The pre-existing untracked
 widget image remains untouched.
 
+A post-implementation review pass corrected six defects in the NFC surfaces
+before any release. Both Compose entry points now supply their own `Surface`:
+`MyApplicationTheme` wraps `MaterialTheme` only, so a bare `Column` inherited
+Material 3's `Color.Black` `LocalContentColor` and rendered black text on the
+translucent result window and the dark DeviceDefault writer window. "Adopt
+compatible tag" previously launched the writer in `WRITE` mode with a freshly
+minted UUID and a hardcoded single use, so a blank tag was silently written
+instead of adopted; adoption is now a dedicated inspect-only `WriterMode.ADOPT`
+that never writes and reports `NoCompatibleTagToAdopt` when a tag carries no
+Cannsheet content. The result Activity now reports `DuplicatePresentation`
+instead of stalling on "Reading NFC tag…" when the process-wide presentation
+gate suppresses a re-tap on a fresh `noHistory` instance, and Retry recovers the
+durable pending payload rather than no-opping. A writer intent carrying an
+invalid UUID or quantity is now rejected up front instead of throwing out of a
+`Dispatchers.IO` coroutine, and that rejection survives `onResume`. The vestigial
+`Saved.offline` flag and its unverifiable "saved offline" copy were removed.
+
 ## Repository state
 
 - Canonical branch: `main`

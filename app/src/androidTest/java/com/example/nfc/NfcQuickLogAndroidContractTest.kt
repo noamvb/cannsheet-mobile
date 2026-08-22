@@ -63,4 +63,35 @@ class NfcQuickLogAndroidContractTest {
         )
         assertEquals(false, writerInfo.exported)
     }
+
+    @Test
+    fun adoptStartsAnInspectOnlySessionAndNeverPreparesAWritableTarget() {
+        val adopt = NfcTagWriterActivityContract.adopt(context, label = "  bedside  ".trim())
+
+        assertEquals(
+            NfcTagWriterActivity.WriterMode.ADOPT.name,
+            adopt.getStringExtra(NfcTagWriterActivity.EXTRA_MODE),
+        )
+        // Adoption must not carry a pre-minted UUID or quantity: a blank or foreign tag has to
+        // resolve to NoCompatibleTagToAdopt rather than silently being written.
+        assertEquals(null, adopt.getStringExtra(NfcTagWriterActivity.EXTRA_TAG_ID))
+        assertEquals(false, adopt.hasExtra(NfcTagWriterActivity.EXTRA_USES))
+        assertEquals("bedside", adopt.getStringExtra(NfcTagWriterActivity.EXTRA_LABEL))
+        assertEquals(
+            NfcTagWriterActivity::class.java.name,
+            adopt.component?.className,
+        )
+    }
+
+    @Test
+    fun writeNewTagStillCarriesItsConfiguredQuantity() {
+        val write = NfcTagWriterActivityContract.newTag(context, uses = 5, label = null)
+
+        assertEquals(5, write.getIntExtra(NfcTagWriterActivity.EXTRA_USES, -1))
+        assertEquals(null, write.getStringExtra(NfcTagWriterActivity.EXTRA_MODE))
+        assertEquals(
+            NfcTagWriterActivity.WriterMode.WRITE,
+            NfcTagWriterActivity.WriterMode.from(write.getStringExtra(NfcTagWriterActivity.EXTRA_MODE)),
+        )
+    }
 }

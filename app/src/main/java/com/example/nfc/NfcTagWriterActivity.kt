@@ -10,11 +10,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -50,15 +52,22 @@ class NfcTagWriterActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        mode = WriterMode.from(intent.getStringExtra(EXTRA_MODE))
         target = runCatching {
             val tagId = intent.getStringExtra(EXTRA_TAG_ID)
             val uses = intent.getIntExtra(EXTRA_USES, 1)
-            if (tagId == null) NfcQuickLogContract.newTagData(uses)
-            else NfcQuickLogTagData(tagId, uses)
+            when {
+                // ADOPT has no pre-known target; it is discovered from the physical tag. Minting
+                // a placeholder here would render a misleading quantity before the first tap.
+                mode == WriterMode.ADOPT -> null
+                tagId == null -> NfcQuickLogContract.newTagData(uses)
+                NfcQuickLogContract.isCanonicalRfc4122Uuid(tagId) && NfcQuickLogContract.isValidUses(uses) ->
+                    NfcQuickLogTagData(tagId, uses)
+                else -> null
+            }
         }.getOrNull()
         label = intent.getStringExtra(EXTRA_LABEL)
-        mode = WriterMode.from(intent.getStringExtra(EXTRA_MODE))
-        if (target == null) state = NfcTagWriterState.InvalidConfiguration
+        if (target == null && mode != WriterMode.ADOPT) state = NfcTagWriterState.InvalidConfiguration
         setContent {
             MyApplicationTheme {
                 NfcTagWriterContent(
@@ -101,7 +110,10 @@ class NfcTagWriterActivity : ComponentActivity() {
 
     private fun enableReader() {
         val current = adapter ?: return
-        if (state is NfcTagWriterState.Writing || state is NfcTagWriterState.Verified) return
+        if (state is NfcTagWriterState.Writing ||
+            state is NfcTagWriterState.Verified ||
+            state is NfcTagWriterState.InvalidConfiguration
+        ) return
         state = when {
             verificationRequired -> NfcTagWriterState.WaitingToVerify
             overwriteArmed -> NfcTagWriterState.WaitingToWrite
@@ -129,7 +141,10 @@ class NfcTagWriterActivity : ComponentActivity() {
     }
 
     private suspend fun handleTag(tag: Tag) {
-        val configuredTarget = target ?: return
+        val configuredTarget = target
+        // Every mode but ADOPT requires a pre-known target; ADOPT discovers its target from the
+        // physical tag, so it proceeds into inspection even when none is known yet.
+        if (configuredTarget == null && mode != WriterMode.ADOPT) return
         val shouldProcess = withContext(Dispatchers.Main) {
             val waiting = state == NfcTagWriterState.WaitingToInspect ||
                 state == NfcTagWriterState.WaitingToWrite ||
@@ -145,7 +160,7 @@ class NfcTagWriterActivity : ComponentActivity() {
             waiting
         }
         if (!shouldProcess) return
-        if (verificationRequired) {
+        if (verificationRequired && configuredTarget != null) {
             val expected = NfcQuickLogContract.messageFor(
                 configuredTarget.tagId,
                 configuredTarget.uses,
@@ -212,7 +227,7 @@ class NfcTagWriterActivity : ComponentActivity() {
     private suspend fun inspectAndMaybeWrite(
         tag: Tag,
         current: NfcInspectedTag,
-        configuredTarget: NfcQuickLogTagData,
+        configuredTarget: NfcQuickLogTagData?,
     ) {
         val previousInspection = inspected
         inspected = current
@@ -231,7 +246,7 @@ class NfcTagWriterActivity : ComponentActivity() {
         if (existing != null) {
             observedPhysical = existing
             when (val verification = registry.verify(existing)) {
-                is NfcQuickLogRegistryVerification.Verified -> if (mode == WriterMode.REWRITE) {
+                is NfcQuickLogRegistryVerification.Verified -> if (mode == WriterMode.REWRITE && configuredTarget != null) {
                     if (existing.tagId != configuredTarget.tagId) {
                         withContext(Dispatchers.Main) {
                             state = NfcTagWriterState.Failed("A different registered tag was presented")
@@ -244,7 +259,7 @@ class NfcTagWriterActivity : ComponentActivity() {
                     state = NfcTagWriterState.AlreadyVerified
                     disableReader()
                 }
-                is NfcQuickLogRegistryVerification.UsesMismatch -> if (mode == WriterMode.REWRITE) {
+                is NfcQuickLogRegistryVerification.UsesMismatch -> if (mode == WriterMode.REWRITE && configuredTarget != null) {
                     if (existing.tagId != configuredTarget.tagId) {
                         withContext(Dispatchers.Main) {
                             state = NfcTagWriterState.Failed("A different registered tag was presented")
@@ -280,6 +295,17 @@ class NfcTagWriterActivity : ComponentActivity() {
             }
             return
         }
+        // ADOPT never writes. Once the tag is known not to carry valid Cannsheet content (blank,
+        // formatable, or foreign), there is nothing to adopt, so stop here rather than falling
+        // into the overwrite/write paths below.
+        if (mode == WriterMode.ADOPT) {
+            withContext(Dispatchers.Main) {
+                state = NfcTagWriterState.NoCompatibleTagToAdopt
+                disableReader()
+            }
+            return
+        }
+        val configuredTarget = configuredTarget ?: return
         if (overwriteArmed && previousInspection != null &&
             !samePhysicalTag(previousInspection.fingerprint, current.fingerprint)
         ) {
@@ -481,7 +507,7 @@ class NfcTagWriterActivity : ComponentActivity() {
         }
     }
 
-    enum class WriterMode { WRITE, REWRITE, VERIFY;
+    enum class WriterMode { WRITE, REWRITE, VERIFY, ADOPT;
         companion object { fun from(value: String?) = entries.firstOrNull { it.name == value } ?: WRITE }
     }
 
@@ -499,15 +525,16 @@ object NfcTagWriterActivityContract {
     fun writeNew(context: android.content.Context): android.content.Intent =
         newTag(context, uses = 1, label = null)
 
+    /**
+     * With no [tag], starts an inspect-only ADOPT session: the writer never mints or writes a new
+     * tag, it only adopts whatever compatible, unregistered content the physical tag already
+     * carries. With a [tag], delegates to [verify] as before.
+     */
     fun adopt(
         context: android.content.Context,
         tag: RegisteredNfcQuickLogTag? = null,
-    ): android.content.Intent = tag?.let { verify(context, it) } ?: writeNew(context)
-
-    fun rewrite(
-        context: android.content.Context,
-        tag: RegisteredNfcQuickLogTag,
-    ): android.content.Intent = rewrite(context, tag.tagId, tag.uses, tag.label)
+        label: String? = null,
+    ): android.content.Intent = tag?.let { verify(context, it) } ?: adoptIntent(context, label)
 
     fun verify(
         context: android.content.Context,
@@ -528,9 +555,6 @@ object NfcTagWriterActivityContract {
         .putExtra(NfcTagWriterActivity.EXTRA_TAG_ID, tagId)
         .putExtra(NfcTagWriterActivity.EXTRA_MODE, NfcTagWriterActivity.WriterMode.REWRITE.name)
 
-    fun verify(context: android.content.Context, tagId: String): android.content.Intent =
-        verify(context, tagId, uses = 1, label = null)
-
     private fun verify(
         context: android.content.Context,
         tagId: String,
@@ -542,6 +566,11 @@ object NfcTagWriterActivityContract {
             .putExtra(NfcTagWriterActivity.EXTRA_USES, uses)
             .putExtra(NfcTagWriterActivity.EXTRA_LABEL, label)
             .putExtra(NfcTagWriterActivity.EXTRA_MODE, NfcTagWriterActivity.WriterMode.VERIFY.name)
+
+    private fun adoptIntent(context: android.content.Context, label: String?): android.content.Intent =
+        android.content.Intent(context, NfcTagWriterActivity::class.java)
+            .putExtra(NfcTagWriterActivity.EXTRA_MODE, NfcTagWriterActivity.WriterMode.ADOPT.name)
+            .putExtra(NfcTagWriterActivity.EXTRA_LABEL, label)
 }
 
 sealed interface NfcTagWriterState {
@@ -552,6 +581,7 @@ sealed interface NfcTagWriterState {
     data object WaitingToInspect : NfcTagWriterState
     data object Inspecting : NfcTagWriterState
     data object CompatibleUnregistered : NfcTagWriterState
+    data object NoCompatibleTagToAdopt : NfcTagWriterState
     data object AlreadyVerified : NfcTagWriterState
     data object RegistryMismatch : NfcTagWriterState
     data object ForeignContentFound : NfcTagWriterState
@@ -587,75 +617,90 @@ private fun NfcTagWriterContent(
     onRetry: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .padding(24.dp)
-            .fillMaxWidth()
-            .testTag("nfc-tag-writer"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        Text("NFC quick-log tag", style = MaterialTheme.typography.headlineSmall)
-        target?.let { Text("${it.uses} uses per tap") }
-        Text(
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth()
+                .testTag("nfc-tag-writer"),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text("NFC quick-log tag", style = MaterialTheme.typography.headlineSmall)
+            target?.let { Text("${it.uses} uses per tap") }
+            Text(
+                when (state) {
+                    NfcTagWriterState.Editing -> "Choose a tag to write."
+                    NfcTagWriterState.UnavailableNoAdapter -> "This phone has no NFC hardware."
+                    NfcTagWriterState.NfcDisabled -> "NFC is off."
+                    NfcTagWriterState.LaunchPermissionBlocked -> "Launch via NFC is disabled for Cannsheet."
+                    NfcTagWriterState.WaitingToInspect -> "Hold a tag near the back of the phone."
+                    NfcTagWriterState.Inspecting -> "Reading tag…"
+                    NfcTagWriterState.CompatibleUnregistered -> "Compatible tag found. Adopt it to activate."
+                    NfcTagWriterState.NoCompatibleTagToAdopt ->
+                        "This tag has no Cannsheet quick-log content to adopt. Use Write new tag instead."
+                    NfcTagWriterState.AlreadyVerified -> "This registered tag is verified."
+                    NfcTagWriterState.RegistryMismatch -> "The tag quantity does not match registration."
+                    NfcTagWriterState.ForeignContentFound -> if (overwriteIdentityWarning) {
+                        "Other content found. This tag has no stable ID; readback cannot prove the same physical tag."
+                    } else {
+                        "This tag has other content. Overwrite it?"
+                    }
+                    NfcTagWriterState.WaitingToWrite -> "Remove the tag, then retap to confirm the write."
+                    NfcTagWriterState.Writing -> "Writing…"
+                    NfcTagWriterState.NeedsVerificationRetap ->
+                        "Written. Remove the tag and retap to verify and activate."
+                    NfcTagWriterState.WaitingToVerify -> "Remove the tag and retap to verify."
+                    NfcTagWriterState.Verifying -> "Verifying…"
+                    NfcTagWriterState.VerificationMismatch ->
+                        "Readback does not match; keep the tag near the phone and retry."
+                    NfcTagWriterState.Verified -> "Tag verified and active."
+                    NfcTagWriterState.ReadOnlyIncompatible -> "This tag is read-only and cannot be changed."
+                    is NfcTagWriterState.TooSmall ->
+                        "Tag is too small (${state.available} bytes; need ${state.required})."
+                    NfcTagWriterState.Unsupported -> "Unsupported NFC tag."
+                    NfcTagWriterState.TagLost -> "Tag left the field; retry."
+                    NfcTagWriterState.WriteUncertain -> "Write result is uncertain. Retap to verify."
+                    NfcTagWriterState.RegistrySaveFailed ->
+                        "Physical write succeeded, but activation was not saved. Repair or retry."
+                    NfcTagWriterState.RegistryCorrupt -> "Registry is corrupt; reset it in Settings before continuing."
+                    NfcTagWriterState.InvalidConfiguration -> "Writer configuration is invalid."
+                    is NfcTagWriterState.Failed -> state.message
+                },
+            )
             when (state) {
-                NfcTagWriterState.Editing -> "Choose a tag to write."
-                NfcTagWriterState.UnavailableNoAdapter -> "This phone has no NFC hardware."
-                NfcTagWriterState.NfcDisabled -> "NFC is off."
-                NfcTagWriterState.LaunchPermissionBlocked -> "Launch via NFC is disabled for Cannsheet."
-                NfcTagWriterState.WaitingToInspect -> "Hold a tag near the back of the phone."
-                NfcTagWriterState.Inspecting -> "Reading tag…"
-                NfcTagWriterState.CompatibleUnregistered -> "Compatible tag found. Adopt it to activate."
-                NfcTagWriterState.AlreadyVerified -> "This registered tag is verified."
-                NfcTagWriterState.RegistryMismatch -> "The tag quantity does not match registration."
-                NfcTagWriterState.ForeignContentFound -> if (overwriteIdentityWarning) {
-                    "Other content found. This tag has no stable ID; readback cannot prove the same physical tag."
-                } else {
-                    "This tag has other content. Overwrite it?"
-                }
-                NfcTagWriterState.WaitingToWrite -> "Remove the tag, then retap to confirm the write."
-                NfcTagWriterState.Writing -> "Writing…"
-                NfcTagWriterState.NeedsVerificationRetap -> "Written. Remove the tag and retap to verify and activate."
-                NfcTagWriterState.WaitingToVerify -> "Remove the tag and retap to verify."
-                NfcTagWriterState.Verifying -> "Verifying…"
-                NfcTagWriterState.VerificationMismatch -> "Readback does not match; keep the tag near the phone and retry."
-                NfcTagWriterState.Verified -> "Tag verified and active."
-                NfcTagWriterState.ReadOnlyIncompatible -> "This tag is read-only and cannot be changed."
-                is NfcTagWriterState.TooSmall -> "Tag is too small (${state.available} bytes; need ${state.required})."
-                NfcTagWriterState.Unsupported -> "Unsupported NFC tag."
-                NfcTagWriterState.TagLost -> "Tag left the field; retry."
-                NfcTagWriterState.WriteUncertain -> "Write result is uncertain. Retap to verify."
-                NfcTagWriterState.RegistrySaveFailed -> "Physical write succeeded, but activation was not saved. Repair or retry."
-                NfcTagWriterState.RegistryCorrupt -> "Registry is corrupt; reset it in Settings before continuing."
-                NfcTagWriterState.InvalidConfiguration -> "Writer configuration is invalid."
-                is NfcTagWriterState.Failed -> state.message
-            },
-        )
-        when (state) {
-            NfcTagWriterState.NfcDisabled, NfcTagWriterState.UnavailableNoAdapter ->
-                Button(onClick = onEnableNfc, modifier = Modifier.fillMaxWidth()) { Text("Open NFC settings") }
-            NfcTagWriterState.LaunchPermissionBlocked ->
-                Button(onClick = onOpenLaunchPreference, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open Launch via NFC")
-                }
-            NfcTagWriterState.ForeignContentFound ->
-                Button(onClick = onArmOverwrite, modifier = Modifier.fillMaxWidth()) { Text("Overwrite after retap") }
-            NfcTagWriterState.CompatibleUnregistered ->
-                Button(
-                    onClick = onAdopt,
-                    enabled = launchAllowed,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("Adopt tag") }
-            NfcTagWriterState.RegistryMismatch ->
-                Button(onClick = onRepair, modifier = Modifier.fillMaxWidth()) {
-                    Text("Use verified physical quantity")
-                }
-            NfcTagWriterState.VerificationMismatch,
-            NfcTagWriterState.TagLost,
-            NfcTagWriterState.WriteUncertain,
-            NfcTagWriterState.NeedsVerificationRetap,
-            -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
-            else -> Unit
+                NfcTagWriterState.NfcDisabled, NfcTagWriterState.UnavailableNoAdapter ->
+                    Button(onClick = onEnableNfc, modifier = Modifier.fillMaxWidth()) { Text("Open NFC settings") }
+                NfcTagWriterState.LaunchPermissionBlocked ->
+                    Button(onClick = onOpenLaunchPreference, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open Launch via NFC")
+                    }
+                NfcTagWriterState.ForeignContentFound ->
+                    Button(
+                        onClick = onArmOverwrite,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Overwrite after retap") }
+                NfcTagWriterState.CompatibleUnregistered ->
+                    Button(
+                        onClick = onAdopt,
+                        enabled = launchAllowed,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("Adopt tag") }
+                NfcTagWriterState.RegistryMismatch ->
+                    Button(onClick = onRepair, modifier = Modifier.fillMaxWidth()) {
+                        Text("Use verified physical quantity")
+                    }
+                NfcTagWriterState.VerificationMismatch,
+                NfcTagWriterState.TagLost,
+                NfcTagWriterState.WriteUncertain,
+                NfcTagWriterState.NeedsVerificationRetap,
+                -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
+                else -> Unit
+            }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Close") }
         }
-        OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Close") }
     }
 }

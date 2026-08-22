@@ -104,7 +104,6 @@ object NfcQuickLogContract {
             intent.getParcelableArrayExtra(NfcAdapter.EXTRA_NDEF_MESSAGES)
         }
             ?: return null
-        if (parcelables.size > 4) return null
         if (parcelables.size != 1) return null
         val message = parcelables.single() as? NdefMessage ?: return null
 

@@ -68,10 +68,14 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        val graph = CannsheetGraph.get(context)
+    androidx.compose.runtime.LaunchedEffect(resolverDescription) {
+        // The only production caller (NfcQuickLogSettingsCoordinator) always supplies a
+        // description, so this load only runs for the default-argument/fallback case.
+        if (resolverDescription != null) return@LaunchedEffect
+        val appContext = context.applicationContext
+        val graph = CannsheetGraph.get(appContext)
         val loaded = withContext(Dispatchers.IO) {
-            PenQuickLogDataSource.load(context) to
+            PenQuickLogDataSource.load(appContext) to
                 graph.consumptionPreferences.preferences.first().loadedPenProductId
         }
         penState = loaded.first
@@ -153,7 +157,14 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Write new tag") }
         OutlinedButton(
-            onClick = { context.startActivity(NfcTagWriterActivityContract.adopt(context)) },
+            onClick = {
+                context.startActivity(
+                    NfcTagWriterActivityContract.adopt(
+                        context,
+                        label = label.trim().takeIf(String::isNotEmpty),
+                    ),
+                )
+            },
             enabled = canWrite,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("Adopt compatible tag") }

@@ -23,7 +23,6 @@ sealed interface NfcQuickLogResultState {
     data class Saved(
         val uses: Int,
         val cartName: String?,
-        val offline: Boolean,
     ) : NfcQuickLogResultState
 
     data class Undone(val uses: Int) : NfcQuickLogResultState

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -150,7 +151,13 @@ class NfcQuickLogActivity : ComponentActivity() {
         if (!presentationGate.begin(parsed.tagId)) {
             // A second dispatch while the same physical tag remains present must not replace
             // the accepted operation or reset its Undo countdown. The existing result is the
-            // authoritative UI for this continuous presentation.
+            // authoritative UI for this continuous presentation. But this Activity is
+            // `noHistory`, so a fresh instance can hit this branch while the process-wide gate
+            // still has the tag active and this instance's own resultState never advanced past
+            // Parsing; only leave the state untouched when it already holds a meaningful result.
+            if (resultState is NfcQuickLogResultState.Parsing) {
+                resultState = NfcQuickLogResultState.DuplicatePresentation
+            }
             return
         }
         activeTagId = parsed.tagId
@@ -190,14 +197,8 @@ class NfcQuickLogActivity : ComponentActivity() {
             val pending = coordinator.pending()
             val pendingUses = pending
                 ?.takeIf { it.inputKind == com.example.widget.DeferredPenInputKind.DIRECT_USES }
-                ?.uses
-                ?.takeIf { it.isFinite() && it.toInt().toDouble() == it }
-                ?.toInt()
-            if (
-                pending != null &&
-                pendingUses != null &&
-                pendingUses in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES
-            ) {
+                ?.let { wholeUsesInRangeOrNull(it.uses) }
+            if (pending != null && pendingUses != null) {
                 resultState = NfcQuickLogResultState.AwaitingUndo(
                     commitId = pending.commitId,
                     uses = pendingUses,
@@ -210,10 +211,22 @@ class NfcQuickLogActivity : ComponentActivity() {
                 savedCommitId != null &&
                 savedUses in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES
             ) {
-                resultState = NfcQuickLogResultState.Saved(savedUses, savedCartName, offline = true)
+                resultState = NfcQuickLogResultState.Saved(savedUses, savedCartName)
             }
         }
     }
+
+    /**
+     * [uses] as a whole number within [NfcQuickLogContract.MIN_USES]..[NfcQuickLogContract.MAX_USES],
+     * or null if it is fractional, non-finite, or out of range. Shared by [restorePendingOperation]
+     * and the [retrySave] recovery path so both apply the exact same acceptance rule to a durable
+     * direct-uses payload.
+     */
+    private fun wholeUsesInRangeOrNull(uses: Double): Int? =
+        uses
+            .takeIf { it.isFinite() && it.toInt().toDouble() == it }
+            ?.toInt()
+            ?.takeIf { it in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES }
 
     private suspend fun watchCommit(awaiting: NfcQuickLogResultState.AwaitingUndo) {
         val deadline = awaiting.submittedAtEpochMillis + COMMIT_DELAY_MILLIS + 2_000L
@@ -224,7 +237,6 @@ class NfcQuickLogActivity : ComponentActivity() {
                 resultState = NfcQuickLogResultState.Saved(
                     uses = awaiting.uses,
                     cartName = awaiting.cartName,
-                    offline = true,
                 )
                 return
             }
@@ -260,7 +272,7 @@ class NfcQuickLogActivity : ComponentActivity() {
         lifecycleScope.launch {
             val next = if (coordinator.submitNow(awaiting.commitId)) {
                 retryAwaiting = null
-                NfcQuickLogResultState.Saved(awaiting.uses, awaiting.cartName, offline = true)
+                NfcQuickLogResultState.Saved(awaiting.uses, awaiting.cartName)
             } else {
                 retryAwaiting = awaiting
                 NfcQuickLogResultState.StorageFailure
@@ -273,7 +285,29 @@ class NfcQuickLogActivity : ComponentActivity() {
     }
 
     private fun retrySave() {
-        if (retryAwaiting != null) submitNow()
+        if (retryAwaiting != null) {
+            submitNow()
+            return
+        }
+        // A fresh instance (this Activity is `noHistory`) has no in-memory AwaitingUndo to
+        // retry from. Recover the durable pending payload before giving up on Retry.
+        lifecycleScope.launch {
+            val pending = coordinator.pending()
+            val recoveredUses = pending
+                ?.takeIf { it.inputKind == com.example.widget.DeferredPenInputKind.DIRECT_USES }
+                ?.let { wholeUsesInRangeOrNull(it.uses) }
+            if (pending != null && recoveredUses != null) {
+                retryAwaiting = NfcQuickLogResultState.AwaitingUndo(
+                    commitId = pending.commitId,
+                    uses = recoveredUses,
+                    cartName = null,
+                    submittedAtEpochMillis = pending.submittedAtEpochMillis,
+                )
+                submitNow()
+            } else {
+                resultState = NfcQuickLogResultState.UnexpectedFailure()
+            }
+        }
     }
 
     private fun openCartPicker() {
@@ -401,79 +435,86 @@ private fun NfcQuickLogResultContent(
             onClose()
         }
     }
-    Column(
+    Surface(
         modifier = Modifier
-            .padding(24.dp)
             .fillMaxWidth()
-            .testTag("nfc-quick-log-result"),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = MaterialTheme.shapes.large,
+        tonalElevation = 3.dp,
     ) {
-        val message = when (state) {
-            NfcQuickLogResultState.Parsing -> "Reading NFC tag…"
-            NfcQuickLogResultState.DuplicatePresentation -> "Tag is still being held near the phone."
-            NfcQuickLogResultState.Staging -> "Preparing quick log…"
-            is NfcQuickLogResultState.AwaitingUndo -> if (locked) {
-                "${state.uses} uses queued"
-            } else {
-                "${state.uses} uses queued for ${state.cartName ?: "the current Pen cart"}"
-            }
-            is NfcQuickLogResultState.Saving -> "Saving ${state.uses} uses…"
-            is NfcQuickLogResultState.Saved -> {
-                val savedCopy = if (state.offline) " saved offline" else " saved"
-                if (locked) {
-                    "${state.uses} uses$savedCopy"
+        Column(
+            modifier = Modifier
+                .padding(24.dp)
+                .fillMaxWidth()
+                .testTag("nfc-quick-log-result"),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val message = when (state) {
+                NfcQuickLogResultState.Parsing -> "Reading NFC tag…"
+                NfcQuickLogResultState.DuplicatePresentation -> "Tag is still being held near the phone."
+                NfcQuickLogResultState.Staging -> "Preparing quick log…"
+                is NfcQuickLogResultState.AwaitingUndo -> if (locked) {
+                    "${state.uses} uses queued"
                 } else {
-                    "${state.uses} uses$savedCopy for ${state.cartName ?: "the current Pen cart"}"
+                    "${state.uses} uses queued for ${state.cartName ?: "the current Pen cart"}"
                 }
-            }
-            is NfcQuickLogResultState.Undone -> "${state.uses} uses not logged"
-            NfcQuickLogResultState.UnregisteredTag -> "This NFC tag is not registered."
-            NfcQuickLogResultState.RegistryMismatch -> "This tag configuration does not match its registration."
-            NfcQuickLogResultState.RegistryCorrupt -> "NFC tag registrations need recovery in Settings."
-            NfcQuickLogResultState.NoCart -> "No Pen cart is currently loaded."
-            NfcQuickLogResultState.PreviousTapBusy -> "Previous tap is still saving—try again."
-            NfcQuickLogResultState.StorageFailure -> "The tap could not be saved. Keep it and retry."
-            NfcQuickLogResultState.InvalidTag -> "Unsupported Cannsheet NFC tag."
-            NfcQuickLogResultState.NfcLaunchDisabled -> "Launch via NFC is disabled for Cannsheet."
-            NfcQuickLogResultState.NfcUnavailable -> "NFC is unavailable or turned off."
-            is NfcQuickLogResultState.UnexpectedFailure -> "NFC quick-log could not be completed."
-        }
-        Text(message, style = MaterialTheme.typography.titleLarge)
-        when (state) {
-            is NfcQuickLogResultState.AwaitingUndo -> {
-                Button(onClick = onUndo, modifier = Modifier.fillMaxWidth()) { Text("Undo") }
-                OutlinedButton(onClick = onSubmitNow, modifier = Modifier.fillMaxWidth()) {
-                    Text("Submit now")
+                is NfcQuickLogResultState.Saving -> "Saving ${state.uses} uses…"
+                is NfcQuickLogResultState.Saved -> if (locked) {
+                    "${state.uses} uses saved"
+                } else {
+                    "${state.uses} uses saved for ${state.cartName ?: "the current Pen cart"}"
                 }
+                is NfcQuickLogResultState.Undone -> "${state.uses} uses not logged"
+                NfcQuickLogResultState.UnregisteredTag -> "This NFC tag is not registered."
+                NfcQuickLogResultState.RegistryMismatch -> "This tag configuration does not match its registration."
+                NfcQuickLogResultState.RegistryCorrupt -> "NFC tag registrations need recovery in Settings."
+                NfcQuickLogResultState.NoCart -> "No Pen cart is currently loaded."
+                NfcQuickLogResultState.PreviousTapBusy -> "Previous tap is still saving—try again."
+                NfcQuickLogResultState.StorageFailure -> "The tap could not be saved. Keep it and retry."
+                NfcQuickLogResultState.InvalidTag -> "Unsupported Cannsheet NFC tag."
+                NfcQuickLogResultState.NfcLaunchDisabled -> "Launch via NFC is disabled for Cannsheet."
+                NfcQuickLogResultState.NfcUnavailable -> "NFC is unavailable or turned off."
+                is NfcQuickLogResultState.UnexpectedFailure -> "NFC quick-log could not be completed."
             }
-            NfcQuickLogResultState.NoCart -> if (!locked) {
-                Button(onClick = onChooseCart, modifier = Modifier.fillMaxWidth()) { Text("Choose cart") }
-            }
-            NfcQuickLogResultState.UnregisteredTag,
-            NfcQuickLogResultState.RegistryMismatch,
-            NfcQuickLogResultState.RegistryCorrupt,
-            -> if (!locked) {
-                Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open NFC tag settings")
+            Text(message, style = MaterialTheme.typography.titleLarge)
+            when (state) {
+                is NfcQuickLogResultState.AwaitingUndo -> {
+                    Button(onClick = onUndo, modifier = Modifier.fillMaxWidth()) { Text("Undo") }
+                    OutlinedButton(onClick = onSubmitNow, modifier = Modifier.fillMaxWidth()) {
+                        Text("Submit now")
+                    }
                 }
-            }
-            NfcQuickLogResultState.NfcUnavailable -> if (!locked) {
-                Button(onClick = onOpenNfcSettings, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open NFC settings")
+                NfcQuickLogResultState.NoCart -> if (!locked) {
+                    Button(onClick = onChooseCart, modifier = Modifier.fillMaxWidth()) { Text("Choose cart") }
                 }
-            }
-            NfcQuickLogResultState.NfcLaunchDisabled -> if (!locked) {
-                Button(onClick = onOpenLaunchPreference, modifier = Modifier.fillMaxWidth()) {
-                    Text("Open Launch via NFC")
+                NfcQuickLogResultState.UnregisteredTag,
+                NfcQuickLogResultState.RegistryMismatch,
+                NfcQuickLogResultState.RegistryCorrupt,
+                -> if (!locked) {
+                    Button(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open NFC tag settings")
+                    }
                 }
+                NfcQuickLogResultState.NfcUnavailable -> if (!locked) {
+                    Button(onClick = onOpenNfcSettings, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open NFC settings")
+                    }
+                }
+                NfcQuickLogResultState.NfcLaunchDisabled -> if (!locked) {
+                    Button(onClick = onOpenLaunchPreference, modifier = Modifier.fillMaxWidth()) {
+                        Text("Open Launch via NFC")
+                    }
+                }
+                NfcQuickLogResultState.StorageFailure,
+                NfcQuickLogResultState.PreviousTapBusy,
+                -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
+                else -> Unit
             }
-            NfcQuickLogResultState.StorageFailure,
-            NfcQuickLogResultState.PreviousTapBusy,
-            -> Button(onClick = onRetry, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
-            else -> Unit
-        }
-        if (!terminal) {
-            OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Close") }
+            if (!terminal) {
+                OutlinedButton(onClick = onClose, modifier = Modifier.fillMaxWidth()) { Text("Close") }
+            }
         }
     }
 }
