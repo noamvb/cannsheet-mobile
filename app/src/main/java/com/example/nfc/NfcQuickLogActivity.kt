@@ -138,6 +138,16 @@ class NfcQuickLogActivity : ComponentActivity() {
     }
 
     private fun consumeIntent(incoming: Intent) {
+        if (NfcWriterSession.isActiveWithin()) {
+            // The tag writer owns this tag. It normally suppresses dispatch by holding reader
+            // mode, but a tag it just wrote carries our own Application Record, so a dispatch
+            // slipping through while the writer pauses or resumes would launch this Activity over
+            // it, report the not-yet-registered tag as unregistered, and pause the writer before
+            // it could finish registering. Withdraw silently instead of stealing the tap.
+            clearNfcIntent(incoming)
+            finish()
+            return
+        }
         val adapter = NfcAdapter.getDefaultAdapter(this)
         if (adapter == null) {
             clearNfcIntent(incoming)

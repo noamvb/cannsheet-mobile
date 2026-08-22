@@ -91,6 +91,7 @@ class NfcTagWriterActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        NfcWriterSession.onWriterResumed()
         adapter = NfcAdapter.getDefaultAdapter(this)
         val current = adapter
         launchAllowed = current == null || Build.VERSION.SDK_INT < 36 ||
@@ -106,20 +107,29 @@ class NfcTagWriterActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        NfcWriterSession.onWriterPaused()
         disableReader()
         super.onPause()
     }
 
-    private fun enableReader() {
+    /**
+     * Enables reader mode and, when appropriate, arms a waiting state.
+     *
+     * Reader mode is held for the writer's entire resumed lifetime, including behind a settled
+     * result screen. That is not merely an optimization: while it is off, the platform owns tag
+     * dispatch, and a tag carrying our own Application Record launches [NfcQuickLogActivity] over
+     * this Activity. Because the tag is not registered until the writer finishes, that surfaces
+     * "This NFC tag is not registered" mid-registration and pauses the writer, which disables its
+     * reader in turn — the flow can never complete. Only [onPause] releases the reader.
+     */
+    private fun enableReader(forceArmWaitingState: Boolean = false) {
         val current = adapter ?: return
-        if (state is NfcTagWriterState.Writing ||
-            state is NfcTagWriterState.Verified ||
-            state is NfcTagWriterState.InvalidConfiguration
-        ) return
-        state = when {
-            verificationRequired -> NfcTagWriterState.WaitingToVerify
-            overwriteArmed -> NfcTagWriterState.WaitingToWrite
-            else -> NfcTagWriterState.WaitingToInspect
+        if (forceArmWaitingState || shouldArmWaitingState(state)) {
+            state = when {
+                verificationRequired -> NfcTagWriterState.WaitingToVerify
+                overwriteArmed -> NfcTagWriterState.WaitingToWrite
+                else -> NfcTagWriterState.WaitingToInspect
+            }
         }
         runCatching {
             current.enableReaderMode(
@@ -142,34 +152,7 @@ class NfcTagWriterActivity : ComponentActivity() {
         runCatching { adapter?.disableReaderMode(this) }
     }
 
-    /**
-     * Runs one tag operation and then releases the reader unless the resulting state still needs
-     * it. Centralizing this keeps the lifetime correct on every path, including the terminal
-     * branches that used to depend on the incorrect pre-I/O teardown.
-     */
     private suspend fun handleTag(tag: Tag) {
-        try {
-            handleTagOperation(tag)
-        } finally {
-            withContext(NonCancellable + Dispatchers.Main) { releaseReaderIfSettled() }
-        }
-    }
-
-    /**
-     * Reader mode must stay enabled while a tag operation is in flight and while a state is
-     * waiting for a presentation. Anything else is settled, so the foreground reader is released
-     * rather than left polling and discarding discoveries behind a result screen.
-     */
-    private fun releaseReaderIfSettled() {
-        val current = state
-        val stillNeedsTheReader = acceptsTagPresentation(current) ||
-            current is NfcTagWriterState.Inspecting ||
-            current is NfcTagWriterState.Verifying ||
-            current is NfcTagWriterState.Writing
-        if (!stillNeedsTheReader) disableReader()
-    }
-
-    private suspend fun handleTagOperation(tag: Tag) {
         val configuredTarget = target
         // Every mode but ADOPT requires a pre-known target; ADOPT discovers its target from the
         // physical tag, so it proceeds into inspection even when none is known yet.
@@ -210,7 +193,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                         withContext(Dispatchers.Main) {
                             state = NfcTagWriterState.RegistrySaveFailed
                             verificationRequired = false
-                            disableReader()
                         }
                         return
                     }
@@ -222,7 +204,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                             else -> NfcTagWriterState.RegistrySaveFailed
                         }
                         verificationRequired = false
-                        disableReader()
                     }
                 }
                 is NfcTagVerificationResult.Mismatch -> withContext(Dispatchers.Main) {
@@ -269,7 +250,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                     state = NfcTagWriterState.Failed("A different tag was presented; inspect again")
                     overwriteArmed = false
                     overwriteFingerprint = null
-                    disableReader()
                 }
                 return
             }
@@ -282,20 +262,17 @@ class NfcTagWriterActivity : ComponentActivity() {
                     if (existing.tagId != configuredTarget.tagId) {
                         withContext(Dispatchers.Main) {
                             state = NfcTagWriterState.Failed("A different registered tag was presented")
-                            disableReader()
                         }
                     } else {
                         writeVerifiedTag(tag, current, configuredTarget)
                     }
                 } else withContext(Dispatchers.Main) {
                     state = NfcTagWriterState.AlreadyVerified
-                    disableReader()
                 }
                 is NfcQuickLogRegistryVerification.UsesMismatch -> if (mode == WriterMode.REWRITE && configuredTarget != null) {
                     if (existing.tagId != configuredTarget.tagId) {
                         withContext(Dispatchers.Main) {
                             state = NfcTagWriterState.Failed("A different registered tag was presented")
-                            disableReader()
                         }
                     } else if (!overwriteArmed) {
                         withContext(Dispatchers.Main) {
@@ -310,20 +287,16 @@ class NfcTagWriterActivity : ComponentActivity() {
                     }
                 } else withContext(Dispatchers.Main) {
                     state = NfcTagWriterState.RegistryMismatch
-                    disableReader()
                 }
                 NfcQuickLogRegistryVerification.Unregistered -> withContext(Dispatchers.Main) {
                     target = existing
                     state = NfcTagWriterState.CompatibleUnregistered
-                    disableReader()
                 }
                 NfcQuickLogRegistryVerification.RegistryCorrupt -> withContext(Dispatchers.Main) {
                     state = NfcTagWriterState.RegistryCorrupt
-                    disableReader()
                 }
                 NfcQuickLogRegistryVerification.InvalidTag -> withContext(Dispatchers.Main) {
                     state = NfcTagWriterState.InvalidConfiguration
-                    disableReader()
                 }
             }
             return
@@ -334,7 +307,6 @@ class NfcTagWriterActivity : ComponentActivity() {
         if (mode == WriterMode.ADOPT) {
             withContext(Dispatchers.Main) {
                 state = NfcTagWriterState.NoCompatibleTagToAdopt
-                disableReader()
             }
             return
         }
@@ -345,7 +317,6 @@ class NfcTagWriterActivity : ComponentActivity() {
             withContext(Dispatchers.Main) {
                 state = NfcTagWriterState.Failed("A different tag was presented; inspect again")
                 overwriteArmed = false
-                disableReader()
             }
             return
         }
@@ -354,7 +325,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                 state = NfcTagWriterState.ForeignContentFound
                 overwriteFingerprint = current.fingerprint
                 overwriteIdentityWarning = current.fingerprint.uidHex.isEmpty()
-                disableReader()
             }
             return
         }
@@ -417,7 +387,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                 state = NfcTagWriterState.Failed("A different tag was presented; inspect again")
                 overwriteArmed = false
                 overwriteFingerprint = null
-                disableReader()
             }
             return
         }
@@ -461,7 +430,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                 }
             }.getOrElse {
                 state = NfcTagWriterState.RegistrySaveFailed
-                disableReader()
                 return@launch
             }
             state = when (mutation) {
@@ -470,14 +438,15 @@ class NfcTagWriterActivity : ComponentActivity() {
                 NfcQuickLogRegistryMutationResult.StorageFailure -> NfcTagWriterState.RegistrySaveFailed
                 else -> NfcTagWriterState.RegistrySaveFailed
             }
-            disableReader()
         }
     }
 
     private fun armOverwrite() {
         overwriteArmed = true
         inspected = null
-        enableReader()
+        // Explicit user action on a preserved result state: re-arm even though
+        // shouldArmWaitingState declines to overwrite ForeignContentFound on its own.
+        enableReader(forceArmWaitingState = true)
     }
 
     private fun adopt() {
@@ -486,7 +455,6 @@ class NfcTagWriterActivity : ComponentActivity() {
             val mutation = runCatching { registry.adoptVerifiedTag(existing, label) }
                 .getOrElse {
                     state = NfcTagWriterState.RegistrySaveFailed
-                    disableReader()
                     return@launch
                 }
             state = when (mutation) {
@@ -508,7 +476,6 @@ class NfcTagWriterActivity : ComponentActivity() {
             val mutation = runCatching { registry.alignRegistryToVerifiedPhysicalTag(physical) }
                 .getOrElse {
                     state = NfcTagWriterState.RegistrySaveFailed
-                    disableReader()
                     return@launch
                 }
             state = when (mutation) {
@@ -518,7 +485,6 @@ class NfcTagWriterActivity : ComponentActivity() {
                 else -> NfcTagWriterState.RegistrySaveFailed
             }
             if (state is NfcTagWriterState.Verified) repairPending = false
-            disableReader()
         }
     }
 
@@ -532,7 +498,9 @@ class NfcTagWriterActivity : ComponentActivity() {
         // before reapplying the mutation, so activation still requires exact physical proof.
         verificationRequired = state is NfcTagWriterState.NeedsVerificationRetap ||
             state is NfcTagWriterState.RegistrySaveFailed
-        enableReader()
+        // Same reason as armOverwrite: Retry is pressed from states such as VerificationMismatch,
+        // TagLost, and WriteUncertain that are deliberately preserved across a resume.
+        enableReader(forceArmWaitingState = true)
     }
 
     private fun openNfcSettings() {
@@ -631,6 +599,25 @@ object NfcTagWriterActivityContract {
  * with "Could not read this tag" — and a retap-awaiting state missing from this set silently
  * swallows the retap it just asked for.
  */
+/**
+ * Whether re-enabling the reader may overwrite [state] with a fresh waiting state.
+ *
+ * Only states that carry no outcome or pending decision may be armed. A result the owner still
+ * has to act on — an adoptable tag, a foreign-content confirmation, a repair offer, a completed
+ * write — must survive resuming the Activity, so returning to the writer does not silently
+ * discard the affordance that was on screen.
+ */
+internal fun shouldArmWaitingState(state: NfcTagWriterState): Boolean = when (state) {
+    NfcTagWriterState.Editing,
+    NfcTagWriterState.Inspecting,
+    NfcTagWriterState.Verifying,
+    NfcTagWriterState.NfcDisabled,
+    NfcTagWriterState.UnavailableNoAdapter,
+    NfcTagWriterState.LaunchPermissionBlocked,
+    -> true
+    else -> acceptsTagPresentation(state)
+}
+
 internal fun acceptsTagPresentation(state: NfcTagWriterState): Boolean = when (state) {
     NfcTagWriterState.WaitingToInspect,
     NfcTagWriterState.WaitingToWrite,
