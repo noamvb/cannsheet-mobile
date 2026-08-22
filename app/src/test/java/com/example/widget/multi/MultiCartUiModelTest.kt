@@ -3,6 +3,7 @@ package com.example.widget.multi
 import com.example.data.Product
 import com.example.data.ProductInteraction
 import com.example.data.ProductTypeKey
+import com.example.widget.DeferredPenInputKind
 import com.example.widget.PEN_WIDGET_PAYLOAD_VERSION
 import com.example.widget.PenWidgetCommitPayload
 import org.junit.Assert.assertEquals
@@ -141,8 +142,10 @@ class MultiCartUiModelTest {
         commitAtEpochMillis = 7_500L,
         productId = "active",
         productUuid = null,
+        inputKind = DeferredPenInputKind.DURATION_SECONDS,
         seconds = 30,
         secondsPerUse = 10.0,
+        restoreDraftSeconds = 30,
         uses = 3.0,
         date = "2026-08-20",
         time = "12:00",

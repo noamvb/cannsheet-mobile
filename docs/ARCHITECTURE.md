@@ -261,9 +261,23 @@ validation paths. It displays the shared loaded-cart state and uses the same
   0..600 seconds. Submit is enabled only for a positive draft; reset returns
   to zero and a counter tap returns to composing state.
 - A submit broadcast performs one `DataStore.edit` that reads the current draft
-  and captures payload version 2: product, stable consumption `eventId`, submit
-  and deadline timestamps, date, time, seconds, rate, and converted `uses`.
-  Draft capture and payload construction are one atomic transaction.
+  and captures payload version 3 with `inputKind = DURATION_SECONDS`: product,
+  stable consumption `eventId`, submit and deadline timestamps, date, time,
+  seconds, rate, and converted `uses`. Draft capture and payload construction
+  are one atomic transaction.
+- Version 3 also admits `inputKind = DIRECT_USES` for a producer that already
+  knows a whole quantity and has no editable draft. A direct payload carries
+  `uses` natively and leaves `seconds`, `secondsPerUse`, and
+  `restoreDraftSeconds` null; it is staged through `submitDirectCommit`, which
+  neither reads nor writes a draft key, and its Undo removes the payload without
+  restoring a draft. Version 1 and version 2 payloads still decode and migrate
+  deterministically to version 3.
+- An undecodable pending value is preserved rather than overwritten, so
+  future-version or corrupt state stays diagnosable instead of being silently
+  discarded. Because it cannot be decoded it is reported as
+  `pendingCommitUnreadable` and blocks both submission and draft editing for
+  that surface, so the draft can never appear editable while every submit is
+  refused.
 - The displayed Undo window is five seconds, followed by 1.5 seconds of
   delivery grace. A serialized process-local timer is the primary delivery
   path; unique WorkManager work is the durable process-death backstop; lazy
@@ -284,7 +298,9 @@ The deferred commit is represented by the following boundary sequence:
 
 ```mermaid
 flowchart LR
-    Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture payload\nsecondsToUses"]
+    Tap["Widget submit tap\nseconds draft"] --> Capture["DataStore edit\ncapture v3 payload\nDURATION_SECONDS: secondsToUses"]
+    Direct["Direct producer\nwhole uses, no draft"] --> Capture2["DataStore edit\ncapture v3 payload\nDIRECT_USES: no conversion"]
+    Capture2 --> Window
     Capture --> Window["AwaitingCommit\n5-second window + grace"]
     Window --> Tiers["Process timer primary\nWorkManager backstop\nlazy flush recovery"]
     Tiers --> Decision{"Undo wins?"}
@@ -468,8 +484,11 @@ not require relational transactions. Purchase defaults are an independent
 full-map JSON value in the `purchase_defaults` DataStore; they do not enter the
 Room schema or Apps Script synchronization payload.
 The pen widget's draft and deferred-submit payload live in a separate
-`pen_widget_state` DataStore. Payload version 2 stores displayed seconds,
-derived uses, the stable event ID, timing, and claim metadata. It is removed
+`pen_widget_state` DataStore. Payload version 3 stores an `inputKind`, the
+stable event ID, timing, and claim metadata; a `DURATION_SECONDS` payload adds
+displayed seconds, the rate, and derived uses, while a `DIRECT_USES` payload
+carries whole uses natively and leaves every duration field null. Version 1 and
+version 2 values still decode and migrate to version 3. The payload is removed
 only after the Room write is durable; only uses cross the `ConsumptionLogger`
 boundary into Room, the offline queue, and the wire.
 

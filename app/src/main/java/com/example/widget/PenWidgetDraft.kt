@@ -11,7 +11,12 @@ const val MAX_PENDING_AGE_MILLIS = 10 * 60 * 1_000L
 const val CLOCK_ROLLBACK_TOLERANCE_MILLIS = 10_000L
 const val CLAIM_STALE_MILLIS = 60_000L
 const val QUEUED_SUBTITLE_WINDOW_MILLIS = 8_000L
-const val PEN_WIDGET_PAYLOAD_VERSION = 2
+const val PEN_WIDGET_PAYLOAD_VERSION = 3
+
+enum class DeferredPenInputKind {
+    DURATION_SECONDS,
+    DIRECT_USES,
+}
 
 sealed interface PenWidgetDraft {
     data class Composing(val seconds: Int) : PenWidgetDraft
@@ -30,8 +35,10 @@ data class PenWidgetCommitPayload(
     val claimedAtEpochMillis: Long? = null,
     val productId: String,
     val productUuid: String?,
-    val seconds: Int,
-    val secondsPerUse: Double,
+    val inputKind: DeferredPenInputKind,
+    val seconds: Int?,
+    val secondsPerUse: Double?,
+    val restoreDraftSeconds: Int?,
     val uses: Double,
     val date: String,
     val time: String,

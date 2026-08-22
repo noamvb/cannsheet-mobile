@@ -171,7 +171,7 @@ class PenWidgetActionRouterTest {
         val payload = requireNotNull(repository.read(WIDGET_ID).pendingCommit)
         assertEquals("pen-pinned", requestedPinnedProductId)
         assertEquals("pen-pinned", payload.productId)
-        assertEquals(20.0, payload.secondsPerUse, 0.0)
+        assertEquals(20.0, requireNotNull(payload.secondsPerUse), 0.0)
     }
 
     @Test

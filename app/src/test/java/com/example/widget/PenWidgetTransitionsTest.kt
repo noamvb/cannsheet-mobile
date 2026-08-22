@@ -31,7 +31,7 @@ class PenWidgetTransitionsTest {
             resolveUndo(claimed, claimed.commitId, nowMillis = 1_500L),
         )
         assertEquals(
-            PenWidgetUndoResolution.Restored(claimed.seconds),
+            PenWidgetUndoResolution.Restored(requireNotNull(claimed.restoreDraftSeconds)),
             resolveUndo(
                 claimed,
                 claimed.commitId,
@@ -39,8 +39,31 @@ class PenWidgetTransitionsTest {
             ),
         )
         assertEquals(
-            PenWidgetUndoResolution.Restored(payload().seconds),
+            PenWidgetUndoResolution.Restored(requireNotNull(payload().restoreDraftSeconds)),
             resolveUndo(payload(), payload().commitId, nowMillis = 1_500L),
+        )
+    }
+
+    @Test
+    fun directUsesUndoRemovesWithoutCreatingADraftAndStillLosesToLiveClaim() {
+        val direct = payload().copy(
+            inputKind = DeferredPenInputKind.DIRECT_USES,
+            seconds = null,
+            secondsPerUse = null,
+            restoreDraftSeconds = null,
+        )
+
+        assertEquals(
+            PenWidgetUndoResolution.Removed,
+            resolveUndo(direct, direct.commitId, nowMillis = 1_500L),
+        )
+        assertEquals(
+            PenWidgetUndoResolution.NoOp,
+            resolveUndo(
+                direct.copy(claimId = "owner:claim", claimedAtEpochMillis = 1_000L),
+                direct.commitId,
+                nowMillis = 1_500L,
+            ),
         )
     }
 
@@ -153,8 +176,10 @@ class PenWidgetTransitionsTest {
         commitAtEpochMillis = 5_000L,
         productId = "pen-1",
         productUuid = null,
+        inputKind = DeferredPenInputKind.DURATION_SECONDS,
         seconds = 30,
         secondsPerUse = 10.0,
+        restoreDraftSeconds = 30,
         uses = 3.0,
         date = "2026-08-12",
         time = "12:00",

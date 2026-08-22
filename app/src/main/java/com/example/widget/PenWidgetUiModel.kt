@@ -77,7 +77,7 @@ fun buildPenWidgetUiModel(
                 R.string.pen_widget_undo_window,
                 listOf(UNDO_WINDOW_MILLIS / 1_000L),
             ),
-            frozenSeconds = draft.payload.seconds,
+            frozenSeconds = draft.payload.restoreDraftSeconds ?: 0,
             commitId = draft.payload.commitId,
             remainingMillis = (
                 draft.payload.commitAtEpochMillis - COMMIT_GRACE_MILLIS - nowMillis

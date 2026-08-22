@@ -3,6 +3,8 @@ package com.example.widget
 sealed interface PenWidgetUndoResolution {
     data class Restored(val seconds: Int) : PenWidgetUndoResolution
 
+    data object Removed : PenWidgetUndoResolution
+
     data object NoOp : PenWidgetUndoResolution
 }
 
@@ -25,7 +27,10 @@ fun resolveUndo(
     payload == null -> PenWidgetUndoResolution.NoOp
     payload.commitId != commitId -> PenWidgetUndoResolution.NoOp
     payload.claimId != null && !isClaimStale(payload, nowMillis) -> PenWidgetUndoResolution.NoOp
-    else -> PenWidgetUndoResolution.Restored(payload.seconds)
+    payload.inputKind == DeferredPenInputKind.DIRECT_USES -> PenWidgetUndoResolution.Removed
+    payload.restoreDraftSeconds != null ->
+        PenWidgetUndoResolution.Restored(payload.restoreDraftSeconds)
+    else -> PenWidgetUndoResolution.NoOp
 }
 
 fun resolveCommit(
