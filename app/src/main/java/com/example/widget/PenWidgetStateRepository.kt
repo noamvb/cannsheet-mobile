@@ -19,6 +19,13 @@ data class PenWidgetStoredState(
     val draftSeconds: Int,
     val pendingCommit: PenWidgetCommitPayload?,
     val lastQueuedAtMillis: Long?,
+    /**
+     * The pending slot holds a raw value this build cannot decode — corrupt state, or state
+     * written by a newer payload version. The value is deliberately preserved rather than
+     * overwritten, so the surface is blocked rather than editable: [pendingCommit] is null but
+     * neither a submission nor a draft edit will be accepted until the value is resolved.
+     */
+    val pendingCommitUnreadable: Boolean = false,
 )
 
 data class PendingPenWidgetCommit(
@@ -52,10 +59,13 @@ class PenWidgetStateRepository internal constructor(
     suspend fun read(appWidgetId: Int): PenWidgetStoredState {
         requireValidWidgetId(appWidgetId)
         val preferences = dataStore.data.first()
+        val rawPending = preferences[pendingKey(appWidgetId)]
+        val pendingCommit = PenWidgetPayloadCodec.decode(rawPending)
         return PenWidgetStoredState(
             draftSeconds = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0,
-            pendingCommit = PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]),
+            pendingCommit = pendingCommit,
             lastQueuedAtMillis = preferences[lastQueuedKey(appWidgetId)],
+            pendingCommitUnreadable = rawPending != null && pendingCommit == null,
         )
     }
 
@@ -63,7 +73,10 @@ class PenWidgetStateRepository internal constructor(
         requireValidWidgetId(appWidgetId)
         var result = 0
         dataStore.edit { preferences ->
-            if (PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]) != null) {
+            // Any raw pending value blocks a draft edit, decodable or not. Submission uses the
+            // same raw test, so an undecodable payload cannot leave the draft editable while
+            // every submit is silently refused.
+            if (preferences[pendingKey(appWidgetId)] != null) {
                 result = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0
             } else {
                 result = stepSeconds(preferences[draftKey(appWidgetId)] ?: 0, delta)
@@ -77,7 +90,10 @@ class PenWidgetStateRepository internal constructor(
         requireValidWidgetId(appWidgetId)
         var result = 0
         dataStore.edit { preferences ->
-            if (PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]) != null) {
+            // Any raw pending value blocks a draft edit, decodable or not. Submission uses the
+            // same raw test, so an undecodable payload cannot leave the draft editable while
+            // every submit is silently refused.
+            if (preferences[pendingKey(appWidgetId)] != null) {
                 result = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0
             } else {
                 preferences[draftKey(appWidgetId)] = 0
@@ -91,7 +107,10 @@ class PenWidgetStateRepository internal constructor(
         requireValidWidgetId(appWidgetId)
         var result = 0
         dataStore.edit { preferences ->
-            if (PenWidgetPayloadCodec.decode(preferences[pendingKey(appWidgetId)]) != null) {
+            // Any raw pending value blocks a draft edit, decodable or not. Submission uses the
+            // same raw test, so an undecodable payload cannot leave the draft editable while
+            // every submit is silently refused.
+            if (preferences[pendingKey(appWidgetId)] != null) {
                 result = preferences[draftKey(appWidgetId)]?.coerceIn(0, MAX_SECONDS) ?: 0
             } else {
                 result = seconds.coerceIn(0, MAX_SECONDS)

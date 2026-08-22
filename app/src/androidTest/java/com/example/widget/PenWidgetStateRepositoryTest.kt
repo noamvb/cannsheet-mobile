@@ -217,6 +217,38 @@ class PenWidgetStateRepositoryTest {
         assertEquals(unknown, dataStore.data.first()[key])
     }
 
+    @Test
+    fun undecodablePendingStateBlocksDraftEditingAsWellAsSubmission() = runBlocking {
+        val surfaceId = 74
+        val key = stringPreferencesKey("pending_commit_$surfaceId")
+        val unknown = """{"version":99,"future":"opaque"}"""
+        repository.setDraftSeconds(surfaceId, 40)
+        dataStore.edit { preferences -> preferences[key] = unknown }
+
+        // read() cannot decode the payload, but the surface must report itself as blocked rather
+        // than as an ordinary empty slot the user may keep editing.
+        val stored = repository.read(surfaceId)
+        assertEquals(null, stored.pendingCommit)
+        assertTrue(stored.pendingCommitUnreadable)
+
+        // Every draft mutator must refuse, matching submitCommit/submitDirectCommit's raw check.
+        assertEquals(40, repository.adjustDraftSeconds(surfaceId, STEP_SECONDS))
+        assertEquals(40, repository.setDraftSeconds(surfaceId, 120))
+        assertEquals(40, repository.resetDraftSeconds(surfaceId))
+        assertEquals(40, repository.read(surfaceId).draftSeconds)
+        assertEquals(unknown, dataStore.data.first()[key])
+    }
+
+    @Test
+    fun aDecodablePendingPayloadIsNotReportedAsUnreadable() = runBlocking {
+        val surfaceId = 75
+        assertTrue(repository.submitCommit(surfaceId, payload()))
+
+        val stored = repository.read(surfaceId)
+        assertEquals("commit-1", stored.pendingCommit?.commitId)
+        assertFalse(stored.pendingCommitUnreadable)
+    }
+
     private fun payload() = PenWidgetCommitPayload(
         version = PEN_WIDGET_PAYLOAD_VERSION,
         commitId = "commit-1",
