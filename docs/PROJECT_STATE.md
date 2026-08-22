@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-21
 
-## NFC quick-log implementation status (released in v1.6.0, repaired in v1.6.1)
+## NFC quick-log implementation status (released v1.6.0; repaired v1.6.1 and v1.6.2)
 
 Shipped in `v1.6.0` (`versionCode 45`). The work landed as pull requests #142
 (`c6092730b56b8485ccf9c4bce446eb5d7d91c7a9`) and #143
@@ -57,9 +57,9 @@ about RF behavior.
 
 - Canonical branch: `main`
 - Latest published application release source commit
-  `d1d5f6cb67afe25a6f0d6f155f588714ec1c46f6` (v1.6.1)
-- Current release metadata in `app/build.gradle.kts`: version name `1.6.1`,
-  version code `46` (published).
+  `7335cda8990833dbfceb7422effbbb60425d09e7` (v1.6.2)
+- Current release metadata in `app/build.gradle.kts`: version name `1.6.2`,
+  version code `47` (published).
 - v1.5.2 publishes the Runway same-size capacity correction from feature PR
   [#138](https://github.com/noamvb/cannsheet-mobile/pull/138), squash-merged as
   `9b1f0d7c120790565ea3764082bef7b305e5792d`, and version-only PR

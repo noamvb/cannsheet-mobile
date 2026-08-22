@@ -6,43 +6,68 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Current release
 
-Cannsheet Mobile `v1.6.1` (`versionCode 46`, `versionName 1.6.1`) is the latest
+Cannsheet Mobile `v1.6.2` (`versionCode 47`, `versionName 1.6.2`) is the latest
 published Obtainium release in
-[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.6.1).
-It repairs the NFC tag writer shipped broken in `v1.6.0`.
+[`noamvb/cannsheet-mobile-releases`](https://github.com/noamvb/cannsheet-mobile-releases/releases/tag/v1.6.2).
+It is the first NFC release verified on real hardware before publication.
 
 Two pull requests landed for this release, each squash-merged into `main`:
 
-- [#146](https://github.com/noamvb/cannsheet-mobile/pull/146) keep NFC reader
-  mode enabled for the whole tag operation, squash-merged as
-  `f62c0966`; and
-- [#147](https://github.com/noamvb/cannsheet-mobile/pull/147) the version-only
-  bump, squash-merged as `d1d5f6cb67afe25a6f0d6f155f588714ec1c46f6`.
+- [#149](https://github.com/noamvb/cannsheet-mobile/pull/149) let the tag writer
+  own the NFC field while it is open, squash-merged as `857713f7`; and
+- [#150](https://github.com/noamvb/cannsheet-mobile/pull/150) the version-only
+  bump, squash-merged as `7335cda8990833dbfceb7422effbbb60425d09e7`.
 
-The annotated source tag `v1.6.1` peels to
-`d1d5f6cb67afe25a6f0d6f155f588714ec1c46f6`, the exact version commit that was
-the tip of `origin/main` when the tag was pushed.
+The annotated source tag `v1.6.2` peels to
+`7335cda8990833dbfceb7422effbbb60425d09e7`, the exact version commit that was the
+tip of `origin/main` when the tag was pushed.
 
 That commit's `push`-event run of "Cannsheet PR checks" on `main` is
-[`32549097733`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32549097733),
-conclusion `success`, with all six required jobs individually green.
-Publication ran as
-[`32549434212`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32549434212),
+[`32552800420`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32552800420),
+conclusion `success`, with all six required jobs individually green. Publication
+ran as
+[`32553132034`](https://github.com/noamvb/cannsheet-mobile/actions/runs/32553132034),
 all three jobs green.
 
 The public release contains exactly:
 
-- `Cannsheet-Mobile-1.6.1.apk` (14,123,411 bytes)
-- `Cannsheet-Mobile-1.6.1.apk.sha256`
+- `Cannsheet-Mobile-1.6.2.apk` (14,123,411 bytes)
+- `Cannsheet-Mobile-1.6.2.apk.sha256`
 
 The independently calculated APK SHA-256 is
-`0c3a21f9b9af59b82e1e199dd1622306c928e742ade5a44226f54a01faad7e37`, matching the
+`055ba03d3b451deccae2eeeb164779c9ee1d6f1ba2fcb89a53edd67e02488121`, matching the
 published checksum file. `aapt dump badging` confirms package
-`com.noamv.cannsheet.mobile`, `versionCode 46`, `versionName 1.6.1`,
+`com.noamv.cannsheet.mobile`, `versionCode 47`, `versionName 1.6.2`,
 `sdkVersion 24`, `targetSdkVersion 36`; `apksigner verify` reports APK Signature
 Scheme v2. The signer certificate SHA-256 is
 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, **identical**
-to both `v1.6.0` and `v1.5.2`, so the phone updates in place.
+to `v1.6.1`, `v1.6.0`, and `v1.5.2`, so the phone updates in place.
+
+### Hardware verification performed before this release
+
+The fix was exercised on the owner's Samsung SM-F966W over USB ADB before the
+tag was pushed, using the checked-in `sandbox` build type. That variant installs
+alongside production as `com.noamv.cannsheet.mobile.sandbox` with its own Room
+database and a sandbox endpoint, so the test could not read or write production
+data or reach the real spreadsheet. Production stayed at `v1.6.1` with its
+original install date throughout.
+
+A 26,886-line logcat capture of the session shows:
+
+- `NfcService: setReaderMode … packageName: com.noamv.cannsheet.mobile.sandbox,
+  flags: 15` when the writer opened, with `flags: 0` only at activity pauses and
+  never during tag I/O;
+- **`NfcQuickLogActivity` appearing zero times in the entire capture**, so the
+  platform never dispatched a tag the writer was working on;
+- a real registry entry persisted after exact readback, one tag with `uses: 1`;
+- the registration timestamp resolving to the moment immediately after the final
+  tag presentation, which is the adopt-an-unregistered-tag path that failed in
+  `v1.6.1`; and
+- no `AndroidRuntime` or `FATAL EXCEPTION` entries.
+
+Paths still unverified on hardware: foreign-content overwrite, rewrite of a
+registered tag, revoke, registry-corruption recovery, and an actual quick-log tap
+logging a consumption against a loaded Pen cart.
 
 ## Incident: v1.6.0 shipped an NFC writer that could not read any tag
 
