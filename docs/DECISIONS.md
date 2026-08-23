@@ -1902,3 +1902,75 @@ permanently dead chain.
   `app/src/main/res/xml/backup_rules.xml`,
   `app/src/main/res/xml/data_extraction_rules.xml`,
   `docs/NFC_QUICK_LOG_IMPLEMENTATION_PLAN.md`
+
+## ADR-045: Expose only settled aggregate facts to a read-only LocalLLM assistant
+
+- Status: Accepted; implementation staged after the compatible LocalLLM
+  version-two host and grammar are frozen
+- Date: 2026-08-23
+- Context: The existing narrative card sends a fixed list of precomputed facts
+  to LocalLLM for phrasing. The owner wants broader English questions, shared
+  on-device history, grounded Insights cards, and explicit cross-app questions
+  without transmitting rows, projections, queue state, or authority to mutate
+  Cannsheet data.
+- Decision:
+  1. Add a fifth top-level Assistant destination only after LocalLLM publishes a
+     backward-compatible version-two protocol. Cannsheet defaults a turn to its
+     own source. Both providers may be queried only after explicit owner wording
+     or an explicit `both apps` selection; the two evidence groups remain
+     separate and cannot be presented as correlation, causation, medical
+     meaning, or behavioral effect.
+  2. Expose a read-only aggregate fact-provider service protected by the
+     LocalLLM-defined signature permission and a reciprocal runtime check of the
+     exact LocalLLM package and approved signing lineage. LocalLLM performs the
+     corresponding check of this app. A caller-provided client or source ID is
+     never authorization.
+  3. Implement only the frozen typed query grammar. The provider accepts no SQL,
+     selection or projection string, cursor, record JSON, database/event ID,
+     queue payload, note content, or write-shaped operation. Every response is
+     bounded and carries source-contract version, period, response timezone,
+     as-of time, source revision/fingerprint, coverage, qualifiers, tie state,
+     freshness, and deterministic completeness warnings.
+  4. Answer only from a current, live, settled `InsightsResponseDto`: no pending
+     local action, range transition, refresh, initial load, stale/cache-only
+     snapshot, or error. The app computes every date, count, aggregate,
+     denominator, comparison, delta, and display value. Explicit questions may
+     name one product or exact bounded dates and may use current activity,
+     inventory, and correctly qualified recorded-spend aggregates. Runway,
+     spending projections, arbitrary records, and pending queue details remain
+     forbidden across every serialized fact field.
+  5. LocalLLM alone owns durable shared history and deletion. Cannsheet may read
+     bounded history pages and render validated citations, deterministic
+     limitations, partial-source warnings, and escaped failed-output warnings.
+     Live unverified drafts are confined to the deliberately opened Assistant
+     screen and are never saved incrementally, treated as evidence, or shown in
+     Insights cards or notifications. Cannsheet has no assistant-access setting;
+     LocalLLM owns its master and per-app controls.
+  6. Replace the free-form Insights narrative with separate Grounded Highlights
+     and previous-30-day comparison cards after provider, history, and terminal
+     validation exist. Automatic cards use activity patterns only and exclude
+     spending, product names, exact dates, projections, and inactivity. Data
+     warnings, period, and as-of time are app-rendered outside generated prose,
+     and each sentence expands to exact evidence.
+  7. Cannsheet owns one unique daily WorkManager job triggered at most once per
+     local day after a fresh settled sync and the charging, battery, access,
+     notification, model, and snapshot gates pass. Its fixed current-30 versus
+     prior-30 query uses the response timezone and bypasses the language router.
+     Success and failed validation are saved in LocalLLM's automatic feed; public
+     notification text is fixed and neutral and contains no generated prose or
+     personal fact.
+- Rationale: Keeping all calculations and source selection outside the model
+  preserves Cannsheet's data and projection contracts while allowing broader
+  language access. Reciprocal signer checks close the current package-only trust
+  gap. One LocalLLM history owner gives both apps a consistent archive without
+  duplicating sensitive generated text.
+- Consequences: The existing version-one narrative is repaired and released
+  before this expansion. The canonical client is copied only from a merged
+  LocalLLM change and checked for exact drift. Provider work cannot merge before
+  the version-two grammar and evidence fixtures freeze; cross-app acceptance
+  requires both real providers. LocalLLM releases first, client feature releases
+  follow separately, and publication does not authorize installation, launch,
+  production-data access, or device actions.
+- Related files: `AGENTS.md`, `docs/ARCHITECTURE.md`,
+  `docs/PROJECT_STATE.md`, `app/src/main/java/com/example/data/CannsheetLlmFacts.kt`,
+  `app/src/main/java/com/example/ui/InsightNarrativeCard.kt`
