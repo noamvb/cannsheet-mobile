@@ -24,11 +24,32 @@ coverage and denominator and is omitted when every cost is unknown; time-of-day 
 aggregated by valid hour bands; ties are explicit; canonical and legacy product-type aliases
 use one production label and aggregate together; and log-count metrics say "most frequently
 logged" rather than implying preference or quantity of use. Regression coverage protects
-those boundaries and the ban on projection language in all serialized fact fields. The
-current Compose-owned generation identity still omits
-refresh/range/loading/error transitions, can leave obsolete prose visible, and can promote a
-partial timeout to completion. These are confirmed source defects, not device observations;
-they remain pending their focused fixes and tests.
+those boundaries and the ban on projection language in all serialized fact fields.
+
+The focused, unreleased `codex/cannsheet-localllm-coordinator` branch is based on
+`9d3fa6c` and replaces the Compose-owned one-shot generation effect with a screen-lifetime
+coordinator. Its identity includes the complete narrative eligibility state and a deterministic
+fingerprint of the supplied period and facts. Any refresh, range transition, pending-action
+change, initial/load/refresh flag, cache/stale flag, error, snapshot identity, or fact change
+cancels and hides obsolete prose before another result can be shown, including the composition
+that first observes the transition. Stream fragments are buffered behind the loading state and
+never rendered. Only a normally completed terminal result that passes deterministic length,
+Unicode/control/bidirectional-character, finite Cannsheet-owned English vocabulary, prompt/refusal,
+health/causal/advice, projection, numeric-expression/unit, and grounded-number validation is
+eligible to appear. Supplied free text never expands that vocabulary. The
+coordinator stops collection before buffered text can exceed 2,000 characters. Accepted prose is
+retained only in a four-entry,
+screen-lifetime exact-key LRU; timeout, cancellation, rejection, and failure output is neither
+shown nor cached. A missing, refused, not-downloaded, unsupported, or failed LocalLLM remains
+silent as before. Focused JVM tests cover cancellation/hiding, render-time gating, partial-timeout
+and oversized-output discard, bounded access-order caching, cancellation propagation, and terminal
+rejection. Earlier green runs predated the last audit fixes and are not final-source evidence. The
+final isolated, headless, in-process-compiler gate passed
+547 JVM tests with zero failures/errors/skips, Android-test Kotlin compilation, debug assembly,
+and lint with zero errors and 126 existing warnings. The focused coordinator suite passed 17 tests
+with zero failures/errors/skips. All eight checked-in Node suites and the 13-test Python backend
+benchmark also passed. No emulator, device, ADB, backend deployment, production data, version,
+signing, or release action was performed.
 
 ## NFC quick-log implementation status (released v1.6.0; repaired v1.6.1 and v1.6.2)
 

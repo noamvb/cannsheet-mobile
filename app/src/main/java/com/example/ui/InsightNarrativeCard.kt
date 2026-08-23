@@ -10,8 +10,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -21,8 +23,17 @@ import com.noamv.localllm.client.LocalLlmClient
 import com.noamv.localllm.contract.EngineState
 import com.noamv.localllm.contract.InsightRequest
 import com.noamv.localllm.contract.InsightTask
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.withTimeoutOrNull
+import com.noamv.localllm.contract.EngineStatus
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
+import java.util.LinkedHashMap
 
 /**
  * The narrative card's lifecycle, mirroring the states the sibling LocalLLM clients use for
@@ -72,11 +83,241 @@ internal fun NarrativeState.toCardBody(): NarrativeCardBody = when (this) {
  * `onComplete` for a streaming request, so a service that answers only there closes the
  * flow having emitted nothing.
  */
-internal fun terminalState(current: NarrativeState, accumulated: String): NarrativeState = when {
+internal fun terminalState(
+    current: NarrativeState,
+    accumulated: String,
+    request: InsightRequest,
+    completedNormally: Boolean = true,
+): NarrativeState = when {
+    !completedNormally -> NarrativeState.Hidden
     current == NarrativeState.Failed -> NarrativeState.Failed
-    accumulated.isBlank() -> NarrativeState.Hidden
-    else -> NarrativeState.Complete(accumulated.trim())
+    else -> when (val verdict = CannsheetNarrativeValidator.validate(accumulated, request)) {
+        is CannsheetNarrativeValidator.Verdict.Accept -> NarrativeState.Complete(verdict.text)
+        is CannsheetNarrativeValidator.Verdict.Reject -> NarrativeState.Hidden
+    }
 }
+
+/**
+ * Every transition that affects whether prose may be shown. It is deliberately separate from
+ * the request fingerprint: an ineligible state must still cancel and hide an older eligible
+ * request immediately, even though it has no request to fingerprint.
+ */
+internal data class NarrativeEligibility(
+    /** Full immutable DTO equality catches a replacement even when derived facts happen to match. */
+    val snapshot: com.example.data.InsightsResponseDto?,
+    val hasSnapshot: Boolean,
+    val snapshotGeneratedAtEpochMillis: Long?,
+    val displayedRange: com.example.data.InsightsRange,
+    val pendingRange: com.example.data.InsightsRange?,
+    val isInitialLoading: Boolean,
+    val isRefreshing: Boolean,
+    val isFromCache: Boolean,
+    val isStale: Boolean,
+    val pendingActionCount: Int?,
+    val error: AnalyticsUiError?,
+)
+
+/** A request is recreated only when both its complete eligibility and supplied facts match. */
+internal data class NarrativeGenerationKey(
+    val eligibility: NarrativeEligibility,
+    val factFingerprint: String,
+)
+
+/** The complete lifecycle input, including ineligible transitions that must hide old prose. */
+internal data class NarrativeGenerationInput(
+    val eligibility: NarrativeEligibility,
+    val request: InsightRequest?,
+    val key: NarrativeGenerationKey?,
+)
+
+internal fun narrativeGenerationInput(
+    state: InsightsUiState,
+    pendingActionCount: Int?,
+): NarrativeGenerationInput {
+    val eligibility = NarrativeEligibility(
+        snapshot = state.data,
+        hasSnapshot = state.data != null,
+        snapshotGeneratedAtEpochMillis = state.data?.generatedAtEpochMillis,
+        displayedRange = state.displayedRange,
+        pendingRange = state.pendingRange,
+        isInitialLoading = state.isInitialLoading,
+        isRefreshing = state.isRefreshing,
+        isFromCache = state.isFromCache,
+        isStale = state.isStale,
+        pendingActionCount = pendingActionCount,
+        error = state.error,
+    )
+    val snapshot = state.data
+    if (snapshot == null || !CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)) {
+        return NarrativeGenerationInput(eligibility, request = null, key = null)
+    }
+
+    val request = InsightRequest(
+        clientId = "cannsheet-mobile",
+        task = InsightTask.PERIOD_SUMMARY,
+        subject = "your own records of cannabis purchases and consumption",
+        period = CannsheetLlmFacts.period(snapshot),
+        facts = CannsheetLlmFacts.from(snapshot),
+        maxWords = 80,
+        stream = true,
+    )
+    return NarrativeGenerationInput(
+        eligibility = eligibility,
+        request = request,
+        key = NarrativeGenerationKey(eligibility, request.factFingerprint()),
+    )
+}
+
+internal fun InsightRequest.factFingerprint(): String = buildString {
+    append(contractVersion).append('|')
+    append(clientId).append('|').append(task.name).append('|')
+    append(subject.length).append(':').append(subject).append('|')
+    append(period?.label.orEmpty().length).append(':').append(period?.label.orEmpty()).append('|')
+    append(period?.start.orEmpty().length).append(':').append(period?.start.orEmpty()).append('|')
+    append(period?.end.orEmpty().length).append(':').append(period?.end.orEmpty()).append('|')
+    append(maxWords).append('|').append(stream)
+    facts.forEach { fact ->
+        append('|').append(fact.label.length).append(':').append(fact.label)
+        append('|').append(fact.value.length).append(':').append(fact.value)
+        append('|').append(fact.note.orEmpty().length).append(':').append(fact.note.orEmpty())
+    }
+}
+
+/** Narrow adapter that keeps Android binder work out of the coordinator's JVM tests. */
+internal interface NarrativeGenerationService {
+    fun isInstalled(): Boolean
+    suspend fun engineStatus(): EngineStatus
+    fun generate(request: InsightRequest): Flow<String>
+}
+
+private class LocalLlmNarrativeGenerationService(
+    context: android.content.Context,
+) : NarrativeGenerationService {
+    private val client = LocalLlmClient(context)
+
+    override fun isInstalled(): Boolean = client.isInstalled()
+
+    override suspend fun engineStatus(): EngineStatus = client.engineStatus()
+
+    override fun generate(request: InsightRequest): Flow<String> = client.generate(request)
+}
+
+/**
+ * Owns one screen-lifetime narrative request. Each update first clears visible prose, then
+ * either restores a validated result for the exact key or starts a new request. This makes a
+ * refresh, range change, pending action, cache/stale/error/loading transition, or changed fact
+ * fingerprint cancel obsolete work before it can repaint the card.
+ */
+internal class NarrativeGenerationCoordinator(
+    private val scope: CoroutineScope,
+    private val serviceFactory: () -> NarrativeGenerationService,
+    private val generationTimeoutMillis: Long = GENERATION_TIMEOUT_MILLIS,
+) : AutoCloseable {
+    private val completedResults = object : LinkedHashMap<NarrativeGenerationKey, String>(
+        MAX_COMPLETED_RESULTS + 1,
+        0.75f,
+        true,
+    ) {
+        override fun removeEldestEntry(
+            eldest: MutableMap.MutableEntry<NarrativeGenerationKey, String>?,
+        ): Boolean = size > MAX_COMPLETED_RESULTS
+    }
+    private val _state = MutableStateFlow<NarrativeState>(NarrativeState.Hidden)
+    val state: StateFlow<NarrativeState> = _state
+
+    private var activeKey: NarrativeGenerationKey? = null
+    private var generationJob: Job? = null
+
+    /**
+     * Hides prior prose during the composition that first observes a changed input. The
+     * effect that cancels/starts work runs only after that composition commits.
+     */
+    fun visibleStateFor(input: NarrativeGenerationInput, observed: NarrativeState): NarrativeState =
+        if (input.key != null && input.key == activeKey) observed else NarrativeState.Hidden
+
+    fun update(input: NarrativeGenerationInput) {
+        val key = input.key
+        if (key != null && key == activeKey) return
+
+        generationJob?.cancel()
+        generationJob = null
+        activeKey = key
+        _state.value = NarrativeState.Hidden
+
+        val request = input.request ?: return
+        check(key != null) { "An eligible narrative request must have a generation key" }
+        completedResults[key]?.let { cached ->
+            _state.value = NarrativeState.Complete(cached)
+            return
+        }
+
+        generationJob = scope.launch {
+            generate(key, request)
+        }
+    }
+
+    private suspend fun generate(key: NarrativeGenerationKey, request: InsightRequest) {
+        val service = serviceFactory()
+        if (!service.isInstalled()) return
+        val status = try {
+            service.engineStatus()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            return
+        }
+        if ((!status.modelDownloaded && status.state != EngineState.READY) ||
+            status.state == EngineState.UNSUPPORTED
+        ) return
+
+        setStateIfCurrent(key, NarrativeState.Loading)
+        val output = StringBuilder()
+        val completedNormally = try {
+            withTimeout(generationTimeoutMillis) {
+                service.generate(request).collect { fragment ->
+                    if (!CannsheetNarrativeValidator.canAppend(output.length, fragment.length)) {
+                        throw NarrativeOutputTooLongException()
+                    }
+                    output.append(fragment)
+                }
+                true
+            }
+        } catch (_: NarrativeOutputTooLongException) {
+            false
+        } catch (_: TimeoutCancellationException) {
+            false
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Throwable) {
+            setStateIfCurrent(key, NarrativeState.Failed)
+            false
+        }
+
+        val terminal = terminalState(_state.value, output.toString(), request, completedNormally)
+        if (terminal is NarrativeState.Complete && activeKey == key) {
+            completedResults[key] = terminal.text
+        }
+        setStateIfCurrent(key, terminal)
+    }
+
+    private fun setStateIfCurrent(key: NarrativeGenerationKey, value: NarrativeState) {
+        if (activeKey == key) _state.value = value
+    }
+
+    override fun close() {
+        generationJob?.cancel()
+        generationJob = null
+        activeKey = null
+        completedResults.clear()
+        _state.value = NarrativeState.Hidden
+    }
+
+    private companion object {
+        const val MAX_COMPLETED_RESULTS = 4
+    }
+}
+
+private class NarrativeOutputTooLongException : RuntimeException()
 
 /**
  * Drives [NarrativeState] for the given [state]/[pendingActionCount] and survives the card
@@ -95,75 +336,33 @@ internal fun terminalState(current: NarrativeState, accumulated: String): Narrat
 @Composable
 internal fun rememberNarrativeState(state: InsightsUiState, pendingActionCount: Int?): NarrativeState {
     val context = LocalContext.current
-    val response = state.data
+    val input = narrativeGenerationInput(state, pendingActionCount)
+    val scope = rememberCoroutineScope()
+    val coordinator = remember(context, scope) {
+        NarrativeGenerationCoordinator(
+            scope = scope,
+            serviceFactory = { LocalLlmNarrativeGenerationService(context) },
+        )
+    }
+    val narrative by coordinator.state.collectAsState()
 
-    val shouldWarm = CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)
-    DisposableEffect(context, shouldWarm) {
-        val warmup = if (shouldWarm) LocalLlmClient(context).warmup() else null
+    DisposableEffect(context, input.request != null) {
+        val warmup = if (input.request != null) LocalLlmClient(context).warmup() else null
         onDispose {
             warmup?.close()
         }
     }
-
-    val narrative by produceState<NarrativeState>(
-        initialValue = NarrativeState.Hidden,
-        response?.generatedAtEpochMillis,
-        response?.range,
-        state.isFromCache,
-        state.isStale,
-        pendingActionCount,
-    ) {
-        value = NarrativeState.Hidden
-
-        if (!CannsheetLlmFacts.shouldSummarise(state, pendingActionCount)) return@produceState
-        val snapshot = state.data ?: return@produceState
-
-        val client = LocalLlmClient(context)
-        if (!client.isInstalled()) return@produceState
-
-        // Proceed once a model is on disk. Waiting for READY would mean never asking, since
-        // the service holds no engine until something does. Opening Insights must never
-        // start a multi-gigabyte download, which modelDownloaded rules out.
-        val status = runCatching { client.engineStatus() }.getOrNull() ?: return@produceState
-        if (!status.modelDownloaded && status.state != EngineState.READY) return@produceState
-        // A device the engine has already given up on keeps reporting its model as
-        // downloaded, so it clears the gate above and would show a progress bar purely
-        // to have the request refused a moment later.
-        if (status.state == EngineState.UNSUPPORTED) return@produceState
-
-        val request = InsightRequest(
-            clientId = "cannsheet-mobile",
-            task = InsightTask.PERIOD_SUMMARY,
-            subject = "your own records of cannabis purchases and consumption",
-            period = CannsheetLlmFacts.period(snapshot),
-            facts = CannsheetLlmFacts.from(snapshot),
-            maxWords = 80,
-            stream = true,
-        )
-
-        // Every early return above is a pre-flight gate. Only now, immediately before the
-        // call that can take seconds to produce its first fragment, does the card become
-        // visible — a spinner that could appear before this point would sit there forever
-        // on a phone with no model installed.
-        value = NarrativeState.Loading
-
-        val builder = StringBuilder()
-        // Binding successfully is no guarantee of ever being answered: a service that
-        // accepts the request and then wedges emits no fragment, no completion and no
-        // error, and the progress bar would spin for as long as the screen is open.
-        withTimeoutOrNull(GENERATION_TIMEOUT_MILLIS) {
-            client.generate(request)
-                .catch { value = NarrativeState.Failed }
-                .collect { fragment ->
-                    builder.append(fragment)
-                    value = NarrativeState.Streaming(builder.toString())
-                }
-        }
-
-        value = terminalState(value, builder.toString())
+    DisposableEffect(coordinator) {
+        onDispose { coordinator.close() }
+    }
+    // Dispose/recreate runs after composition, so state changes are never performed while this
+    // composable is being read. Every input, including an ineligible one, reaches the coordinator.
+    DisposableEffect(input, coordinator) {
+        coordinator.update(input)
+        onDispose { }
     }
 
-    return narrative
+    return coordinator.visibleStateFor(input, narrative)
 }
 
 /**
