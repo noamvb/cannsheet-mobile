@@ -1,6 +1,31 @@
 # Project state
 
-Last updated: 2026-08-21
+Last updated: 2026-08-23
+
+## Accepted LocalLLM assistant boundary (not yet implemented)
+
+The owner accepted a staged expansion from the existing optional Insights narrative to a
+read-only Assistant tab, mutually authenticated aggregate provider, shared LocalLLM-owned
+history, grounded Highlights and previous-30-day comparison cards, and a client-owned
+daily post-fresh-sync worker. This section records the implementation boundary; none of
+those version-two surfaces is present in the current release.
+
+Cannsheet remains the only authority for its facts and date arithmetic. The provider may
+eventually return bounded current activity, inventory, named-product, and correctly
+qualified recorded-spend aggregates from a live, settled Insights snapshot. It may never
+return rows, pending queue details, runway, spending projections, arbitrary expressions,
+or database identifiers. Normal questions remain Cannsheet-only; another app can be
+queried only after explicit owner wording or selection, and cross-app facts stay in
+separate evidence groups. LocalLLM owns global/per-app access and history deletion; this
+app will have no assistant-enable setting. See ADR-045.
+
+Version-one corrections precede that expansion. The current fact mapper double-counts
+unknown-cost purchases in its coverage wording, can narrate all-unknown spending as zero,
+ranks one busiest hour instead of aggregating time bands, hides ties, exposes product
+codes, and says "most used" for a log-count metric. The current Compose-owned generation
+identity omits refresh/range/loading/error transitions, can leave obsolete prose visible,
+and can promote a partial timeout to completion. These are confirmed source defects, not
+device observations; they remain pending until focused fixes and tests merge.
 
 ## NFC quick-log implementation status (released v1.6.0; repaired v1.6.1 and v1.6.2)
 
@@ -21,11 +46,15 @@ passed after the final fixes: 523 JVM tests, zero failures/errors/skips, Android
 Kotlin compilation, lint, and debug assembly all succeeded. All eight checked-in
 Node suites and the 13-test Python backend benchmark also passed; `git diff --check`
 is clean. CI validation, the exact-SHA `main` gate, signed publication, and independent
-artifact verification are complete and recorded in `docs/HANDOFF.md`. Still not
-run or claimed: the owner's Samsung screen-off feasibility probe, physical
-sandbox RF/write/readback, and Obtainium installation. **No production or
-sandbox NFC tag has been written or tapped.** No endpoint or backend contract
-was changed.
+artifact verification are complete and recorded in `docs/HANDOFF.md`. The later v1.6.2
+repair was exercised on the owner's Samsung SM-F966W with the isolated `sandbox` package
+and sandbox endpoint before publication. Reader mode stayed active through tag I/O, the
+platform never dispatched `NfcQuickLogActivity`, and the compatible-unregistered adopt
+path persisted a registry entry after exact readback. This did not read or mutate
+production data. Still not run or claimed on hardware are foreign-content overwrite,
+registered-tag rewrite, revoke, registry-corruption recovery, and an actual quick-log tap
+that records consumption against a loaded Pen cart. No production app interaction is
+authorized by the LocalLLM roadmap.
 
 A post-implementation review pass corrected six defects in the NFC surfaces
 before any release. Both Compose entry points now supply their own `Surface`:

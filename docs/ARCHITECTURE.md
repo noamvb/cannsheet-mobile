@@ -430,6 +430,25 @@ remain covered by the API 24 compatibility boundary.
    current DTO and its `correctionHeadId`; if the entry leaves the refreshed
    page, the sheet closes with an explanation.
 
+### Accepted LocalLLM assistant target
+
+The current release has only the fixed version-one Insights narrative. ADR-045 records a
+staged version-two target; its provider, Assistant destination, shared-history reader,
+grounded cards, and daily worker are not yet implemented.
+
+In that target, Cannsheet exposes a mutually authenticated, read-only provider over a
+frozen typed aggregate-query grammar. It answers only from a current, live, settled
+`InsightsResponseDto` and computes every date, count, comparison, denominator, qualifier,
+tie, and display value locally. It can return current activity, inventory, explicit
+named-product, and correctly qualified recorded-spend facts with provenance. It cannot
+return rows, arbitrary expressions, database or event identifiers, pending queue details,
+runway, or spending projections. LocalLLM owns access controls, orchestration, terminal
+validation, and device-only shared history; Cannsheet owns no assistant-enable setting.
+
+Normal turns remain Cannsheet-only. A second app may be queried only after explicit owner
+wording or selection, and facts remain in separately labelled evidence groups. The model
+phrases cited supplied facts and never calculates or authorizes a provider query.
+
 ### Inventory runway
 
 Inventory runway and current-month spend pace are derived on Android from the
