@@ -50,6 +50,12 @@ class CannsheetLlmFactsTest {
         complete: Boolean = true,
         warnings: QualityWarningsDto = QualityWarningsDto(),
         spendRange: SpendBucketDto = bucket(),
+        byWeekday: List<WeekdayActivityDto> = listOf(WeekdayActivityDto(1, 3), WeekdayActivityDto(5, 11)),
+        byHour: List<HourActivityDto> = listOf(HourActivityDto(9, 2), HourActivityDto(21, 14)),
+        byType: List<TypeBreakdownDto> = listOf(
+            TypeBreakdownDto("Flower", 9, 2, 1, 0, 3, 0, 5_000, 2, 0, 0, 0),
+            TypeBreakdownDto("Vape", 25, 3, 2, 1, 4, 0, 7_000, 2, 0, 0, 0),
+        ),
         scope: String = "days",
         dayCount: Int = 30,
     ) = InsightsResponseDto(
@@ -66,8 +72,8 @@ class CannsheetLlmFactsTest {
             daysSinceLastLog = daysSinceLastLog,
         ),
         dailyActivity = emptyList(),
-        byWeekday = listOf(WeekdayActivityDto(1, 3), WeekdayActivityDto(5, 11)),
-        byHour = listOf(HourActivityDto(9, 2), HourActivityDto(21, 14)),
+        byWeekday = byWeekday,
+        byHour = byHour,
         inventory = InventoryDto(
             activeCount = 3,
             unopenedCount = 2,
@@ -77,10 +83,7 @@ class CannsheetLlmFactsTest {
             currentBorrowedRecordedValueCents = 0,
             unknownCurrentCostCount = 0,
         ),
-        byType = listOf(
-            TypeBreakdownDto("Flower", 9, 2, 1, 0, 3, 0, 5_000, 2, 0, 0, 0),
-            TypeBreakdownDto("Vape", 25, 3, 2, 1, 4, 0, 7_000, 2, 0, 0, 0),
-        ),
+        byType = byType,
         products = emptyList(),
         spending = SpendingDto(allTime = bucket(), range = spendRange, byMonth = emptyList()),
         syncHealth = SyncHealthDto(coverage = "full", acknowledgedRequestCount30d = 5, partialRequestCount30d = 0),
@@ -167,32 +170,135 @@ class CannsheetLlmFactsTest {
         assertEquals("18 of 30", valueOf(f, "Days with any activity"))
         assertEquals("6", valueOf(f, "Distinct products used"))
         assertEquals("2", valueOf(f, "Days since the last entry"))
-        assertEquals("Vape", valueOf(f, "Most used product type"))
-        assertEquals("Friday", valueOf(f, "Busiest day of the week"))
-        assertEquals("evening", valueOf(f, "Most common time of day"))
+        assertEquals("Vape", valueOf(f, "Most frequently logged product type"))
+        assertEquals("Friday", valueOf(f, "Most frequently logged weekday"))
+        assertEquals("evening", valueOf(f, "Most frequently logged time of day"))
         assertEquals("3", valueOf(f, "Products currently open"))
     }
 
     @Test
-    fun `no projection or runway figure is ever sent`() {
-        val labels = CannsheetLlmFacts.from(response()).map { it.label.lowercase() }
+    fun `no projection or runway language is ever sent in a serialized fact field`() {
+        val serializedFields = CannsheetLlmFacts.from(response()).flatMap { fact ->
+            listOfNotNull(fact.label, fact.value, fact.note).map(String::lowercase)
+        }
         listOf("runway", "project", "forecast", "estimate", "per day", "will last", "remaining").forEach { banned ->
-            assertFalse("leaked a projection: $banned", labels.any { it.contains(banned) })
+            assertFalse(
+                "leaked a projection through a serialized fact field: $banned",
+                serializedFields.any { it.contains(banned) },
+            )
         }
     }
 
     @Test
-    fun `recorded spend is reported with its unknown-cost caveat`() {
+    fun `all-known recorded spend uses every purchase as its cost coverage denominator`() {
+        val f = CannsheetLlmFacts.from(response(spendRange = bucket(spendCents = 12_345, purchases = 4)))
+        val fact = f.first { it.label == "Recorded spend in this range" }
+        assertEquals("\$123.45", fact.value)
+        assertEquals("across 4 of 4 purchases with recorded costs", fact.note)
+    }
+
+    @Test
+    fun `partial recorded spend uses only known-cost purchases and reports the missing coverage`() {
         val f = CannsheetLlmFacts.from(response(spendRange = bucket(spendCents = 12_345, purchases = 4, unknownCost = 2)))
         val fact = f.first { it.label == "Recorded spend in this range" }
-        assertTrue(fact.note!!.contains("across 4 purchases"))
-        assertTrue(fact.note!!.contains("2 more have no recorded cost"))
+        assertEquals("\$123.45", fact.value)
+        assertEquals(
+            "across 2 of 4 purchases with recorded costs; 2 purchases have no recorded cost",
+            fact.note,
+        )
+    }
+
+    @Test
+    fun `all-unknown recorded spend is omitted instead of being narrated as zero`() {
+        val f = CannsheetLlmFacts.from(response(spendRange = bucket(spendCents = 0, purchases = 4, unknownCost = 4)))
+        assertNull(valueOf(f, "Recorded spend in this range"))
+    }
+
+    @Test
+    fun `inconsistent unknown-cost coverage fails closed instead of exceeding its denominator`() {
+        val f = CannsheetLlmFacts.from(
+            response(spendRange = bucket(spendCents = 12_345, purchases = 2, unknownCost = 9)),
+        )
+        assertNull(valueOf(f, "Recorded spend in this range"))
     }
 
     @Test
     fun `spend is omitted entirely when nothing was purchased`() {
         val f = CannsheetLlmFacts.from(response(spendRange = bucket(spendCents = 0, purchases = 0)))
         assertNull(valueOf(f, "Recorded spend in this range"))
+    }
+
+    @Test
+    fun `time-of-day combines every hour in each band before choosing the highest band`() {
+        val f = CannsheetLlmFacts.from(
+            response(
+                byHour = listOf(
+                    HourActivityDto(6, 6),
+                    HourActivityDto(11, 6),
+                    HourActivityDto(21, 10),
+                ),
+            ),
+        )
+        val fact = f.first { it.label == "Most frequently logged time of day" }
+        assertEquals("morning", fact.value)
+        assertEquals("12 entries", fact.note)
+    }
+
+    @Test
+    fun `invalid hour buckets cannot be mislabelled as evening activity`() {
+        val f = CannsheetLlmFacts.from(
+            response(
+                byHour = listOf(
+                    HourActivityDto(9, 4),
+                    HourActivityDto(24, 100),
+                    HourActivityDto(-1, 100),
+                ),
+            ),
+        )
+        val fact = f.first { it.label == "Most frequently logged time of day" }
+        assertEquals("morning", fact.value)
+        assertEquals("4 entries", fact.note)
+    }
+
+    @Test
+    fun `canonical and legacy aliases are aggregated under one product display label`() {
+        val f = CannsheetLlmFacts.from(
+            response(
+                byType = listOf(
+                    TypeBreakdownDto("F", 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                    TypeBreakdownDto("Flower", 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                    TypeBreakdownDto("P", 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                ),
+            ),
+        )
+        val fact = f.first { it.label == "Most frequently logged product type" }
+        assertEquals("Flower", fact.value)
+        assertEquals("12 entries", fact.note)
+    }
+
+    @Test
+    fun `ties are explicit and product codes use their production display labels`() {
+        val f = CannsheetLlmFacts.from(
+            response(
+                byType = listOf(
+                    TypeBreakdownDto("F", 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                    TypeBreakdownDto("P", 12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                ),
+                byWeekday = listOf(WeekdayActivityDto(1, 12), WeekdayActivityDto(5, 12)),
+                byHour = listOf(HourActivityDto(6, 12), HourActivityDto(12, 12)),
+            ),
+        )
+
+        assertEquals("Flower and Pen", valueOf(f, "Most frequently logged product type"))
+        assertEquals("Monday and Friday", valueOf(f, "Most frequently logged weekday"))
+        assertEquals("morning and afternoon", valueOf(f, "Most frequently logged time of day"))
+        listOf(
+            "Most frequently logged product type",
+            "Most frequently logged weekday",
+            "Most frequently logged time of day",
+        ).forEach { label ->
+            assertEquals("tied at 12 entries each", f.first { it.label == label }.note)
+        }
     }
 
     @Test

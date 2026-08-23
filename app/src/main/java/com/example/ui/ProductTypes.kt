@@ -8,27 +8,15 @@ internal object ProductTypes {
     /** Keep this exact order: it is the Purchase screen's dropdown order. */
     val CODES: List<String> = listOf("P", "E", "J", "F", "S", "K")
 
-    private val LABELS: Map<String, String> = mapOf(
-        "P" to "Pen",
-        "E" to "Edible",
-        "J" to "Joint",
-        "F" to "Flower",
-        "S" to "Shatter",
-        "K" to "Keef",
-    )
-
     fun normalize(type: String): String = ProductTypeCodes.normalize(type)
 
     /** Human label without repeating the canonical code. */
-    fun label(type: String): String {
-        val code = normalize(type)
-        return LABELS[code] ?: code
-    }
+    fun label(type: String): String = ProductTypeCodes.displayLabel(type)
 
     /** "F — Flower" for known codes; the raw normalized code for anything else. */
     fun displayName(type: String): String {
         val code = normalize(type)
-        return LABELS[code]?.let { "$code — $it" } ?: code
+        return ProductTypeCodes.displayLabel(code).takeIf { it != code }?.let { "$code — $it" } ?: code
     }
 
     /** Canonical codes plus whatever the catalog actually contains, deduped and sorted. */

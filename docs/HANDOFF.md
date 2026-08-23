@@ -1,8 +1,29 @@
 # Current handoff
 
-Last updated: 2026-08-22
+Last updated: 2026-08-23
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## LocalLLM version-one fact corrections (implemented, not released)
+
+The focused `codex/cannsheet-localllm-facts` branch corrects the bounded facts
+Cannsheet supplies to LocalLLM without changing the service contract, lifecycle,
+database, queue, backend, version, signing, or release configuration. Recorded
+spend now states the number of purchases with known costs and is omitted when all
+costs are unknown. Time-of-day counts are aggregated into valid bands; tied type,
+weekday, and time-band leaders remain ties; product-type codes and legacy labels
+are combined under their production display label; and count-based metrics say
+"most frequently logged". The regression suite scans every serialized fact field
+for forbidden projection language.
+
+The final branch content passed
+`./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug` with 538 JVM
+tests and zero failures, errors, or skips; lint and debug assembly also passed.
+The focused `CannsheetLlmFactsTest` suite passed all 22 tests. No emulator,
+physical device, ADB, production data, backend deployment, release, or phone
+installation was used. The lifecycle-aware generation coordinator, terminal
+validation, canonical client copy, version-two provider, Assistant UI, grounded
+cards, and daily worker remain later coherent changes in the accepted roadmap.
 
 ## Current release
 
