@@ -4,6 +4,53 @@ Last updated: 2026-08-23
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## LocalLLM version-one lifecycle coordinator (implemented, not released)
+
+The focused `codex/cannsheet-localllm-coordinator` branch starts from exact-green main
+`9d3fa6c` and changes only the optional version-one Insights narrative lifecycle,
+its regression tests, and shared-context documentation. It replaces the Compose-owned
+generation coroutine with a screen-lifetime coordinator keyed by the full eligibility
+state and a deterministic request/facts fingerprint. Refresh, pending-range, pending-action,
+initial-loading, refreshing, cache/stale, error, snapshot, or facts transitions synchronously
+clear visible prose and cancel old work; an exact-key render gate also prevents the first
+post-transition composition from showing prior prose. Stream fragments remain buffered behind
+the loading state. Only a normally completed terminal output that passes deterministic length,
+Unicode/control/bidirectional-character, finite Cannsheet-owned English-vocabulary,
+prompt/refusal, health/causal/advice, projection, numeric-expression/unit, and grounded-number
+validation is shown or retained in the four-entry screen-memory LRU for that exact key. Dynamic
+fact text never expands the language allowlist. Collection stops before the buffer can exceed
+2,000 characters. Partial, oversized, timed-out, cancelled, failed, or rejected output is hidden
+and cannot be promoted or cached. LocalLLM absence, bind/status failure, missing model, and
+unsupported state remain silent.
+
+`InsightNarrativeCardTest` has direct JVM coverage for cancellation/hiding, render-time gating,
+timeout after a partial fragment, oversized-stream cancellation, bounded access-order cache
+reuse/eviction, cancellation propagation, Unicode and numeric-expression bypasses, and terminal
+acceptance/rejection. The final focused suite passed 17 tests with zero failures/errors/skips. The
+final full gate used the task-specific Gradle home, JDK/SDK paths,
+`JAVA_TOOL_OPTIONS=-Djava.awt.headless=true`, and
+`-Pkotlin.compiler.execution.strategy=in-process`; it executed all 64 tasks and passed in 5m 8s:
+547 JVM tests with zero failures/errors/skips, Android-test Kotlin compilation, debug assembly,
+and lint with zero errors and 126 existing warnings. All eight checked-in Node suites passed with
+the installed Node 22 runtime's absolute path, and the Python backend benchmark passed 13 tests.
+The first backend command did not start because `node` was absent from the shell PATH. No emulator,
+physical device, ADB, backend deployment, production data, version, signing, release, or phone
+installation was used.
+
+Review-time failures were corrected rather than counted as evidence: one focused attempt found a
+Kotlin constructor-call compile error; two focused runs exposed inadequate synchronization in the
+new timeout test; and an oversized-output assertion once observed the intentional transient loading
+state. The tests now use explicit synchronization and terminal-state waits. One concurrent
+shared-output attempt failed with an inconclusive `NoSuchFileException`. A non-isolated full run
+finished green but emitted a background KSP AWT shutdown exception and was rejected as final
+evidence; a cold isolated run without in-process Kotlin compilation was intentionally stopped. The
+first final-gate attempt found one one-second test wait that was too short under full-suite load;
+after increasing only that test helper's scheduling allowance, the focused and full gates above
+passed. An accidentally started focused command without the required environment was stopped before
+task output, and the exact isolated command was rerun. An initial direct wrapper invocation also
+failed because this worktree's `gradlew` is not executable; every reported Gradle pass used
+`bash ./gradlew`.
+
 ## LocalLLM version-one fact corrections (implemented, not released)
 
 The focused `codex/cannsheet-localllm-facts` branch corrects the bounded facts
@@ -21,9 +68,9 @@ The final branch content passed
 tests and zero failures, errors, or skips; lint and debug assembly also passed.
 The focused `CannsheetLlmFactsTest` suite passed all 22 tests. No emulator,
 physical device, ADB, production data, backend deployment, release, or phone
-installation was used. The lifecycle-aware generation coordinator, terminal
-validation, canonical client copy, version-two provider, Assistant UI, grounded
-cards, and daily worker remain later coherent changes in the accepted roadmap.
+installation was used. The canonical client copy, version-two provider,
+Assistant UI, grounded cards, and daily worker remain later coherent changes
+in the accepted roadmap.
 
 ## Current release
 

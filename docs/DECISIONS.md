@@ -1974,3 +1974,54 @@ permanently dead chain.
 - Related files: `AGENTS.md`, `docs/ARCHITECTURE.md`,
   `docs/PROJECT_STATE.md`, `app/src/main/java/com/example/data/CannsheetLlmFacts.kt`,
   `app/src/main/java/com/example/ui/InsightNarrativeCard.kt`
+
+## ADR-046: Bind version-one narrative prose to the full live snapshot lifecycle
+
+- Status: Accepted; implemented on the focused, unreleased
+  `codex/cannsheet-localllm-coordinator` branch
+- Date: 2026-08-23
+- Context: The original Compose `produceState` key covered a snapshot timestamp, response
+  range, cache/stale flags, and queue depth, but not every condition that makes a narrative
+  unsafe to display. A refresh, range transition, loading flag, error, or fact-only snapshot
+  change could leave earlier prose visible or let an earlier coroutine publish after the UI
+  had moved on. Separately, `withTimeoutOrNull` returned after cancelling a partially streamed
+  request and the unconditional terminal mapper treated its accumulated fragments as a completed
+  summary.
+- Decision:
+  1. Use one screen-lifetime `NarrativeGenerationCoordinator`, created above the Insights
+     `LazyColumn`, rather than letting a `produceState` coroutine own generation. Compose supplies
+     it a lifecycle input on every eligible and ineligible transition.
+  2. Include snapshot presence/generation time, displayed and pending ranges, initial-loading,
+     refreshing, cache/stale, pending-action, and error state in the eligibility identity. Build
+     a deterministic length-delimited fingerprint from the exact request period and every supplied
+     fact field. An ineligible input has no request but still cancels and hides current prose.
+  3. Clear the visible state before beginning or restoring any request, and apply the same exact-
+     identity check while rendering so a post-composition effect cannot expose one stale frame.
+     Only an exact identity may restore an in-memory result. That cache belongs to the
+     coordinator's screen lifetime, is bounded to four least-recently-used results, and is never
+     persisted or sent anywhere.
+  4. Buffer fragments behind the loading state; version-one Insights never displays an unverified
+     draft. Complete and cache prose only when the flow finishes normally and the terminal text
+     passes deterministic length, Unicode/control/bidirectional-character, finite Cannsheet-owned
+     English-vocabulary, prompt/refusal, health/causal/advice, projection, numeric-expression/unit,
+     and supplied-number checks. Request fact text does not extend the language allowlist, so an
+     unknown product type cannot turn its own words into an accepted instruction. Enforce the
+     2,000-character buffer limit before appending each fragment so a broken service cannot grow
+     memory until timeout. Cancellation, LocalLLM failure, a blank or rejected completion, and a
+     timeout all settle hidden. In particular, partial or oversized fragments are not shown,
+     completed, or cached. Missing, refused, unready, or unsupported LocalLLM remains silent.
+- Rationale: A narrative reads as current and authoritative even when it was generated from an
+  earlier snapshot. Treating all eligibility transitions and exact supplied facts as request
+  identity prevents stale prose from outliving its source. Terminal validation is an enforcement
+  boundary rather than another prompt instruction. A bounded memory cache avoids repeated
+  inference during same-screen lifecycle churn without making generated text durable.
+- Consequences: The existing card copy and no-LocalLLM behavior remain unchanged, and scrolling
+  still does not regenerate the card. No Room schema, offline queue, backend, endpoint, package,
+  version, signing, release, or production data behavior changes. Focused JVM coverage must
+  exercise cancellation/hiding, render-time gating, timeout-after-partial discard, terminal
+  validation, cancellation propagation, pre-append output limits, and bounded access-order
+  caching; device behavior remains unobserved.
+- Related files: `app/src/main/java/com/example/ui/InsightNarrativeCard.kt`,
+  `app/src/main/java/com/example/ui/CannsheetNarrativeValidator.kt`,
+  `app/src/test/java/com/example/ui/InsightNarrativeCardTest.kt`, `docs/PROJECT_STATE.md`,
+  `docs/HANDOFF.md`
