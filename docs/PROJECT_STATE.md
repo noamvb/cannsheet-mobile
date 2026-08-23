@@ -19,13 +19,16 @@ queried only after explicit owner wording or selection, and cross-app facts stay
 separate evidence groups. LocalLLM owns global/per-app access and history deletion; this
 app will have no assistant-enable setting. See ADR-045.
 
-Version-one corrections precede that expansion. The current fact mapper double-counts
-unknown-cost purchases in its coverage wording, can narrate all-unknown spending as zero,
-ranks one busiest hour instead of aggregating time bands, hides ties, exposes product
-codes, and says "most used" for a log-count metric. The current Compose-owned generation
-identity omits refresh/range/loading/error transitions, can leave obsolete prose visible,
-and can promote a partial timeout to completion. These are confirmed source defects, not
-device observations; they remain pending until focused fixes and tests merge.
+Version-one corrections precede that expansion. Recorded spend now names its known-cost
+coverage and denominator and is omitted when every cost is unknown; time-of-day totals are
+aggregated by valid hour bands; ties are explicit; canonical and legacy product-type aliases
+use one production label and aggregate together; and log-count metrics say "most frequently
+logged" rather than implying preference or quantity of use. Regression coverage protects
+those boundaries and the ban on projection language in all serialized fact fields. The
+current Compose-owned generation identity still omits
+refresh/range/loading/error transitions, can leave obsolete prose visible, and can promote a
+partial timeout to completion. These are confirmed source defects, not device observations;
+they remain pending their focused fixes and tests.
 
 ## NFC quick-log implementation status (released v1.6.0; repaired v1.6.1 and v1.6.2)
 

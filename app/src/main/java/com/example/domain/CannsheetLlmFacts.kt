@@ -1,6 +1,7 @@
 package com.example.domain
 
 import com.example.data.InsightsResponseDto
+import com.example.data.ProductTypeCodes
 import com.example.ui.InsightsUiState
 import com.example.ui.formatCadCents
 import com.noamv.localllm.contract.Fact
@@ -80,33 +81,55 @@ object CannsheetLlmFacts {
             facts += Fact("Days since the last entry", it.toString())
         }
 
-        response.byType
+        val typeCounts = response.byType
             .filter { it.rangeLogCount > 0 }
-            .maxByOrNull { it.rangeLogCount }
-            ?.let { facts += Fact("Most used product type", it.type, "${it.rangeLogCount} entries") }
+            .groupBy({ productTypeLabel(it.type) }, { it.rangeLogCount })
+            .mapValues { (_, counts) -> counts.sum() }
+        tiedHighest(typeCounts.entries.toList(), { it.value })
+            ?.let { (types, count) ->
+                facts += Fact(
+                    label = "Most frequently logged product type",
+                    value = formatNames(types.map { it.key }.sorted()),
+                    note = tieNote(count, types.size),
+                )
+            }
 
-        response.byWeekday
-            .filter { it.logCount > 0 }
-            .maxByOrNull { it.logCount }
-            ?.let { facts += Fact("Busiest day of the week", weekdayName(it.isoDay), "${it.logCount} entries") }
+        tiedHighest(response.byWeekday.filter { it.logCount > 0 }, { it.logCount })
+            ?.let { (weekdays, count) ->
+                facts += Fact(
+                    label = "Most frequently logged weekday",
+                    value = formatNames(weekdays.sortedBy { it.isoDay }.map { weekdayName(it.isoDay) }),
+                    note = tieNote(count, weekdays.size),
+                )
+            }
 
-        response.byHour
-            .filter { it.logCount > 0 }
-            .maxByOrNull { it.logCount }
-            ?.let { facts += Fact("Most common time of day", hourBand(it.hour), "${it.logCount} entries") }
+        val timeBands = response.byHour
+            .filter { it.hour in 0..23 && it.logCount > 0 }
+            .groupBy({ hourBand(it.hour) }, { it.logCount })
+            .mapValues { (_, counts) -> counts.sum() }
+        tiedHighest(timeBands.entries.toList(), { it.value })
+            ?.let { (bands, count) ->
+                facts += Fact(
+                    label = "Most frequently logged time of day",
+                    value = formatNames(bands.map { it.key }.sortedBy(::timeBandOrder)),
+                    note = tieNote(count, bands.size),
+                )
+            }
 
         // Recorded spend only. Nothing projected, nothing per-day, nothing extrapolated.
         val spend = response.spending.range
-        if (spend.personalPurchaseCount > 0) {
+        val personalPurchaseCount = spend.personalPurchaseCount.coerceAtLeast(0)
+        val unknownCostPurchaseCount =
+            spend.unknownPersonalCostCount.coerceIn(0, personalPurchaseCount)
+        val knownCostPurchaseCount = personalPurchaseCount - unknownCostPurchaseCount
+        if (knownCostPurchaseCount > 0) {
             facts += Fact(
                 label = "Recorded spend in this range",
                 value = formatCadCents(spend.personalSpendCents),
-                note = buildString {
-                    append("across ${spend.personalPurchaseCount} purchases")
-                    if (spend.unknownPersonalCostCount > 0) {
-                        append("; ${spend.unknownPersonalCostCount} more have no recorded cost")
-                    }
-                },
+                note = "across $knownCostPurchaseCount of $personalPurchaseCount purchases " +
+                    "with recorded costs" +
+                    unknownCostPurchaseCount.takeIf { it > 0 }
+                        ?.let { "; $it purchases have no recorded cost" }.orEmpty(),
             )
         }
 
@@ -148,5 +171,33 @@ object CannsheetLlmFacts {
         in 6..11 -> "morning"
         in 12..17 -> "afternoon"
         else -> "evening"
+    }
+
+    private fun timeBandOrder(band: String): Int = when (band) {
+        "night" -> 0
+        "morning" -> 1
+        "afternoon" -> 2
+        else -> 3
+    }
+
+    private fun <T> tiedHighest(values: List<T>, count: (T) -> Int): Pair<List<T>, Int>? {
+        val maximum = values.maxOfOrNull(count) ?: return null
+        return values.filter { count(it) == maximum } to maximum
+    }
+
+    private fun tieNote(count: Int, tieCount: Int): String =
+        if (tieCount == 1) "$count entries" else "tied at $count entries each"
+
+    private fun productTypeLabel(type: String): String {
+        val normalized = ProductTypeCodes.normalize(type)
+        val displayLabel = ProductTypeCodes.displayLabel(type)
+        return if (displayLabel == normalized) type.trim() else displayLabel
+    }
+
+    private fun formatNames(names: List<String>): String = when (names.size) {
+        0 -> ""
+        1 -> names.single()
+        2 -> names.joinToString(" and ")
+        else -> names.dropLast(1).joinToString(", ") + ", and " + names.last()
     }
 }
