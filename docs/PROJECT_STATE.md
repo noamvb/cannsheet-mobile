@@ -2,12 +2,12 @@
 
 Last updated: 2026-08-24
 
-## Assistant V2 Implementation & Rollout Status (100% Complete & Merged)
+## Assistant V2 Implementation & Rollout Status (100% Shipped & Verified)
 
-The multi-repository LocalLLM Version 2 On-Device Assistant Platform is fully implemented, validated, and merged to `main` across all three repositories:
-- **LocalLLM Host & Platform**: PRs #17-#27 merged (100% of Stages 1, 2, and 4 complete). Features 1-role and dual-residency orchestration, mutual certificate authorization, bounded router grammar, strict sentence-level citation verification, and Room-backed shared history.
-- **Cannsheet Mobile**: PRs #152-#158 merged (100% of Stages 1 and 3 complete). Features \`CannsheetFactsProviderService\` (\`IAssistantFactsProviderV2\`), Assistant Tab Material 3 Chat UI (\`AssistantScreen.kt\`, \`AssistantViewModel.kt\`, \`AssistantClientV2.kt\`), and post-sync \`DailyAssistantWorker\`.
-- **Poop Schedule**: PRs #94-#97 merged (100% of Stages 1 and 3 complete). Features \`PoopFactsProviderService\` (\`IAssistantFactsProviderV2\`), Assistant Tab Material 3 Chat UI (\`AssistantScreen.kt\`, \`AssistantViewModel.kt\`, \`AssistantClientV2.kt\`), and post-sync \`DailyAssistantWorker\`.
+The multi-repository LocalLLM Version 2 On-Device Assistant Platform is fully implemented, validated, merged to `main`, and published as official signed releases across all three repositories:
+- **LocalLLM v0.2.1 (code 8)**: Tag `v0.2.1`. Features 1-role and dual-residency orchestration, mutual certificate authorization (release signer `f1f2632b76d0edbd40c839a86c7d6eec63ec74f3d5095726a6f676ba1ad3b95d`), FactProviderClient for dynamic IPC fact binding, bounded router grammar, strict sentence-level citation verification, and Room-backed shared history.
+- **Cannsheet Mobile v1.7.2 (code 50)**: Tag `v1.7.2`. Features `CannsheetFactsProviderService` (`IAssistantFactsProviderV2`), Assistant Tab Material 3 Chat UI (`AssistantScreen.kt`, `AssistantViewModel.kt`, `AssistantClientV2.kt` targeting `com.noamv.localllm.service.InferenceService`), updated `localllm_host_approved_callers` authorizing LocalLLM's production release signing cert, and post-sync `DailyAssistantWorker`.
+- **Poop Schedule v1.4.2 (code 27)**: Tag `v1.4.2`. Features `PoopFactsProviderService` (`IAssistantFactsProviderV2`), Assistant Tab Material 3 Chat UI (`AssistantScreen.kt`, `AssistantViewModel.kt`, `AssistantClientV2.kt` targeting `com.noamv.localllm.service.InferenceService`), updated `localllm_host_approved_callers` authorizing LocalLLM's production release signing cert, and post-sync `DailyAssistantWorker`.
 
 ## Accepted LocalLLM assistant boundary
 

@@ -4,13 +4,17 @@ Last updated: 2026-08-24
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## LocalLLM Assistant V2 Platform Rollout (100% Complete & Merged across all 3 Repositories)
+## LocalLLM Assistant V2 Platform Rollout (100% Shipped & Verified across all 3 Repositories)
 
-All 4 roadmap stages of the LocalLLM Assistant V2 Platform are complete, verified by extensive local testing, Android Lint (0 errors), CI workflows, and squash-merged to `main`:
+All 4 roadmap stages of the LocalLLM Assistant V2 Platform are complete, verified by extensive local testing, Android Lint (0 errors), CI workflows, squash-merged to `main`, and published as signed GitHub Releases:
 1. **Stage 1 (Foundation Repairs)**: 14 PRs merged across LocalLLM (#17-#23), Cannsheet Mobile (#152-#156), and Poop Schedule (#94-#95).
 2. **Stage 2 (LocalLLM Host & Model Platform)**: 3 PRs merged in LocalLLM (#24, #25, #26) establishing the Model Catalog, Model Store, AIDL V2 interfaces, router grammar, sentence citation validator, and history repository.
 3. **Stage 3 (Client Fact Providers & Assistant UI Tabs)**: 4 PRs merged across Cannsheet Mobile (#157, #158) and Poop Schedule (#96, #97) implementing fact providers with bounded metrics, full chat tabs with interactive citation chips, app filters, cross-app query toggles, and daily WorkManager triggers.
 4. **Stage 4 (End-to-End Integration & Verification)**: PR #27 merged in LocalLLM covering multi-source cross-app turns, dynamic memory residency under pressure, ungrounded rejection, and follow-up conversational context.
+5. **Releases & On-Device Patch Verification**:
+   - `LocalLLM v0.2.1` (code 8)
+   - `Cannsheet Mobile v1.7.2` (code 50)
+   - `Poop Schedule v1.4.2` (code 27)
 
 ## Canonical LocalLLM version-one client copy (implemented, not released)
 
