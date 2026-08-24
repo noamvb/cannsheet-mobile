@@ -125,7 +125,7 @@ class AssistantClientV2(
     private suspend fun bindSession(): BoundSession {
         val resolved = resolver.resolve()
         val intent = Intent("com.noamv.localllm.v2.action.BIND_ASSISTANT").apply {
-            component = ComponentName(resolved.packageName, "com.noamv.localllm.service.AssistantServiceV2")
+            component = ComponentName(resolved.packageName, "com.noamv.localllm.service.InferenceService")
         }
 
         return suspendCancellableCoroutine { cont ->
