@@ -2025,3 +2025,18 @@ permanently dead chain.
   `app/src/main/java/com/example/ui/CannsheetNarrativeValidator.kt`,
   `app/src/test/java/com/example/ui/InsightNarrativeCardTest.kt`, `docs/PROJECT_STATE.md`,
   `docs/HANDOFF.md`
+
+## ADR-048: Rollout of Assistant V2 Platform across LocalLLM and Client Applications
+
+- Status: Accepted; merged across all three repositories (LocalLLM PRs #24-#27, Cannsheet Mobile PRs #157-#158, Poop Schedule PRs #96-#97)
+- Date: 2026-08-24
+- Context: Expanding the LocalLLM on-device intelligence platform from one-shot Insights summaries to a multi-turn Assistant with cross-app capabilities, strict grounding, and mutual IPC authentication.
+- Decision:
+  1. **IPC Protocol and Wire Contracts (V2)**: Implement \`IAssistantServiceV2\` and \`IAssistantCallbackV2\` for streaming assistant turns with structured event types (\`ROUTING\`, \`QUEUED\`, \`MODEL_LOADING\`, \`PROVIDER_STATUS\`, \`DRAFT\`, \`COMPLETE\`, \`FAILURE\`). Clients query and return typed fact evidence via \`IAssistantFactsProviderV2\`. Clients never transmit raw database rows or user credentials; LocalLLM never persists client database rows.
+  2. **Deterministic Query Routing & Grounded Sentence Citations**: The router maps questions to bounded aggregate queries or limitations (\`READ_ONLY\`, \`MEDICAL_OR_CAUSAL\`, \`OUT_OF_GRAMMAR\`). Generated text is validated sentence-by-sentence against returned \`FactEvidence\`. Hallucinated numbers or ungrounded statistics produce \`FAILED_VALIDATION\` and render collapsed behind an advisory warning banner as inert text.
+  3. **Memory-Aware Dynamic Residency**: Maintain dynamic dual-residency for Router and Writer models when device RAM headroom >= 2.5 GB. Fall back to strict 1-role residency and active role unloading when RAM headroom < 2.5 GB.
+  4. **Shared Multi-App History**: LocalLLM owns conversation history persistence in Room with initiating-client tracking. Client UIs default to filtering conversations by initiating app with a toggle for cross-app views. Follow-up turns re-fetch fresh facts and supply structured prior turn summaries as conversational context to the writer.
+  5. **Daily Highlights Worker**: Schedule WorkManager one-time daily highlights post-settled sync with charging/battery constraints.
+- Rationale: Ensures 100% on-device data privacy, prevents hallucinated statistical claims, respects mobile memory constraints, and provides a conversational interface for personal health and consumption tracking.
+- Consequences: Assistant V2 tabs and background workers are fully integrated into Cannsheet Mobile and Poop Schedule; LocalLLM serves as the central on-device model and history platform.
+- Related files: \`LocalLLM\`, \`cannsheet-mobile\`, \`poop-schedule\`, \`docs/PROJECT_STATE.md\`, \`docs/HANDOFF.md\`
