@@ -4,6 +4,35 @@ Last updated: 2026-08-23
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Canonical LocalLLM version-one client copy (implemented, not released)
+
+Branch `codex/cannsheet-localllm-v1-client` vendors the canonical version-one client from
+exact LocalLLM merged-main commit `5d537466fc9f7a48a5107d0b105c234f391bdf1a`. It was produced
+only through `scripts/localllm_v1_client.sh copy`; the two AIDL files, JSON contract, client,
+and helper classes were not edited independently in this repository. The checked provenance
+file records canonical digest
+`fafc994962f895399bdf2e2702255a31388236726847660e41f1a161aaa38f4b`, and the LocalLLM
+consumer drift check passed both before and after the copy commit.
+
+The copied client adds exact LocalLLM package/signing-lineage verification before binding,
+same-session API negotiation, finite bind/status/first-response/total deadlines, null/binding/
+service-death handling, callback request-ID validation, bounded pre-ID callback handling, typed
+progress/draft/completion/failure events, and authoritative completion-text reconstruction. The
+deprecated string flow remains source-compatible for the existing Insights integration and emits
+only the completed result. This branch does not change fact selection, narrative policy, Room,
+offline queues, backend behavior, UI, versions, signing, endpoints, or release configuration.
+
+The final isolated JDK 17 gate ran `testDebugUnitTest`,
+`compileDebugAndroidTestKotlin`, `lintDebug`, and `assembleDebug` with in-process Kotlin
+compilation. It completed all 64 tasks successfully in 16 minutes 49 seconds: 547 JVM tests
+passed with zero failures/errors/skips, Android-test Kotlin compilation passed, lint completed
+with 126 existing warnings and no errors, and the debug APK assembled. The successful run emitted
+one non-fatal KSP AWT shutdown exception after task completion; exact PR CI remains the merge
+authority. An earlier environment setup attempt failed before compilation because the selected
+cloud-synced SDK copy lacked `aapt`; the successful gate used the complete Homebrew Android SDK.
+No emulator, physical device, ADB, backend deployment, production data, version, signing, release,
+or phone installation was used.
+
 ## LocalLLM version-one lifecycle coordinator (implemented, not released)
 
 The focused `codex/cannsheet-localllm-coordinator` branch starts from exact-green main
@@ -68,7 +97,7 @@ The final branch content passed
 tests and zero failures, errors, or skips; lint and debug assembly also passed.
 The focused `CannsheetLlmFactsTest` suite passed all 22 tests. No emulator,
 physical device, ADB, production data, backend deployment, release, or phone
-installation was used. The canonical client copy, version-two provider,
+installation was used. The version-two provider,
 Assistant UI, grounded cards, and daily worker remain later coherent changes
 in the accepted roadmap.
 

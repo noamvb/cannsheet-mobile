@@ -26,6 +26,17 @@ use one production label and aggregate together; and log-count metrics say "most
 logged" rather than implying preference or quantity of use. Regression coverage protects
 those boundaries and the ban on projection language in all serialized fact fields.
 
+The focused `codex/cannsheet-localllm-v1-client` branch now copies the canonical version-one
+client from exact LocalLLM merged-main commit `5d537466` through the checked copy script. Its
+provenance digest is
+`fafc994962f895399bdf2e2702255a31388236726847660e41f1a161aaa38f4b`. The copied client adds
+reciprocal package/signing-lineage verification, version negotiation, finite deadlines,
+Binder-lifecycle handling, typed events, and authoritative final-result reconstruction without
+changing Cannsheet facts or UI. The final isolated local gate passed 547 JVM tests with zero
+failures/errors/skips, Android-test Kotlin compilation, lint with zero errors, and debug assembly.
+This is static/build evidence only; no emulator, device, ADB, backend, production-data, version,
+signing, or release action was performed.
+
 The focused, unreleased `codex/cannsheet-localllm-coordinator` branch is based on
 `9d3fa6c` and replaces the Compose-owned one-shot generation effect with a screen-lifetime
 coordinator. Its identity includes the complete narrative eligibility state and a deterministic
