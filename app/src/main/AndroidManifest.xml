@@ -155,6 +155,14 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+        <service
+            android:name=".data.localllm.CannsheetFactsProviderService"
+            android:exported="true"
+            android:permission="com.noamv.localllm.permission.INFERENCE">
+            <intent-filter>
+                <action android:name="com.noamv.localllm.v2.action.BIND_FACTS_PROVIDER" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
