@@ -439,16 +439,22 @@ class InsightNarrativeCardTest {
     @Test
     fun `rejected terminal output is never displayed or cached`() = runBlocking {
         val requests = AtomicInteger()
+        val emitted = Channel<Unit>(capacity = 2)
         val coordinator = coordinator {
             requests.incrementAndGet()
-            flowOf("You recorded 99 entries.")
+            flow {
+                emit("You recorded 99 entries.")
+                emitted.send(Unit)
+            }
         }
         val eligible = input(fingerprint = "facts-a")
 
         coordinator.update(eligible)
+        withTimeout(1_000) { emitted.receive() }
         awaitState(coordinator) { requests.get() == 1 && it == NarrativeState.Hidden }
         coordinator.update(ineligibleInput(eligible.eligibility.copy(isRefreshing = true)))
         coordinator.update(eligible)
+        withTimeout(1_000) { emitted.receive() }
         awaitState(coordinator) { requests.get() == 2 && it == NarrativeState.Hidden }
 
         coordinator.close()
