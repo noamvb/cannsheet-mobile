@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Insights
@@ -31,6 +32,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.example.ui.assistant.AssistantScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
@@ -39,10 +41,11 @@ sealed class Screen(val route: String, val title: String, val icon: @Composable 
     object Consumption : Screen("consumption", "Log", { Icon(Icons.Filled.List, contentDescription = "Consumption") })
     object Purchase : Screen("purchase", "Purchase", { Icon(Icons.Filled.AddShoppingCart, contentDescription = "Purchase") })
     object Insights : Screen("insights", "Insights", { Icon(Icons.Filled.Insights, contentDescription = "Insights") })
+    object Assistant : Screen("assistant", "Assistant", { Icon(Icons.Filled.AutoAwesome, contentDescription = "Assistant") })
     object Settings : Screen("settings", "Settings", { Icon(Icons.Filled.Settings, contentDescription = "Settings") })
 }
 
-val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.Settings)
+val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.Assistant, Screen.Settings)
 
 internal object AdaptiveNavigationTestTags {
     const val BOTTOM_BAR = "adaptive-navigation-bottom-bar"
@@ -98,6 +101,9 @@ fun CannsheetApp(
                 composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
                 composable(Screen.Insights.route) {
                     InsightsScreen(viewModel, windowWidth = windowWidth)
+                }
+                composable(Screen.Assistant.route) {
+                    AssistantScreen()
                 }
                 composable(Screen.Settings.route) { SettingsScreen(viewModel) }
             }
