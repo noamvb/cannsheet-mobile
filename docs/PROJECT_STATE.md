@@ -1,8 +1,15 @@
 # Project state
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
-## Accepted LocalLLM assistant boundary (not yet implemented)
+## Assistant V2 Implementation & Rollout Status (100% Complete & Merged)
+
+The multi-repository LocalLLM Version 2 On-Device Assistant Platform is fully implemented, validated, and merged to `main` across all three repositories:
+- **LocalLLM Host & Platform**: PRs #17-#27 merged (100% of Stages 1, 2, and 4 complete). Features 1-role and dual-residency orchestration, mutual certificate authorization, bounded router grammar, strict sentence-level citation verification, and Room-backed shared history.
+- **Cannsheet Mobile**: PRs #152-#158 merged (100% of Stages 1 and 3 complete). Features \`CannsheetFactsProviderService\` (\`IAssistantFactsProviderV2\`), Assistant Tab Material 3 Chat UI (\`AssistantScreen.kt\`, \`AssistantViewModel.kt\`, \`AssistantClientV2.kt\`), and post-sync \`DailyAssistantWorker\`.
+- **Poop Schedule**: PRs #94-#97 merged (100% of Stages 1 and 3 complete). Features \`PoopFactsProviderService\` (\`IAssistantFactsProviderV2\`), Assistant Tab Material 3 Chat UI (\`AssistantScreen.kt\`, \`AssistantViewModel.kt\`, \`AssistantClientV2.kt\`), and post-sync \`DailyAssistantWorker\`.
+
+## Accepted LocalLLM assistant boundary
 
 The owner accepted a staged expansion from the existing optional Insights narrative to a
 read-only Assistant tab, mutually authenticated aggregate provider, shared LocalLLM-owned
