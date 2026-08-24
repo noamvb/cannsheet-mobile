@@ -28,7 +28,9 @@ class DailyAssistantWorker(
         }
 
         val prefs = applicationContext.getSharedPreferences("assistant_daily_prefs", Context.MODE_PRIVATE)
-        val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).apply {
+            timeZone = java.util.TimeZone.getTimeZone("UTC")
+        }.format(Date())
         val lastRunDate = prefs.getString("last_daily_run_date", null)
         if (lastRunDate == today) {
             return Result.success()
@@ -59,6 +61,7 @@ class DailyAssistantWorker(
         fun schedule(context: Context) {
             val constraints = Constraints.Builder()
                 .setRequiresBatteryNotLow(true)
+                .setRequiresCharging(true)
                 .build()
 
             val request = OneTimeWorkRequestBuilder<DailyAssistantWorker>()

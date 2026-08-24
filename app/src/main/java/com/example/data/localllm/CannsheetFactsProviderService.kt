@@ -75,6 +75,19 @@ class CannsheetFactsProviderService : Service() {
                     val graph = CannsheetGraph.get(applicationContext)
                     val snapshot = graph.analyticsRepository.readCachedInsights()
                     val pendingCount = graph.repository.pendingActionCount.first()
+                    if (pendingCount > 0) {
+                        val unsettledResult = com.noamv.localllm.contract.v2.ProviderFactsResult(
+                            sourceApp = com.noamv.localllm.contract.v2.AppSource.CANNSHEET,
+                            facts = emptyList(),
+                            revision = "unsettled",
+                            asOfTime = System.currentTimeMillis(),
+                            timezone = snapshot?.timeZone ?: "UTC",
+                            warnings = listOf("UNSETTLED_ACTIONS_PENDING"),
+                        )
+                        val resultJson = AssistantContractV2.json.encodeToString(com.noamv.localllm.contract.v2.ProviderFactsResult.serializer(), unsettledResult)
+                        callback.onFactsResult(queryId, resultJson)
+                        return@launch
+                    }
                     val factsResult = CannsheetFactsCalculator.calculateFacts(
                         query = query,
                         snapshot = snapshot,
