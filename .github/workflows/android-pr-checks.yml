@@ -198,6 +198,13 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
+      - name: Verify LocalLLM contract synchronization
+        shell: bash
+        run: |
+          if [ -f scripts/localllm_v1_client.sh ]; then
+            bash scripts/localllm_v1_client.sh check-local || true
+          fi
+
       - name: Run Android unit tests, compile instrumentation tests, lint, and build debug APK
         run: ./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug
 

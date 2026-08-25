@@ -120,6 +120,46 @@ class CannsheetFactsCalculatorTest {
         assertEquals("3", inventoryFact?.displayValue)
     }
 
+    @Test
+    fun testCalculateFactsWithUnsupportedFilterAddsWarning() {
+        val query = AggregateQuery(
+            sources = listOf(AppSource.CANNSHEET),
+            metrics = listOf(MetricId.CANNSHEET_RECORDED_SPEND),
+            period = QueryPeriod.LastDays(30),
+            filters = listOf(
+                com.noamv.localllm.contract.v2.QueryFilter(
+                    source = AppSource.CANNSHEET,
+                    field = "cannsheet.unknown_field",
+                    operator = "EQUALS",
+                    value = "foo",
+                ),
+            ),
+        )
+        val snapshot = createTestSnapshot()
+        val result = CannsheetFactsCalculator.calculateFacts(
+            query = query,
+            snapshot = snapshot,
+            pendingActionCount = 0,
+        )
+        assertTrue(result.warnings.any { it.contains("UNSUPPORTED filter: cannsheet.unknown_field") })
+    }
+
+    @Test
+    fun testCalculateFactsWithMismatchedPeriodAddsWarning() {
+        val query = AggregateQuery(
+            sources = listOf(AppSource.CANNSHEET),
+            metrics = listOf(MetricId.CANNSHEET_RECORDED_SPEND),
+            period = QueryPeriod.LastDays(90),
+        )
+        val snapshot = createTestSnapshot()
+        val result = CannsheetFactsCalculator.calculateFacts(
+            query = query,
+            snapshot = snapshot,
+            pendingActionCount = 0,
+        )
+        assertTrue(result.warnings.any { it.contains("Requested period LastDays(90) differs from cached snapshot range") })
+    }
+
     private fun bucket(
         spendCents: Long = 12_050L,
         purchases: Int = 10,

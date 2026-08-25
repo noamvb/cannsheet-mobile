@@ -2,6 +2,5 @@
 <resources>
     <string-array name="localllm_host_approved_callers">
         <item>com.noamv.localllm|f1f2632b76d0edbd40c839a86c7d6eec63ec74f3d5095726a6f676ba1ad3b95d</item>
-        <item>com.noamv.localllm|a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e</item>
     </string-array>
 </resources>

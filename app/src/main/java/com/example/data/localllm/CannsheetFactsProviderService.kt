@@ -45,10 +45,12 @@ class CannsheetFactsProviderService : Service() {
 
     private val binder = object : IAssistantFactsProviderV2.Stub() {
         override fun getProviderVersion(): Int {
+            hostAuthorizer.enforceAuthorizedHost(Binder.getCallingUid())
             return AssistantContractV2.VERSION
         }
 
         override fun getProviderCapabilitiesJson(): String {
+            hostAuthorizer.enforceAuthorizedHost(Binder.getCallingUid())
             val capabilities = CannsheetFactsCalculator.getCapabilities()
             return AssistantContractV2.json.encodeToString(ProviderCapabilities.serializer(), capabilities)
         }
@@ -107,6 +109,7 @@ class CannsheetFactsProviderService : Service() {
         }
 
         override fun cancelQuery(queryId: String) {
+            hostAuthorizer.enforceAuthorizedHost(Binder.getCallingUid())
             activeJobs.remove(queryId)?.cancel()
         }
     }

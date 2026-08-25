@@ -211,7 +211,7 @@ fun ChatMessageItem(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                         Text(message.stage ?: "Thinking...", style = MaterialTheme.typography.bodyMedium)
                     }
-                } else if (message.status == AssistantTerminalStatus.FAILED_VALIDATION) {
+                } else if (!isUser && message.status != null && message.status != AssistantTerminalStatus.VALIDATED) {
                     ValidationFailedWarningCard(message = message)
                 } else {
                     Text(
