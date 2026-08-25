@@ -22,7 +22,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -45,17 +47,40 @@ class AssistantClientV2(
     fun isInstalled(): Boolean = runCatching { resolver.resolve() }.isSuccess
 
     fun submitTurn(request: AssistantTurnRequest): Flow<AssistantTurnEvent> = callbackFlow {
+        val terminalState = AtomicBoolean(false)
         val session = try {
-            bindSession()
+            bindSession(
+                onDeath = { error ->
+                    if (terminalState.compareAndSet(false, true)) {
+                        trySend(AssistantTurnEvent.Error(LocalLlmError.INTERNAL, error.message ?: "Service died"))
+                        close()
+                    }
+                },
+            )
         } catch (e: Exception) {
             trySend(AssistantTurnEvent.Error(LocalLlmError.MODEL_NOT_READY, e.message ?: "Failed to bind to Assistant service"))
             close()
             return@callbackFlow
         }
 
+        val apiVersion = try {
+            session.service.apiVersion
+        } catch (e: Exception) {
+            -1
+        }
+        if (apiVersion != AssistantContractV2.VERSION) {
+            if (terminalState.compareAndSet(false, true)) {
+                trySend(AssistantTurnEvent.Error(LocalLlmError.INVALID_REQUEST, "Incompatible Assistant API version: expected ${AssistantContractV2.VERSION}, got $apiVersion"))
+                close()
+            }
+            session.unbind()
+            return@callbackFlow
+        }
+
         val requestJson = AssistantContractV2.json.encodeToString(AssistantTurnRequest.serializer(), request)
         val callback = object : IAssistantCallbackV2.Stub() {
             override fun onEvent(requestId: String?, eventJson: String?) {
+                if (requestId != request.requestId || terminalState.get()) return
                 if (eventJson != null) {
                     try {
                         val event = AssistantContractV2.json.decodeFromString(AssistantEvent.serializer(), eventJson)
@@ -65,6 +90,8 @@ class AssistantClientV2(
             }
 
             override fun onComplete(requestId: String?, resultJson: String?) {
+                if (requestId != request.requestId) return
+                if (!terminalState.compareAndSet(false, true)) return
                 if (resultJson != null) {
                     try {
                         val result = AssistantContractV2.json.decodeFromString(AssistantTerminalResult.serializer(), resultJson)
@@ -72,11 +99,15 @@ class AssistantClientV2(
                     } catch (ex: Exception) {
                         trySend(AssistantTurnEvent.Error(LocalLlmError.INTERNAL, "Malformed result: ${ex.message}"))
                     }
+                } else {
+                    trySend(AssistantTurnEvent.Error(LocalLlmError.INTERNAL, "LocalLLM returned null terminal result"))
                 }
                 close()
             }
 
             override fun onError(requestId: String?, errorCode: Int, message: String?, retryable: Boolean) {
+                if (requestId != null && requestId != request.requestId) return
+                if (!terminalState.compareAndSet(false, true)) return
                 trySend(AssistantTurnEvent.Error(errorCode, message ?: "Assistant error", retryable))
                 close()
             }
@@ -85,8 +116,10 @@ class AssistantClientV2(
         try {
             session.service.startTurn(requestJson, callback)
         } catch (e: Exception) {
-            trySend(AssistantTurnEvent.Error(LocalLlmError.INTERNAL, e.message ?: "Failed to start turn"))
-            close()
+            if (terminalState.compareAndSet(false, true)) {
+                trySend(AssistantTurnEvent.Error(LocalLlmError.INTERNAL, e.message ?: "Failed to start turn"))
+                close()
+            }
         }
 
         awaitClose {
@@ -122,67 +155,99 @@ class AssistantClientV2(
         }
     }
 
-    private suspend fun bindSession(): BoundSession {
-        val resolved = resolver.resolve()
-        val intent = Intent("com.noamv.localllm.v2.action.BIND_ASSISTANT").apply {
-            component = ComponentName(resolved.packageName, "com.noamv.localllm.service.InferenceService")
-        }
+    private suspend fun bindSession(onDeath: ((Throwable) -> Unit)? = null): BoundSession =
+        withTimeout(bindTimeoutMillis) {
+            val resolved = resolver.resolve()
+            val intent = Intent("com.noamv.localllm.v2.action.BIND_ASSISTANT").apply {
+                component = ComponentName(resolved.packageName, "com.noamv.localllm.service.InferenceService")
+            }
 
-        return suspendCancellableCoroutine { cont ->
-            val unbindOnce = AtomicBoolean(false)
-            val connection = object : ServiceConnection {
-                override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                    if (binder == null) {
-                        if (!unbindOnce.getAndSet(true)) {
-                            appContext.unbindService(this)
-                        }
-                        if (cont.isActive) {
-                            cont.resumeWithException(Unavailable("Assistant service returned null Binder"))
-                        }
-                        return
+            suspendCancellableCoroutine { cont ->
+                val unbindOnce = AtomicBoolean(false)
+                val deathRecipientRef = AtomicReference<Pair<IBinder, IBinder.DeathRecipient>?>(null)
+                lateinit var connection: ServiceConnection
+
+                fun cleanup() {
+                    deathRecipientRef.getAndSet(null)?.let { (b, r) ->
+                        runCatching { b.unlinkToDeath(r, 0) }
                     }
-
-                    val service = IAssistantServiceV2.Stub.asInterface(binder)
-                    if (cont.isActive) {
-                        cont.resume(BoundSession(service) {
-                            if (!unbindOnce.getAndSet(true)) {
-                                runCatching { appContext.unbindService(this) }
-                            }
-                        })
-                    }
-                }
-
-                override fun onServiceDisconnected(name: ComponentName?) {}
-
-                override fun onBindingDied(name: ComponentName?) {
                     if (!unbindOnce.getAndSet(true)) {
-                        runCatching { appContext.unbindService(this) }
-                    }
-                    if (cont.isActive) {
-                        cont.resumeWithException(Unavailable("Assistant service binding died"))
+                        runCatching { appContext.unbindService(connection) }
                     }
                 }
-            }
 
-            val bound = try {
-                appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-            } catch (sec: SecurityException) {
-                if (cont.isActive) cont.resumeWithException(Unavailable("Permission denied binding to assistant service", sec))
-                return@suspendCancellableCoroutine
-            }
+                fun connectionLost(error: Throwable) {
+                    cleanup()
+                    if (cont.isActive) {
+                        cont.resumeWithException(error)
+                    } else {
+                        onDeath?.invoke(error)
+                    }
+                }
 
-            if (!bound) {
-                if (cont.isActive) cont.resumeWithException(Unavailable("bindService returned false for Assistant service"))
-                return@suspendCancellableCoroutine
-            }
+                connection = object : ServiceConnection {
+                    override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                        try {
+                            resolver.verifyConnected(name)
+                            if (binder == null) {
+                                connectionLost(Unavailable("Assistant service returned null Binder"))
+                                return
+                            }
 
-            cont.invokeOnCancellation {
-                if (!unbindOnce.getAndSet(true)) {
-                    runCatching { appContext.unbindService(connection) }
+                            val service = IAssistantServiceV2.Stub.asInterface(binder)
+                                ?: throw Unavailable("Assistant service returned invalid Binder")
+
+                            val recipient = IBinder.DeathRecipient {
+                                connectionLost(Unavailable("Assistant service process died"))
+                            }
+                            binder.linkToDeath(recipient, 0)
+                            deathRecipientRef.set(binder to recipient)
+
+                            if (cont.isActive) {
+                                cont.resume(BoundSession(service, ::cleanup))
+                            } else {
+                                cleanup()
+                            }
+                        } catch (e: Throwable) {
+                            connectionLost(Unavailable("Failed to verify or initialize Assistant connection", e))
+                        }
+                    }
+
+                    override fun onServiceDisconnected(name: ComponentName?) {
+                        connectionLost(Unavailable("The Assistant service disconnected"))
+                    }
+
+                    override fun onNullBinding(name: ComponentName?) {
+                        connectionLost(Unavailable("Assistant service returned a null binding"))
+                    }
+
+                    override fun onBindingDied(name: ComponentName?) {
+                        connectionLost(Unavailable("The Assistant service binding died"))
+                    }
+                }
+
+                val bound = try {
+                    appContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+                } catch (sec: SecurityException) {
+                    cleanup()
+                    if (cont.isActive) cont.resumeWithException(Unavailable("Permission denied binding to assistant service", sec))
+                    return@suspendCancellableCoroutine
+                }
+
+                if (!bound) {
+                    cleanup()
+                    if (!unbindOnce.getAndSet(true)) {
+                        runCatching { appContext.unbindService(connection) }
+                    }
+                    if (cont.isActive) cont.resumeWithException(Unavailable("bindService returned false for Assistant service"))
+                    return@suspendCancellableCoroutine
+                }
+
+                cont.invokeOnCancellation {
+                    cleanup()
                 }
             }
         }
-    }
 
     private class BoundSession(
         val service: IAssistantServiceV2,

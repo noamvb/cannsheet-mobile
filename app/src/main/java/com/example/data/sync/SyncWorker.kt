@@ -57,12 +57,16 @@ class SyncWorker(
 
         val result = runtime.run()
         val workerResult = when (result) {
-            BackgroundSyncRunResult.NothingToSync -> Result.success()
+            BackgroundSyncRunResult.NothingToSync -> {
+                com.example.data.localllm.DailyAssistantWorker.schedule(applicationContext)
+                Result.success()
+            }
 
             is BackgroundSyncRunResult.Applied -> {
                 runtime.recordMeaningfulResult(result.outcome.plan.toBackgroundSyncResult())
                 // A presentation refresh cannot turn an acknowledged queue delivery into a retry.
                 runCatching { runtime.refreshWidgets() }
+                com.example.data.localllm.DailyAssistantWorker.schedule(applicationContext)
                 Result.success()
             }
 

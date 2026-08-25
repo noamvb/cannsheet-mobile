@@ -61,6 +61,23 @@ object CannsheetFactsCalculator {
         if (!snapshot.dataQuality.complete) {
             warnings += "Data quality report indicates incomplete history"
         }
+        for (filter in query.filters) {
+            if (filter.field !in SUPPORTED_FILTERS) {
+                warnings += "UNSUPPORTED filter: ${filter.field}"
+            }
+        }
+        if (query.period != null) {
+            when (val period = query.period) {
+                is com.noamv.localllm.contract.v2.QueryPeriod.LastDays -> {
+                    if (period.days != snapshot.range.dayCount) {
+                        warnings += "Requested period LastDays(${period.days}) differs from cached snapshot range (${snapshot.range.dayCount} days)"
+                    }
+                }
+                else -> {
+                    warnings += "UNSUPPORTED period: $period (snapshot fixed to ${snapshot.range.from}..${snapshot.range.to})"
+                }
+            }
+        }
 
         val tz = snapshot.timeZone.ifBlank { "UTC" }
         val rev = snapshot.sourceRevision.dataVersion.ifBlank { "rev-${snapshot.range.from}-${snapshot.range.to}" }
