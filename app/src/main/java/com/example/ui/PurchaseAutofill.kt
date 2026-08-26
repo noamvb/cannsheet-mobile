@@ -23,6 +23,8 @@ object PurchaseContentTestTags {
     const val VALIDATION_ERROR = "purchase_validation_error"
     const val APPLIED_AUTOFILL = "purchase_applied_autofill"
     const val SCAN = "purchase_scan"
+    const val SCAN_ATTACHED = "purchase_scan_attached"
+    const val SCAN_DETACH = "purchase_scan_detach"
     const val THC_STALE = "purchase_thc_stale"
 
     fun suggestion(name: String): String = "purchase_suggestion_${name.normalizedPurchaseValue()}"

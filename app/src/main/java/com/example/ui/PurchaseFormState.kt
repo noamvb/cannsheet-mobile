@@ -42,6 +42,7 @@ data class PurchaseFormState(
 internal fun scanBatchChanged(scannedBatch: String?, rememberedBatch: String?): Boolean =
     scannedBatch != null && rememberedBatch != null && scannedBatch != rememberedBatch
 
+// The barcode belongs to the in-progress purchase, so it deliberately survives form edits.
 fun PurchaseFormState.clearedForNewSelection(): PurchaseFormState = copy(
     cost = "",
     thc = "",
@@ -52,14 +53,18 @@ fun PurchaseFormState.clearedForNewSelection(): PurchaseFormState = copy(
     appliedAutofillMessage = null,
     validationMessage = null,
     thcNeedsVerification = false,
-    pendingScanGtin = null,
-    pendingScanBatch = null,
 )
+
+// The user's explicit detach; unlike reset(), this leaves the rest of the form intact.
+fun PurchaseFormState.withoutPendingScan(): PurchaseFormState =
+    copy(pendingScanGtin = null, pendingScanBatch = null)
 
 fun PurchaseFormState.reset(): PurchaseFormState = copy(
     date = currentSubmissionDateTime().date,
     type = "",
     name = "",
+    pendingScanGtin = null,
+    pendingScanBatch = null,
 ).clearedForNewSelection()
 
 fun PurchaseFormState.withAutofillFor(

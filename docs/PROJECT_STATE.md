@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-26
 
-## Barcode purchase autofill (released v1.8.0, code 52)
+## Barcode purchase autofill (released v1.8.0, repaired in v1.8.1 code 53)
 
 Scanning the GS1 DataMatrix on a product label fills the Purchase form from the app's own
 record of that product. The feature is recognition, not extraction: a GTIN cannot say what
@@ -33,6 +33,21 @@ submit; every later scan of that product resolves exactly. See ADR-049.
 
 Deliberately excluded from this version: OCR of any kind, receipt scanning (`cost` stays
 manual), any LocalLLM involvement, any new purchase field, and any network lookup.
+
+**v1.8.1 repairs the learning path, which never worked in v1.8.0.**
+`clearedForNewSelection()` cleared the pending barcode, and selecting a Type calls it. A
+newly scanned product has nothing prefilled, so the user must select a Type - which erased
+the barcode before submission could learn it. Confirmed on device: a second scan of the
+same product still reported "New product". The barcode now survives every form edit and is
+dropped only by a successful submission or a reset, and a persistent line states that a
+barcode is attached, because the transient message disappeared on the first edit and left
+no indication.
+
+The unit test covering that transition asserted the broken behaviour, so it passed while
+the feature was dead. It was replaced with an assertion that fails when the defect is
+reintroduced, verified by reintroducing it. Instrumentation coverage was added that drives
+the real form: seed an attached barcode, select a Type through the UI, and assert the
+attached-barcode indicator renders.
 
 ## Assistant V2 Implementation & Rollout Status (100% Shipped & Verified)
 

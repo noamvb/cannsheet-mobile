@@ -7,6 +7,7 @@ import com.example.data.PurchaseDefaultsState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PurchaseFormStateTest {
@@ -108,21 +109,55 @@ class PurchaseFormStateTest {
     }
 
     @Test
-    fun `choosing a different product drops an abandoned barcode`() {
-        // Scanning and then abandoning must never link that barcode to whatever
-        // product is entered next.
+    fun `a scanned barcode survives choosing a type and is only dropped on reset`() {
         val scanned = populatedState().copy(
+            thcNeedsVerification = true,
             pendingScanGtin = "00840773004481",
             pendingScanBatch = "26070000162",
         )
 
         val afterNewSelection = scanned.clearedForNewSelection()
-        assertNull(afterNewSelection.pendingScanGtin)
-        assertNull(afterNewSelection.pendingScanBatch)
+        assertEquals("00840773004481", afterNewSelection.pendingScanGtin)
+        assertEquals("26070000162", afterNewSelection.pendingScanBatch)
+        assertEquals("", afterNewSelection.cost)
+        assertEquals("", afterNewSelection.thc)
+        assertEquals("", afterNewSelection.grams)
+        assertFalse(afterNewSelection.borrowed)
+        assertFalse(afterNewSelection.postTax)
+        assertFalse(afterNewSelection.saveAsDefault)
+        assertNull(afterNewSelection.appliedAutofillMessage)
+        assertNull(afterNewSelection.validationMessage)
+        assertFalse(afterNewSelection.thcNeedsVerification)
 
         val afterReset = scanned.reset()
         assertNull(afterReset.pendingScanGtin)
         assertNull(afterReset.pendingScanBatch)
+    }
+
+    @Test
+    fun `explicitly detaching a barcode leaves the rest of the form untouched`() {
+        val state = populatedState().copy(
+            thcNeedsVerification = true,
+            pendingScanGtin = "00840773004481",
+            pendingScanBatch = "26070000162",
+        )
+
+        val detached = state.withoutPendingScan()
+
+        assertNull(detached.pendingScanGtin)
+        assertNull(detached.pendingScanBatch)
+        assertEquals(state.date, detached.date)
+        assertEquals(state.type, detached.type)
+        assertEquals(state.name, detached.name)
+        assertEquals(state.cost, detached.cost)
+        assertEquals(state.thc, detached.thc)
+        assertEquals(state.grams, detached.grams)
+        assertTrue(detached.borrowed)
+        assertTrue(detached.postTax)
+        assertTrue(detached.saveAsDefault)
+        assertEquals(state.appliedAutofillMessage, detached.appliedAutofillMessage)
+        assertEquals(state.validationMessage, detached.validationMessage)
+        assertTrue(detached.thcNeedsVerification)
     }
 
     @Test
