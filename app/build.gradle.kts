@@ -85,6 +85,14 @@ android {
     // Generates the binder stubs for the LocalLLM inference service.
     aidl = true
   }
+  installation {
+    // The bundled ML Kit barcode model pushed the debug APK past 43 MB, and streaming
+    // that onto the API 24 CI emulator started intermittently exceeding ddmlib's default
+    // per-command timeout: connectedDebugAndroidTest failed twice in a row with
+    // ShellCommandUnresponsiveException during install-write, without running a test.
+    // Ten minutes is well inside the workflow's own 20-minute cap on the Gradle step.
+    timeOutInMs = 600_000
+  }
 }
 
 androidComponents {
