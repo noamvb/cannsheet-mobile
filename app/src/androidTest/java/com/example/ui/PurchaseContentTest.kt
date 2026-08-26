@@ -181,6 +181,49 @@ class PurchaseContentTest {
     }
 
     @Test
+    fun scannedBarcodeSurvivesChoosingATypeAndIsShownAsAttached() {
+        setPurchaseContent(
+            initialFormState = PurchaseFormState.initial().copy(
+                appliedAutofillMessage =
+                    "New product. Fill this in and the barcode will be remembered.",
+                pendingScanGtin = "00840773004481",
+                pendingScanBatch = "26070000162",
+            ),
+        )
+
+        selectType("F")
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SCAN_ATTACHED).assertIsDisplayed()
+    }
+
+    @Test
+    fun submittingClearsTheAttachedBarcode() {
+        var submission: PurchaseSubmission? = null
+
+        setPurchaseContent(
+            onQueuePurchase = { submission = it },
+            initialFormState = PurchaseFormState.initial().copy(
+                appliedAutofillMessage =
+                    "New product. Fill this in and the barcode will be remembered.",
+                pendingScanGtin = "00840773004481",
+                pendingScanBatch = "26070000162",
+            ),
+        )
+        selectType("F")
+        composeRule.onNodeWithTag(PurchaseContentTestTags.NAME).performTextInput("New Product")
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST).performTextInput("12.5")
+        composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).performTextInput("3.5")
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().performClick()
+
+        composeRule.runOnIdle {
+            assertEquals("F", submission?.type)
+            assertEquals("New Product", submission?.name)
+        }
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SCAN_ATTACHED).assertDoesNotExist()
+    }
+
+    @Test
     fun blankThcSubmitsImmutablePayloadAndImmediatelyResetsScrollableForm() {
         var submission: PurchaseSubmission? = null
 
@@ -244,10 +287,11 @@ class PurchaseContentTest {
         products: List<Product> = emptyList(),
         purchaseDefaultsState: PurchaseDefaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
         onQueuePurchase: (PurchaseSubmission) -> Unit = {},
+        initialFormState: PurchaseFormState = PurchaseFormState.initial(),
     ) {
         composeRule.setContent {
             MaterialTheme {
-                var formState by remember { mutableStateOf(PurchaseFormState.initial()) }
+                var formState by remember { mutableStateOf(initialFormState) }
                 PurchaseContent(
                     products = products,
                     purchaseDefaultsState = purchaseDefaultsState,
