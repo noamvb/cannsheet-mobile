@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -26,6 +27,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -49,9 +51,13 @@ import com.example.data.PurchaseDefaultsState
 import com.example.data.PurchaseSubmission
 
 @Composable
-fun PurchaseScreen(viewModel: CannsheetViewModel) {
+fun PurchaseScreen(
+    viewModel: CannsheetViewModel,
+    onScanRequested: (() -> Unit)? = null,
+) {
     val products by viewModel.allProducts.collectAsState()
     val purchaseDefaultsState by viewModel.purchaseDefaultsState.collectAsState()
+    val formState by viewModel.purchaseFormState.collectAsState()
     val purchaseFeedback by viewModel.purchaseFeedback.collectAsState()
     val context = LocalContext.current
 
@@ -65,7 +71,10 @@ fun PurchaseScreen(viewModel: CannsheetViewModel) {
     PurchaseContent(
         products = products,
         purchaseDefaultsState = purchaseDefaultsState,
+        formState = formState,
+        onFormChange = viewModel::updatePurchaseForm,
         onQueuePurchase = { submission -> viewModel.queuePurchase(submission) },
+        onScanRequested = onScanRequested,
     )
 }
 
@@ -74,57 +83,32 @@ fun PurchaseScreen(viewModel: CannsheetViewModel) {
 fun PurchaseContent(
     products: List<Product>,
     purchaseDefaultsState: PurchaseDefaultsState,
+    formState: PurchaseFormState,
+    onFormChange: (PurchaseFormState) -> Unit,
     onQueuePurchase: (PurchaseSubmission) -> Unit,
     modifier: Modifier = Modifier,
+    onScanRequested: (() -> Unit)? = null,
 ) {
-    val initialDate = remember { currentSubmissionDateTime().date }
-    var date by remember { mutableStateOf(initialDate) }
     var showDatePicker by remember { mutableStateOf(false) }
-    var type by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var cost by remember { mutableStateOf("") }
-    var thc by remember { mutableStateOf("") }
-    var grams by remember { mutableStateOf("") }
-    var borrowed by remember { mutableStateOf(false) }
-    var postTax by remember { mutableStateOf(false) }
-    var saveAsDefault by remember { mutableStateOf(false) }
     var typeExpanded by remember { mutableStateOf(false) }
     var nameExpanded by remember { mutableStateOf(false) }
-    var appliedAutofillMessage by remember { mutableStateOf<String?>(null) }
-    var validationMessage by remember { mutableStateOf<String?>(null) }
 
     val categories = ProductTypes.CODES
-    val suggestions = remember(products, purchaseDefaultsState, type, name) {
+    val suggestions = remember(products, purchaseDefaultsState, formState.type, formState.name) {
         if (purchaseDefaultsState is PurchaseDefaultsState.Loaded) {
-            purchaseSuggestions(products = products, selectedType = type, query = name)
+            purchaseSuggestions(
+                products = products,
+                selectedType = formState.type,
+                query = formState.name,
+            )
         } else {
             emptyList()
         }
     }
 
-    fun clearValuesForNewSelection() {
-        cost = ""
-        thc = ""
-        grams = ""
-        borrowed = false
-        postTax = false
-        saveAsDefault = false
-        appliedAutofillMessage = null
-        validationMessage = null
-    }
-
-    fun resetForm() {
-        date = initialDate
-        type = ""
-        name = ""
-        clearValuesForNewSelection()
-        typeExpanded = false
-        nameExpanded = false
-    }
-
     if (showDatePicker) {
-        val initialMillis = remember(date) {
-            parsePickerDateToMillis(date) ?: currentLocalDateAsPickerMillis()
+        val initialMillis = remember(formState.date) {
+            parsePickerDateToMillis(formState.date) ?: currentLocalDateAsPickerMillis()
         }
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
         DatePickerDialog(
@@ -132,7 +116,9 @@ fun PurchaseContent(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        datePickerState.selectedDateMillis?.let { date = pickerDateToWire(it) }
+                        datePickerState.selectedDateMillis?.let { selectedDateMillis ->
+                            onFormChange(formState.copy(date = pickerDateToWire(selectedDateMillis)))
+                        }
                         showDatePicker = false
                     },
                 ) { Text("OK") }
@@ -155,8 +141,25 @@ fun PurchaseContent(
         Text("Add Purchase", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(16.dp))
 
+        if (onScanRequested != null) {
+            OutlinedButton(
+                onClick = onScanRequested,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(PurchaseContentTestTags.SCAN),
+            ) {
+                Icon(
+                    Icons.Default.QrCodeScanner,
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
+                Text("Scan product barcode")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         OutlinedTextField(
-            value = date,
+            value = formState.date,
             onValueChange = {},
             readOnly = true,
             label = { Text("Date") },
@@ -176,7 +179,7 @@ fun PurchaseContent(
             onExpandedChange = { typeExpanded = !typeExpanded },
         ) {
             OutlinedTextField(
-                value = type.ifEmpty { "Select Type" },
+                value = formState.type.ifEmpty { "Select Type" },
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Type") },
@@ -198,10 +201,11 @@ fun PurchaseContent(
                         text = { Text(category) },
                         modifier = Modifier.testTag(PurchaseContentTestTags.typeOption(category)),
                         onClick = {
-                            if (type != category) {
-                                type = category
-                                name = ""
-                                clearValuesForNewSelection()
+                            if (formState.type != category) {
+                                onFormChange(
+                                    formState.copy(type = category, name = "")
+                                        .clearedForNewSelection(),
+                                )
                                 nameExpanded = false
                             }
                             typeExpanded = false
@@ -213,20 +217,24 @@ fun PurchaseContent(
 
         Spacer(modifier = Modifier.height(8.dp))
         ExposedDropdownMenuBox(
-            expanded = nameExpanded && type.isNotBlank() && suggestions.isNotEmpty(),
+            expanded = nameExpanded && formState.type.isNotBlank() && suggestions.isNotEmpty(),
             onExpandedChange = { expanded ->
-                nameExpanded = expanded && type.isNotBlank()
+                nameExpanded = expanded && formState.type.isNotBlank()
             },
         ) {
             OutlinedTextField(
-                value = name,
+                value = formState.name,
                 onValueChange = {
-                    name = it
-                    appliedAutofillMessage = null
-                    validationMessage = null
-                    nameExpanded = type.isNotBlank()
+                    onFormChange(
+                        formState.copy(
+                            name = it,
+                            appliedAutofillMessage = null,
+                            validationMessage = null,
+                        ),
+                    )
+                    nameExpanded = formState.type.isNotBlank()
                 },
-                enabled = type.isNotBlank(),
+                enabled = formState.type.isNotBlank(),
                 label = { Text("Product Name") },
                 modifier = Modifier
                     .menuAnchor()
@@ -234,13 +242,13 @@ fun PurchaseContent(
                     .testTag(PurchaseContentTestTags.NAME),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(
-                        expanded = nameExpanded && type.isNotBlank(),
+                        expanded = nameExpanded && formState.type.isNotBlank(),
                     )
                 },
                 colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             )
             ExposedDropdownMenu(
-                expanded = nameExpanded && type.isNotBlank() && suggestions.isNotEmpty(),
+                expanded = nameExpanded && formState.type.isNotBlank() && suggestions.isNotEmpty(),
                 onDismissRequest = { nameExpanded = false },
                 modifier = Modifier.testTag(PurchaseContentTestTags.SUGGESTIONS),
             ) {
@@ -249,29 +257,7 @@ fun PurchaseContent(
                         text = { Text(product.name) },
                         modifier = Modifier.testTag(PurchaseContentTestTags.suggestion(product.name)),
                         onClick = {
-                            name = product.name
-                            clearValuesForNewSelection()
-                            val savedDefault = matchingSavedDefault(
-                                defaultsState = purchaseDefaultsState,
-                                type = type,
-                                name = product.name,
-                            )
-                            if (savedDefault != null) {
-                                cost = canonicalPurchaseNumber(savedDefault.cost)
-                                thc = canonicalPurchaseNumber(savedDefault.thc * 100.0)
-                                grams = canonicalPurchaseNumber(savedDefault.grams)
-                                appliedAutofillMessage = "Saved defaults applied."
-                            } else {
-                                cost = product.cost.takeIf { it.isFinite() && it > 0.0 }
-                                    ?.let(::canonicalPurchaseNumber)
-                                    .orEmpty()
-                                thc = catalogThcPercent(product.thc)
-                                    ?.let(::canonicalPurchaseNumber)
-                                    .orEmpty()
-                                grams = product.grams.takeIf { it.isFinite() && it > 0.0 }
-                                    ?.let(::canonicalPurchaseNumber)
-                                    .orEmpty()
-                            }
+                            onFormChange(formState.withAutofillFor(product, purchaseDefaultsState))
                             nameExpanded = false
                         },
                     )
@@ -279,7 +265,7 @@ fun PurchaseContent(
             }
         }
 
-        appliedAutofillMessage?.let { message ->
+        formState.appliedAutofillMessage?.let { message ->
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = message,
@@ -294,30 +280,45 @@ fun PurchaseContent(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             OutlinedTextField(
-                value = cost,
+                value = formState.cost,
                 onValueChange = {
-                    cost = it
-                    validationMessage = null
+                    onFormChange(formState.copy(cost = it, validationMessage = null))
                 },
                 label = { Text("Pre-tax Cost") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = validationMessage != null && !isNonNegativeFinite(cost),
+                isError = formState.validationMessage != null &&
+                    !isNonNegativeFinite(formState.cost),
                 modifier = Modifier
                     .weight(1f)
                     .testTag(PurchaseContentTestTags.COST),
             )
             OutlinedTextField(
-                value = thc,
+                value = formState.thc,
                 onValueChange = {
-                    thc = it
-                    validationMessage = null
+                    onFormChange(
+                        formState.copy(
+                            thc = it,
+                            validationMessage = null,
+                            thcNeedsVerification = false,
+                        ),
+                    )
                 },
                 label = { Text("THC") },
+                supportingText = if (formState.thcNeedsVerification) {
+                    {
+                        Text(
+                            text = "New batch, check this",
+                            modifier = Modifier.testTag(PurchaseContentTestTags.THC_STALE),
+                        )
+                    }
+                } else {
+                    null
+                },
                 trailingIcon = { Text("%", modifier = Modifier.padding(end = 12.dp)) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                isError = validationMessage != null && !isValidThcPercent(
-                    value = thc,
-                    requiresExplicitValue = saveAsDefault,
+                isError = formState.validationMessage != null && !isValidThcPercent(
+                    value = formState.thc,
+                    requiresExplicitValue = formState.saveAsDefault,
                 ),
                 modifier = Modifier
                     .weight(1f)
@@ -327,14 +328,13 @@ fun PurchaseContent(
 
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
-            value = grams,
+            value = formState.grams,
             onValueChange = {
-                grams = it
-                validationMessage = null
+                onFormChange(formState.copy(grams = it, validationMessage = null))
             },
             label = { Text("Grams") },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            isError = validationMessage != null && !isPositiveFinite(grams),
+            isError = formState.validationMessage != null && !isPositiveFinite(formState.grams),
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(PurchaseContentTestTags.GRAMS),
@@ -348,10 +348,9 @@ fun PurchaseContent(
         ) {
             Text("Borrowed")
             Switch(
-                checked = borrowed,
+                checked = formState.borrowed,
                 onCheckedChange = {
-                    borrowed = it
-                    validationMessage = null
+                    onFormChange(formState.copy(borrowed = it, validationMessage = null))
                 },
                 modifier = Modifier.testTag(PurchaseContentTestTags.BORROWED),
             )
@@ -363,10 +362,9 @@ fun PurchaseContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Checkbox(
-                checked = postTax,
+                checked = formState.postTax,
                 onCheckedChange = {
-                    postTax = it
-                    validationMessage = null
+                    onFormChange(formState.copy(postTax = it, validationMessage = null))
                 },
                 modifier = Modifier.testTag(PurchaseContentTestTags.POST_TAX),
             )
@@ -385,16 +383,15 @@ fun PurchaseContent(
                 modifier = Modifier.weight(1f),
             )
             Switch(
-                checked = saveAsDefault,
+                checked = formState.saveAsDefault,
                 onCheckedChange = {
-                    saveAsDefault = it
-                    validationMessage = null
+                    onFormChange(formState.copy(saveAsDefault = it, validationMessage = null))
                 },
                 modifier = Modifier.testTag(PurchaseContentTestTags.SAVE_AS_DEFAULT),
             )
         }
 
-        validationMessage?.let { message ->
+        formState.validationMessage?.let { message ->
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = message,
@@ -406,44 +403,50 @@ fun PurchaseContent(
         Spacer(modifier = Modifier.height(32.dp))
         Button(
             onClick = {
-                val costValue = cost.toDoubleOrNull()
-                val thcPercent = thc.toDoubleOrNull()
-                val gramsValue = grams.toDoubleOrNull()
+                val costValue = formState.cost.toDoubleOrNull()
+                val thcPercent = formState.thc.toDoubleOrNull()
+                val gramsValue = formState.grams.toDoubleOrNull()
                 val hasOrdinaryRequiredFields =
-                    type.isNotBlank() &&
-                        name.isNotBlank() &&
-                        cost.isNotBlank() &&
-                        grams.isNotBlank()
+                    formState.type.isNotBlank() &&
+                        formState.name.isNotBlank() &&
+                        formState.cost.isNotBlank() &&
+                        formState.grams.isNotBlank()
                 val hasValidSavedDefaultValues =
                     costValue != null && costValue.isFinite() && costValue >= 0.0 &&
-                        isValidThcPercent(thc, requiresExplicitValue = true) &&
+                        isValidThcPercent(formState.thc, requiresExplicitValue = true) &&
                         gramsValue != null && gramsValue.isFinite() && gramsValue > 0.0
                 val valid =
-                    type.isNotBlank() &&
-                        name.isNotBlank() &&
-                        if (saveAsDefault) {
+                    formState.type.isNotBlank() &&
+                        formState.name.isNotBlank() &&
+                        if (formState.saveAsDefault) {
                             hasValidSavedDefaultValues
                         } else {
                             hasOrdinaryRequiredFields
                         }
                 if (!valid) {
-                    validationMessage =
-                        "Choose a type and name, then enter a non-negative cost and positive grams. THC must be between 0 and 100%; saving a default requires THC to be entered."
+                    onFormChange(
+                        formState.copy(
+                            validationMessage =
+                                "Choose a type and name, then enter a non-negative cost and positive grams. THC must be between 0 and 100%; saving a default requires THC to be entered.",
+                        ),
+                    )
                 } else {
                     onQueuePurchase(
                         PurchaseSubmission(
-                            date = date,
-                            type = type.trim(),
-                            name = name.trim(),
+                            date = formState.date,
+                            type = formState.type.trim(),
+                            name = formState.name.trim(),
                             cost = costValue ?: 0.0,
                             thc = (thcPercent ?: 0.0) / 100.0,
                             grams = gramsValue ?: 0.0,
-                            borrowed = borrowed,
-                            postTax = postTax,
-                            saveAsDefault = saveAsDefault,
+                            borrowed = formState.borrowed,
+                            postTax = formState.postTax,
+                            saveAsDefault = formState.saveAsDefault,
                         ),
                     )
-                    resetForm()
+                    onFormChange(formState.reset())
+                    typeExpanded = false
+                    nameExpanded = false
                 }
             },
             modifier = Modifier

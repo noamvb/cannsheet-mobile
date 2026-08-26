@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.BackgroundSyncEvent
 import com.example.data.CannsheetGraph
+import com.example.data.barcode.Gs1ScanResult
 import com.example.data.ConsumptionCorrectionOperation
 import com.example.data.ConsumptionAction
 import com.example.data.ConsumptionPreferencesRepository
@@ -277,6 +278,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private val _submissionTimer = MutableStateFlow(5)
     val submissionTimer: StateFlow<Int> = _submissionTimer
 
+    private val _purchaseFormState = MutableStateFlow(PurchaseFormState.initial())
+    val purchaseFormState: StateFlow<PurchaseFormState> = _purchaseFormState
+
     private val _pendingCountdown = MutableStateFlow(0)
     val pendingCountdown: StateFlow<Int> = _pendingCountdown
 
@@ -310,6 +314,58 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setSubmissionTimer(seconds: Int) {
         _submissionTimer.value = seconds.coerceIn(0, 5)
+    }
+
+    fun updatePurchaseForm(state: PurchaseFormState) {
+        _purchaseFormState.value = state
+    }
+
+    /**
+     * Seeds the Purchase form from a scanned product barcode.
+     *
+     * A GTIN cannot say what a product is, so a first sighting fills nothing and is
+     * learned on submit instead. A GTIN seen before resolves through exactly the same
+     * autofill path a tapped suggestion uses, so the two entry points cannot drift.
+     */
+    fun applyScanResult(result: Gs1ScanResult) {
+        viewModelScope.launch {
+            val link = repository.scannedProductLink(result.gtin)
+            if (link == null) {
+                _purchaseFormState.value = _purchaseFormState.value.copy(
+                    appliedAutofillMessage = NEW_PRODUCT_SCAN_MESSAGE,
+                    pendingScanGtin = result.gtin,
+                    pendingScanBatch = result.batch,
+                )
+                return@launch
+            }
+
+            // A different lot means the remembered potency is stale. Cost, name and
+            // grams do not vary by batch, so only THC is flagged.
+            val batchChanged = scanBatchChanged(result.batch, link.lastBatch)
+
+            val typed = _purchaseFormState.value.copy(type = link.type)
+            val catalogProduct = allProducts.value.firstOrNull { product ->
+                product.name.equals(link.name, ignoreCase = true) &&
+                    product.type.equals(link.type, ignoreCase = true)
+            }
+            val filled = if (catalogProduct != null) {
+                typed.withAutofillFor(catalogProduct, purchaseDefaultsState.value)
+            } else {
+                typed.copy(name = link.name).clearedForNewSelection()
+            }
+
+            _purchaseFormState.value = filled.copy(
+                appliedAutofillMessage = if (batchChanged) {
+                    RECOGNISED_NEW_BATCH_SCAN_MESSAGE
+                } else {
+                    RECOGNISED_SCAN_MESSAGE
+                },
+                thcNeedsVerification = batchChanged,
+                // Set last: withAutofillFor clears these via clearedForNewSelection.
+                pendingScanGtin = result.gtin,
+                pendingScanBatch = result.batch,
+            )
+        }
     }
 
     suspend fun updateQuantityPresets(presets: List<Double>): Result<Unit> =
@@ -445,8 +501,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun queuePurchase(submission: PurchaseSubmission) {
+        // Read before the form resets: the UI clears it immediately, while the actual
+        // write happens after the five-second countdown.
+        val form = _purchaseFormState.value
+        val scanGtin = form.pendingScanGtin
+        val scanBatch = form.pendingScanBatch
         queueSubmission {
-            submitPurchase(submission)
+            submitPurchase(submission, scanGtin, scanBatch)
         }
     }
 
@@ -581,7 +642,28 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    private fun submitPurchase(submission: PurchaseSubmission) {
+    private suspend fun rememberPendingScan(
+        submission: PurchaseSubmission,
+        scanGtin: String?,
+        scanBatch: String?,
+    ) {
+        if (scanGtin == null) return
+        runCatching {
+            repository.rememberScannedProduct(
+                gtin = scanGtin,
+                name = submission.name,
+                type = submission.type,
+                batch = scanBatch,
+                nowEpochMillis = System.currentTimeMillis(),
+            )
+        }
+    }
+
+    private fun submitPurchase(
+        submission: PurchaseSubmission,
+        scanGtin: String? = null,
+        scanBatch: String? = null,
+    ) {
         viewModelScope.launch {
             val action = PurchaseAction(
                 tempId = "temp_${UUID.randomUUID()}",
@@ -624,6 +706,9 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                     _syncStatus.value = "Purchase saved offline"
                 }
             }
+            // Only reached when the purchase itself persisted, so the barcode is learned
+            // against a product that really exists. Never blocks or fails the purchase.
+            rememberPendingScan(submission, scanGtin, scanBatch)
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
         }
@@ -988,6 +1073,11 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     private companion object {
         const val RECENT_PRODUCT_LIMIT = 6
+        const val RECOGNISED_SCAN_MESSAGE = "Recognised from barcode."
+        const val RECOGNISED_NEW_BATCH_SCAN_MESSAGE =
+            "Recognised from barcode. New batch, so check the THC."
+        const val NEW_PRODUCT_SCAN_MESSAGE =
+            "New product. Fill this in and the barcode will be remembered."
     }
 }
 
