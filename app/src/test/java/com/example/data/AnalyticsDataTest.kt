@@ -568,6 +568,9 @@ private class FakeCannsheetDao : CannsheetDao {
     override suspend fun insertProducts(products: List<Product>) = Unit
     override suspend fun deleteAllProducts() = Unit
     override suspend fun deleteProduct(productId: String) = Unit
+    override suspend fun getScannedProductLink(gtin: String): ScannedProductLink? = null
+    override suspend fun upsertScannedProductLink(link: ScannedProductLink) = Unit
+    override suspend fun getScannedProductLinkCount(): Int = 0
     override suspend fun insertPurchase(action: PurchaseAction) = Unit
     override suspend fun getPendingPurchases(): List<PurchaseAction> = emptyList()
     override suspend fun deletePurchasesByActionIds(actionIds: List<String>) = Unit

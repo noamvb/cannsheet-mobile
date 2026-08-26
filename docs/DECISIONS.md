@@ -2040,3 +2040,75 @@ permanently dead chain.
 - Rationale: Ensures 100% on-device data privacy, prevents hallucinated statistical claims, respects mobile memory constraints, and provides a conversational interface for personal health and consumption tracking.
 - Consequences: Assistant V2 tabs and background workers are fully integrated into Cannsheet Mobile and Poop Schedule; LocalLLM serves as the central on-device model and history platform.
 - Related files: \`LocalLLM\`, \`cannsheet-mobile\`, \`poop-schedule\`, \`docs/PROJECT_STATE.md\`, \`docs/HANDOFF.md\`
+
+## ADR-049: Recognise products by GS1 barcode rather than reading labels with OCR or a model
+
+- Status: Accepted; implemented and released in 1.8.0 (code 52)
+- Date: 2026-08-26
+- Context: Adding a purchase means filling eight controls by hand. The owner
+  asked whether OCR or the on-device LocalLLM could scan the product and the
+  receipt with the camera and autofill as much as possible. Three findings
+  reshaped the question. First, the square code on the product label is a GS1
+  DataMatrix: a real capture decodes to
+  `(01)00840773004481(13)260708(10)26070000162`, giving a GTIN-14, a packaging
+  date, and a batch. The GTIN is a permanent identifier for that SKU. Second,
+  the receipt is the weaker target for this schema: its only unique
+  contribution is `cost`, because dispensary, tax and total have nowhere to be
+  stored, the item name is truncated, and potency is never printed. Third, the
+  app already has an autofill engine in `purchaseSuggestions` plus the saved
+  per-`(name, type)` defaults, which fills cost, THC and grams whenever a
+  suggestion is tapped.
+- Decision:
+  1. Treat the feature as recognition, not extraction. A barcode cannot say what
+     a product is, but it can be remembered. An unrecognised GTIN is filled in
+     by hand as before and the mapping is learned on submit; every later scan of
+     that product resolves exactly, with no inference.
+  2. Store the mapping in a local-only Room table `scanned_product_links`
+     keyed by GTIN, holding identity only - name, type, last batch, last seen,
+     times seen. Cost, THC and grams are deliberately absent because they
+     already live in `PurchaseDefaultsRepository` and the catalog `products`
+     row; a second copy would diverge. The table is never synced, never added to
+     a wire model, and never written to the spreadsheet.
+  3. Drive the existing autofill path from the barcode rather than adding a
+     second one. A recognised GTIN sets type and name, then calls the same
+     function a suggestion tap calls, so the two entry points cannot drift.
+  4. Normalise every GTIN to fourteen digits and validate the mod-10 check
+     digit. A UPC-A or EAN-13 read from the package's linear barcode must map to
+     the same key as the DataMatrix, because the value is a primary key and two
+     spellings of one product would otherwise create two rows. A failed check
+     digit is rejected rather than stored.
+  5. Flag potency, and only potency, when the batch changes. GS1 AI (10) tells
+     us the lot differs from the one last seen, so the remembered THC is stale.
+     Cost, name and grams do not vary by batch and are filled silently.
+  6. Exclude LocalLLM. Both AIDL contracts carry JSON strings capped at 32 KB
+     with no image field, structured output is refused outright
+     (`resultSchema` returns `INVALID_REQUEST`), initialisation costs about four
+     seconds and two gigabytes, and the stated premise of the platform is that
+     clients send facts and the model writes sentences. A photo-to-structured-
+     data path inverts that premise.
+  7. Exclude OCR from this version. Barcode recognition is smaller, exact, and
+     measures how often an unrecognised product is actually scanned - the number
+     that decides whether OCR is worth building at all.
+  8. Analyse camera frames in memory and never store them. No image, GTIN or
+     batch is transmitted; there is no external product lookup. A GS1 lookup
+     service would disclose a record of every cannabis product purchased.
+- Rationale: Recognition is exact where extraction is probabilistic, and it
+  reuses machinery that already exists and is already trusted. Reported repeat
+  purchase rate is roughly half, so the learning table pays off immediately and
+  improves as it grows. Bundled ML Kit keeps scanning working on a device with
+  no Google Play Services, matching how this app is distributed.
+- Consequences: A Room migration to version 12 is required, local only, with no
+  change to the sync contract, the wire models, or `CANN.PURCHASE_HEADERS`. The
+  Purchase form's state had to be hoisted out of the composable first, because
+  the scanner is a separate navigation destination whose entry disposes
+  `PurchaseContent`; that also fixes the form silently losing typed values on
+  rotation and process death. The app now requests `CAMERA`, declared with
+  `required="false"` so it stays installable on a device without one, and
+  degrades to manual entry when the permission is refused. First contact with a
+  new product is no faster than before; only repeat purchases benefit.
+- Related files: `app/src/main/java/com/example/data/barcode/Gs1Barcode.kt`,
+  `app/src/main/java/com/example/data/Database.kt`,
+  `app/src/main/java/com/example/ui/PurchaseFormState.kt`,
+  `app/src/main/java/com/example/ui/PurchaseScreen.kt`,
+  `app/src/main/java/com/example/ui/scan/BarcodeScanScreen.kt`,
+  `gradle/libs.versions.toml`, `app/src/main/AndroidManifest.xml`

@@ -36,8 +36,8 @@ android {
     applicationId = "com.noamv.cannsheet.mobile"
     minSdk = 24
     targetSdk = 36
-    versionCode = 51
-    versionName = "1.7.3"
+    versionCode = 52
+    versionName = "1.8.0"
 
     buildConfigField("String", "GAS_URL", buildConfigString(productionGasUrl))
     buildConfigField("String", "APP_ENVIRONMENT", buildConfigString("PRODUCTION"))
@@ -85,6 +85,14 @@ android {
     // Generates the binder stubs for the LocalLLM inference service.
     aidl = true
   }
+  installation {
+    // The bundled ML Kit barcode model pushed the debug APK past 43 MB, and streaming
+    // that onto the API 24 CI emulator started intermittently exceeding ddmlib's default
+    // per-command timeout: connectedDebugAndroidTest failed twice in a row with
+    // ShellCommandUnresponsiveException during install-write, without running a test.
+    // Ten minutes is well inside the workflow's own 20-minute cap on the Gradle step.
+    timeOutInMs = 600_000
+  }
 }
 
 androidComponents {
@@ -114,6 +122,10 @@ tasks.matching { it.name == "preSandboxBuild" }.configureEach {
 dependencies {
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
+  implementation(libs.androidx.camera.camera2)
+  implementation(libs.androidx.camera.core)
+  implementation(libs.androidx.camera.lifecycle)
+  implementation(libs.androidx.camera.view)
   implementation(libs.androidx.compose.material.icons.core)
   implementation(libs.androidx.compose.material.icons.extended)
   implementation(libs.androidx.compose.material3)
@@ -134,6 +146,7 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.logging.interceptor)
+  implementation(libs.mlkit.barcode.scanning)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.retrofit)

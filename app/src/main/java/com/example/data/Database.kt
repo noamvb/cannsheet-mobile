@@ -30,6 +30,16 @@ data class Product(
     val totalUses: Double? = null,
 )
 
+@Entity(tableName = "scanned_product_links")
+data class ScannedProductLink(
+    @PrimaryKey val gtin: String,
+    val name: String,
+    val type: String,
+    val lastBatch: String?,
+    val lastSeenAtEpochMillis: Long,
+    val timesSeen: Int,
+)
+
 @Entity(
     tableName = "purchase_actions",
     indices = [Index(value = ["actionId"], unique = true)],
@@ -168,6 +178,15 @@ interface CannsheetDao {
 
     @Query("DELETE FROM products WHERE id = :productId")
     suspend fun deleteProduct(productId: String)
+
+    @Query("SELECT * FROM scanned_product_links WHERE gtin = :gtin LIMIT 1")
+    suspend fun getScannedProductLink(gtin: String): ScannedProductLink?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertScannedProductLink(link: ScannedProductLink)
+
+    @Query("SELECT COUNT(*) FROM scanned_product_links")
+    suspend fun getScannedProductLinkCount(): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPurchase(action: PurchaseAction)
@@ -409,8 +428,9 @@ interface CannsheetDao {
         ProductInteraction::class,
         SyncRequestState::class,
         AnalyticsCacheEntity::class,
+        ScannedProductLink::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = false,
 )
 @TypeConverters(CannsheetTypeConverters::class)
@@ -652,6 +672,24 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_consumption_history_loggedAtEpochMillis` " +
                         "ON `consumption_history` (`loggedAtEpochMillis`)",
+                )
+            }
+        }
+
+        val MIGRATION_11_12: Migration = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `scanned_product_links` (
+                        `gtin` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `type` TEXT NOT NULL,
+                        `lastBatch` TEXT,
+                        `lastSeenAtEpochMillis` INTEGER NOT NULL,
+                        `timesSeen` INTEGER NOT NULL,
+                        PRIMARY KEY(`gtin`)
+                    )
+                    """.trimIndent(),
                 )
             }
         }

@@ -1,6 +1,10 @@
 package com.example.ui
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -243,9 +247,12 @@ class PurchaseContentTest {
     ) {
         composeRule.setContent {
             MaterialTheme {
+                var formState by remember { mutableStateOf(PurchaseFormState.initial()) }
                 PurchaseContent(
                     products = products,
                     purchaseDefaultsState = purchaseDefaultsState,
+                    formState = formState,
+                    onFormChange = { formState = it },
                     onQueuePurchase = onQueuePurchase,
                 )
             }

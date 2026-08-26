@@ -33,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.ui.assistant.AssistantScreen
+import com.example.ui.scan.BarcodeScanScreen
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.emptyFlow
@@ -46,6 +47,9 @@ sealed class Screen(val route: String, val title: String, val icon: @Composable 
 }
 
 val items = listOf(Screen.Consumption, Screen.Purchase, Screen.Insights, Screen.Assistant, Screen.Settings)
+
+/** Not a tab: reached from the Purchase form and popped back on result or cancel. */
+internal const val BARCODE_SCAN_ROUTE = "purchase/scan"
 
 internal object AdaptiveNavigationTestTags {
     const val BOTTOM_BAR = "adaptive-navigation-bottom-bar"
@@ -98,7 +102,21 @@ fun CannsheetApp(
                 composable(Screen.Consumption.route) {
                     ConsumptionScreen(viewModel, openCartPickerRequests)
                 }
-                composable(Screen.Purchase.route) { PurchaseScreen(viewModel) }
+                composable(Screen.Purchase.route) {
+                    PurchaseScreen(
+                        viewModel = viewModel,
+                        onScanRequested = { navController.navigate(BARCODE_SCAN_ROUTE) },
+                    )
+                }
+                composable(BARCODE_SCAN_ROUTE) {
+                    BarcodeScanScreen(
+                        onScanned = { result ->
+                            viewModel.applyScanResult(result)
+                            navController.popBackStack()
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                }
                 composable(Screen.Insights.route) {
                     InsightsScreen(viewModel, windowWidth = windowWidth)
                 }

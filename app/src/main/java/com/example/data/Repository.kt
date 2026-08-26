@@ -56,6 +56,30 @@ class CannsheetRepository(
         }
     }
 
+    suspend fun scannedProductLink(gtin: String): ScannedProductLink? =
+        dao.getScannedProductLink(gtin)
+
+    suspend fun rememberScannedProduct(
+        gtin: String,
+        name: String,
+        type: String,
+        batch: String?,
+        nowEpochMillis: Long,
+    ) {
+        database.withTransaction {
+            dao.upsertScannedProductLink(
+                nextScannedProductLink(
+                    existing = dao.getScannedProductLink(gtin),
+                    gtin = gtin,
+                    name = name,
+                    type = type,
+                    batch = batch,
+                    nowEpochMillis = nowEpochMillis,
+                ),
+            )
+        }
+    }
+
     override suspend fun addConsumption(
         action: ConsumptionAction,
         loggedAtEpochMillis: Long,
@@ -200,6 +224,22 @@ class CannsheetRepository(
         }
     }
 }
+
+internal fun nextScannedProductLink(
+    existing: ScannedProductLink?,
+    gtin: String,
+    name: String,
+    type: String,
+    batch: String?,
+    nowEpochMillis: Long,
+): ScannedProductLink = ScannedProductLink(
+    gtin = gtin,
+    name = name,
+    type = type,
+    lastBatch = batch,
+    lastSeenAtEpochMillis = nowEpochMillis,
+    timesSeen = (existing?.timesSeen ?: 0) + 1,
+)
 
 fun PendingConsumptionCorrection.toSyncConsumptionCorrection(): SyncConsumptionCorrection {
     requireValid()

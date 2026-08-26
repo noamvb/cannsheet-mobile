@@ -9,6 +9,10 @@
     <uses-feature
         android:name="android.hardware.nfc"
         android:required="false" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
     <!--
       Lets this app ask the LocalLLM app to write a summary of analytics this app has
       already received. The permission is signature|knownSigner and is granted because this

@@ -1,6 +1,38 @@
 # Project state
 
-Last updated: 2026-08-24
+Last updated: 2026-08-26
+
+## Barcode purchase autofill (released v1.8.0, code 52)
+
+Scanning the GS1 DataMatrix on a product label fills the Purchase form from the app's own
+record of that product. The feature is recognition, not extraction: a GTIN cannot say what
+a product is, so a first sighting is typed in as before and the mapping is learned on
+submit; every later scan of that product resolves exactly. See ADR-049.
+
+- `app/src/main/java/com/example/data/barcode/Gs1Barcode.kt` parses parenthesised,
+  GS-separated and bare-concatenated GS1 element strings, plus bare UPC-A and EAN-13, into
+  a normalised 14-digit GTIN with a validated mod-10 check digit, batch/lot (AI 10) and
+  packaging date (AI 13, pinned to `Locale.US`). 19 unit tests.
+- `scanned_product_links` (Room migration 11 -> 12) maps a GTIN to a product identity -
+  name, type, last batch, last seen, times seen. Identity only: cost, THC and grams stay in
+  `PurchaseDefaultsRepository` and the catalog `products` row so the two cannot diverge.
+  Local only - not referenced by `SyncEngine`, no wire model, no spreadsheet column.
+- A recognised GTIN drives the existing autofill path through
+  `PurchaseFormState.withAutofillFor`, the same function a tapped suggestion uses.
+- A changed lot flags THC, and only THC, as needing verification. `scanBatchChanged`
+  treats an absent batch on either side as "not changed" so a label without one never
+  flags potency.
+- `app/src/main/java/com/example/ui/scan/BarcodeScanScreen.kt` uses CameraX with bundled
+  `com.google.mlkit:barcode-scanning` (works without Google Play Services), restricted to
+  `FORMAT_DATA_MATRIX`, `FORMAT_UPC_A` and `FORMAT_EAN_13`. Frames are analysed in memory
+  and never stored; no GTIN is transmitted and there is no external product lookup.
+- Purchase form state is hoisted from `PurchaseContent` into `CannsheetViewModel`
+  (`PurchaseFormState`). This was a prerequisite - the scanner is a separate navigation
+  destination whose entry disposes the composable - and it also fixes the form losing typed
+  values on rotation and process death.
+
+Deliberately excluded from this version: OCR of any kind, receipt scanning (`cost` stays
+manual), any LocalLLM involvement, any new purchase field, and any network lookup.
 
 ## Assistant V2 Implementation & Rollout Status (100% Shipped & Verified)
 
