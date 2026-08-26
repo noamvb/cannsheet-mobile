@@ -274,6 +274,15 @@ fun PurchaseContent(
             )
         }
 
+        if (formState.pendingScanGtin != null && formState.appliedAutofillMessage == null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Barcode attached. It will be remembered when you add this purchase.",
+                modifier = Modifier.testTag(PurchaseContentTestTags.SCAN_ATTACHED),
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),

@@ -108,17 +108,25 @@ class PurchaseFormStateTest {
     }
 
     @Test
-    fun `choosing a different product drops an abandoned barcode`() {
-        // Scanning and then abandoning must never link that barcode to whatever
-        // product is entered next.
+    fun `a scanned barcode survives choosing a type and is only dropped on reset`() {
         val scanned = populatedState().copy(
+            thcNeedsVerification = true,
             pendingScanGtin = "00840773004481",
             pendingScanBatch = "26070000162",
         )
 
         val afterNewSelection = scanned.clearedForNewSelection()
-        assertNull(afterNewSelection.pendingScanGtin)
-        assertNull(afterNewSelection.pendingScanBatch)
+        assertEquals("00840773004481", afterNewSelection.pendingScanGtin)
+        assertEquals("26070000162", afterNewSelection.pendingScanBatch)
+        assertEquals("", afterNewSelection.cost)
+        assertEquals("", afterNewSelection.thc)
+        assertEquals("", afterNewSelection.grams)
+        assertFalse(afterNewSelection.borrowed)
+        assertFalse(afterNewSelection.postTax)
+        assertFalse(afterNewSelection.saveAsDefault)
+        assertNull(afterNewSelection.appliedAutofillMessage)
+        assertNull(afterNewSelection.validationMessage)
+        assertFalse(afterNewSelection.thcNeedsVerification)
 
         val afterReset = scanned.reset()
         assertNull(afterReset.pendingScanGtin)
