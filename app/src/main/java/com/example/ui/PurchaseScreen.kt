@@ -274,13 +274,26 @@ fun PurchaseContent(
             )
         }
 
-        if (formState.pendingScanGtin != null && formState.appliedAutofillMessage == null) {
+        if (formState.pendingScanGtin != null) {
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Barcode attached. It will be remembered when you add this purchase.",
-                modifier = Modifier.testTag(PurchaseContentTestTags.SCAN_ATTACHED),
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "Barcode attached. It will be remembered when you add this purchase.",
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(PurchaseContentTestTags.SCAN_ATTACHED),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(
+                    onClick = { onFormChange(formState.withoutPendingScan()) },
+                    modifier = Modifier.testTag(PurchaseContentTestTags.SCAN_DETACH),
+                ) {
+                    Text("Remove")
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(8.dp))

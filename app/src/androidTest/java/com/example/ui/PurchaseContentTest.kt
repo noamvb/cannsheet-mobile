@@ -197,6 +197,24 @@ class PurchaseContentTest {
     }
 
     @Test
+    fun removingAnAttachedBarcodeDetachesItWithoutClearingTheForm() {
+        setPurchaseContent(
+            initialFormState = PurchaseFormState.initial().copy(
+                type = "F",
+                name = "Entered Product",
+                appliedAutofillMessage = null,
+                pendingScanGtin = "00840773004481",
+                pendingScanBatch = "26070000162",
+            ),
+        )
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SCAN_ATTACHED).assertIsDisplayed()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SCAN_DETACH).performScrollTo().performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SCAN_ATTACHED).assertDoesNotExist()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.NAME).assertTextContains("Entered Product")
+    }
+
+    @Test
     fun submittingClearsTheAttachedBarcode() {
         var submission: PurchaseSubmission? = null
 

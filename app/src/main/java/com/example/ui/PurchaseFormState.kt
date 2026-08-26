@@ -55,6 +55,10 @@ fun PurchaseFormState.clearedForNewSelection(): PurchaseFormState = copy(
     thcNeedsVerification = false,
 )
 
+// The user's explicit detach; unlike reset(), this leaves the rest of the form intact.
+fun PurchaseFormState.withoutPendingScan(): PurchaseFormState =
+    copy(pendingScanGtin = null, pendingScanBatch = null)
+
 fun PurchaseFormState.reset(): PurchaseFormState = copy(
     date = currentSubmissionDateTime().date,
     type = "",
