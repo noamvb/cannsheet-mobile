@@ -623,7 +623,10 @@ class DatabaseMigrationTest {
             context,
             AppDatabase::class.java,
             databaseName,
-        ).addMigrations(AppDatabase.MIGRATION_10_11).build()
+        ).addMigrations(
+            AppDatabase.MIGRATION_10_11,
+            AppDatabase.MIGRATION_11_12,
+        ).build()
 
         try {
             runBlocking {
@@ -751,6 +754,61 @@ class DatabaseMigrationTest {
             assertEquals(0, cursor.getInt(0))
         }
         version11.close()
+    }
+
+    @Test
+    fun migrationFrom11To12AddsUsableScannedProductLinks() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version10 = factory.create(
+            configuration(10, object : SupportSQLiteOpenHelper.Callback(10) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    this@DatabaseMigrationTest.createVersion10Schema(db)
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+            }),
+        )
+        version10.writableDatabase
+        version10.close()
+
+        // Opening the real AppDatabase makes Room validate that the schema the
+        // migrations produce matches the schema the entities declare.
+        val database = Room.databaseBuilder(
+            context,
+            AppDatabase::class.java,
+            databaseName,
+        ).addMigrations(
+            AppDatabase.MIGRATION_10_11,
+            AppDatabase.MIGRATION_11_12,
+        ).build()
+
+        try {
+            runBlocking {
+                val dao = database.cannsheetDao()
+                assertEquals(0, dao.getScannedProductLinkCount())
+
+                dao.upsertScannedProductLink(
+                    ScannedProductLink(
+                        gtin = "00840773004481",
+                        name = "Blue Dream",
+                        type = "F",
+                        lastBatch = "26070000162",
+                        lastSeenAtEpochMillis = 1_700_000_000_000L,
+                        timesSeen = 1,
+                    ),
+                )
+
+                val stored = dao.getScannedProductLink("00840773004481")
+                assertEquals("Blue Dream", stored?.name)
+                assertEquals("F", stored?.type)
+                assertEquals("26070000162", stored?.lastBatch)
+                assertEquals(1, stored?.timesSeen)
+                assertEquals(1, dao.getScannedProductLinkCount())
+                assertNull(dao.getScannedProductLink("00000000000000"))
+            }
+        } finally {
+            database.close()
+        }
     }
 
     private fun createVersion10Schema(db: SupportSQLiteDatabase) {
