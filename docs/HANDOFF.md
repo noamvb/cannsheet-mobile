@@ -6,11 +6,7 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.9.0 (code 54) - pen widget step repaired, in flight
 
-**Status: prepared and validated, not yet published.** `app/build.gradle.kts` reads
-versionCode 54 / versionName 1.9.0. The last published release is still v1.8.1 (code 53).
-Do not tell the phone owner to install 1.9.0 until Phase 7 of
-`.agents/skills/ship-release/SKILL.md` has actually run; the "Next step for the phone
-owner" section below says what is true right now.
+**Status: published and independently verified on 2026-08-30.**
 
 The pen widget's `+`/`-` buttons now move the counter by the number they state, and that
 number is configuration rather than a function of widget size. See ADR-050 and the
@@ -103,18 +99,26 @@ New coverage aimed squarely at the gap that let this ship:
 
 ### Release provenance
 
-**Not yet recorded - this release is not published.** Once Phases 5-7 of the ship-release
-skill have run, replace this section with: the merged pull request and its squashed SHA,
-the proving `main` run id and confirmation that all six required jobs passed on that exact
-SHA, that the annotated tag points at that commit, the published asset names, the APK
-SHA-256 re-verified after download, and the signing-certificate comparison against v1.8.1.
-
-The previous release for comparison: v1.8.1 (code 53), squashed commit
-`b20088a7a0089c9ea7e18f9d4439812538582ae6`, proving run `33010663275`, APK SHA-256
-`2ad6ba29a33c918a89a6c8c89b2087975bfb7936a5f325093c348f43d1a0bcb7`, signing certificate
-`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e` (`CN=Android Debug`).
-**The new APK's certificate must match that digest**, or the phone cannot update in place
-and an uninstall would destroy the Room database and every pending offline queue row.
+- Pull request merged: `noamvb/cannsheet-mobile#169`, squash merged
+- Squashed commit on `main`: `7e9eb58f4dcb9687d8594deb324be7ae4926b97f`
+- Proving `main` run: `33315508424`, `event=push`, `conclusion=success`
+- All six required jobs passed on that exact SHA: `Classify changes and scan repository`,
+  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
+  and `Cannsheet Android PR validation`. Emulator API 36 only ever runs on `main`, which is
+  why a green pull-request check can never satisfy the publish workflow.
+- Annotated tag `v1.9.0` points at exactly that validated commit: `git rev-list -n 1 v1.9.0`
+  returns `7e9eb58f4dcb9687d8594deb324be7ae4926b97f`
+- Published by release workflow run `33315829391` at 2026-08-30T14:10:40Z:
+  `Cannsheet-Mobile-1.9.0.apk` (38,003,753 bytes) and `Cannsheet-Mobile-1.9.0.apk.sha256`
+- APK SHA-256: `cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`,
+  re-downloaded and checked independently with `shasum -a 256 -c` after publication: OK.
+  `aapt dump badging` reports package `com.noamv.cannsheet.mobile`, versionCode 54,
+  versionName 1.9.0, sdkVersion 24, targetSdkVersion 36.
+- Signing certificate: `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+  (`CN=Android Debug`), byte-identical to the certificate on the published v1.8.1 APK.
+  `apksigner verify` reports `Verifies` with APK Signature Scheme v2 and no other scheme.
+  The phone updates in place; no uninstall is required and no Room data or queued offline
+  row is at risk.
 
 ### Known limitations
 
@@ -155,10 +159,11 @@ and an uninstall would destroy the Room database and every pending offline queue
 
 ### Next step for the phone owner
 
-**Nothing yet.** v1.9.0 is validated but unpublished; v1.8.1 remains the current release
-and the installed build. When the tag is pushed and the release workflow completes, the
-instruction becomes: open Obtainium, pull to refresh or tap **Check for updates**, and
+v1.9.0 is published. Open Obtainium, pull to refresh or tap **Check for updates**, and
 install Cannsheet Mobile 1.9.0.
 
 After installing, the fix is worth one check: tap `+` once on the small pen widget and
-confirm the counter moves to 10, not 30.
+confirm the counter moves to 10, not 30. On-device confirmation of the shipped build has
+not been performed - the pre-fix behaviour was reproduced on hardware, but the post-fix
+behaviour is so far proven only by CI, because installing a debug build over the release
+build would have forced an uninstall and destroyed the Room database.

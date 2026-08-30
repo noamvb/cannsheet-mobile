@@ -4,6 +4,10 @@ Last updated: 2026-08-30
 
 ## Pen widget step size (released v1.9.0, code 54)
 
+Published 2026-08-30 from `main` commit `7e9eb58`; APK SHA-256
+`cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`, signing certificate
+unchanged from v1.8.1.
+
 The pen widget's `+`/`-` step is configuration and never a function of widget size.
 See ADR-050.
 
