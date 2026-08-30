@@ -4,9 +4,27 @@ Last updated: 2026-08-30
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Cannsheet Mobile v1.9.0 (code 54) - pen widget step repaired, in flight
+## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 
-**Status: published and independently verified on 2026-08-30.**
+**Status: v1.9.0 published and independently verified on 2026-08-30. v1.9.1 (code 55)
+corrects a label-case defect found on the owner's phone immediately after that install and
+is being released on top of it.**
+
+### The v1.9.0 follow-up defect
+
+v1.9.0 drew the new step labels as `+10S` / `-10S`, which reads as `+105`. The strings are
+lowercase (`+%1$ds`), but `Button` styles default to `textAllCaps`, applied as a
+`TransformationMethod` at draw time, so the lowercase `s` never reached the screen. Fixed by
+setting `android:textAllCaps="false"` on the five labelled buttons in
+`widget_pen_consumption.xml`. The three preset buttons had rendered `10S` / `20S` / `30S`
+since #109 and are corrected in the same change rather than left inconsistent.
+
+The renderer test did not catch it, and the reason is worth keeping: it asserted
+`plus.text.toString()`, which returns the **stored** string, while `textAllCaps` transforms
+the text only at draw time. The assertion was green while the screen showed something else -
+the same "check the announcement, not the behaviour" mistake that let the original step
+defect ship, one level down. `PenWidgetRendererTest` now asserts through
+`transformationMethod.getTransformation(...)`, so it fails against the un-fixed layout.
 
 The pen widget's `+`/`-` buttons now move the counter by the number they state, and that
 number is configuration rather than a function of widget size. See ADR-050 and the

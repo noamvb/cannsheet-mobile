@@ -2,7 +2,7 @@
 
 Last updated: 2026-08-30
 
-## Pen widget step size (released v1.9.0, code 54)
+## Pen widget step size (released v1.9.0, code 54; label case repaired in v1.9.1 code 55)
 
 Published 2026-08-30 from `main` commit `7e9eb58`; APK SHA-256
 `cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`, signing certificate
@@ -32,7 +32,13 @@ See ADR-050.
   offers Default / 5s / 10s / 30s; it previously read null as 10 and wrote it back,
   silently detaching a widget from the default.
 - Full layouts render `+10s` / `-10s`; the compact layout keeps bare symbols because a
-  four-glyph label clips at roughly 45dp.
+  four-glyph label clips at roughly 45dp. v1.9.0 shipped those labels drawn as `+10S`,
+  which reads as `+105`: `Button` styles default to `textAllCaps`, applied as a
+  `TransformationMethod` at draw time, so the lowercase `s` in the string never reached the
+  screen. The five labelled buttons in `widget_pen_consumption.xml` - minus, plus and the
+  three presets - now set `android:textAllCaps="false"`. The preset row had rendered `10S`
+  since it shipped in #109; it is corrected in the same change rather than left
+  inconsistent with the step buttons.
 - The provider is `reconfigurable`, and Settings gains a Widgets section
   (`WidgetSettingsSection.kt`) with the app default plus a per-widget list labelled
   `<cart> - <size word> - <width> x <height>`. Both write paths repaint the affected
