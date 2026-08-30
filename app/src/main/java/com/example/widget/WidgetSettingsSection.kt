@@ -154,8 +154,8 @@ internal fun WidgetSettingsCoordinator(
             scope.launch {
                 withContext(Dispatchers.IO) {
                     configRepository.writeDefaultStepSeconds(seconds)
+                    PenWidgetUpdater.updateAllNow(context)
                 }
-                PenWidgetUpdater.updateAll(context)
                 refreshTrigger++
             }
         },

@@ -12,9 +12,7 @@ object PenWidgetUpdater {
     /** Safe to call from any app path; users without widget instances pay no update cost. */
     fun updateAll(context: Context) {
         val appContext = context.applicationContext
-        val manager = AppWidgetManager.getInstance(appContext)
-        val component = ComponentName(appContext, PenConsumptionWidgetProvider::class.java)
-        val appWidgetIds = manager.getAppWidgetIds(component)
+        val appWidgetIds = placedWidgetIds(appContext)
         if (appWidgetIds.isEmpty()) return
 
         PenWidgetRuntime.launchSerialized {
@@ -22,6 +20,31 @@ object PenWidgetUpdater {
                 update(appContext, appWidgetId)
             }
         }
+    }
+
+    /**
+     * Awaiting form of [updateAll], for a caller that has just made a durable configuration
+     * change. [updateAll] only enqueues the repaint, so a process death between the durable write
+     * and the render would leave the launcher stating one step while a tap applies another - the
+     * exact label/behaviour split this widget shipped with. Suspending until the render lands
+     * keeps the stated step and the acted step coupled.
+     */
+    suspend fun updateAllNow(context: Context) {
+        val appContext = context.applicationContext
+        val appWidgetIds = placedWidgetIds(appContext)
+        if (appWidgetIds.isEmpty()) return
+
+        PenWidgetRuntime.withSerialized {
+            appWidgetIds.forEach { appWidgetId ->
+                update(appContext, appWidgetId)
+            }
+        }
+    }
+
+    private fun placedWidgetIds(appContext: Context): IntArray {
+        val manager = AppWidgetManager.getInstance(appContext)
+        val component = ComponentName(appContext, PenConsumptionWidgetProvider::class.java)
+        return manager.getAppWidgetIds(component)
     }
 
     suspend fun update(context: Context, appWidgetId: Int) {

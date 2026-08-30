@@ -1,94 +1,138 @@
 # Current handoff
 
-Last updated: 2026-08-26
+Last updated: 2026-08-30
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Cannsheet Mobile v1.8.1 (code 53) - barcode learning repaired
+## Cannsheet Mobile v1.9.0 (code 54) - pen widget step repaired, in flight
 
-v1.8.0 shipped barcode purchase autofill in which the learning path never worked. v1.8.1
-repairs it. Scanning a product label now fills the Purchase form from the app's own record
-of that product: a first sighting is typed in as before and the mapping is learned on
-submit, and every later scan of that product resolves exactly. See ADR-049 and the
-"Barcode purchase autofill" section of `docs/PROJECT_STATE.md`.
+**Status: prepared and validated, not yet published.** `app/build.gradle.kts` reads
+versionCode 54 / versionName 1.9.0. The last published release is still v1.8.1 (code 53).
+Do not tell the phone owner to install 1.9.0 until Phase 7 of
+`.agents/skills/ship-release/SKILL.md` has actually run; the "Next step for the phone
+owner" section below says what is true right now.
 
-### Release provenance
+The pen widget's `+`/`-` buttons now move the counter by the number they state, and that
+number is configuration rather than a function of widget size. See ADR-050 and the
+"Pen widget step size" section of `docs/PROJECT_STATE.md`.
 
-- Pull request merged: `noamvb/cannsheet-mobile#167`, squash merged
-- Squashed commit on `main`: `b20088a7a0089c9ea7e18f9d4439812538582ae6`
-- Proving `main` run: `33010663275`, `event=push`, `conclusion=success`
-- All six required jobs passed on that exact SHA: `Classify changes and scan repository`,
-  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
-  and `Cannsheet Android PR validation`. Emulator API 36 only ever runs on `main`, which is
-  why a green pull-request check can never satisfy the publish workflow.
-- Annotated tag `v1.8.1` points at exactly that validated commit: `git rev-list -n 1 v1.8.1`
-  returns `b20088a7a0089c9ea7e18f9d4439812538582ae6`
-- Published by release workflow run `33011290682` at 2026-08-26T20:44:45Z:
-  `Cannsheet-Mobile-1.8.1.apk` (37,981,857 bytes) and `Cannsheet-Mobile-1.8.1.apk.sha256`
-- APK SHA-256: `2ad6ba29a33c918a89a6c8c89b2087975bfb7936a5f325093c348f43d1a0bcb7`,
-  re-downloaded and checked independently with `shasum -a 256 -c` after publication: OK.
-  `aapt dump badging` reports package `com.noamv.cannsheet.mobile`, versionCode 53,
-  versionName 1.8.1, sdkVersion 24, targetSdkVersion 36, the `CAMERA` permission, and
-  `uses-feature-not-required: android.hardware.camera`.
-- Signing certificate: `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
-  (`CN=Android Debug`), byte-identical to the certificate on the published v1.8.0 APK,
-  which was downloaded and compared rather than assumed. `apksigner verify` reports
-  `Verifies` with APK Signature Scheme v2. The phone updates in place; no uninstall is
-  required and no Room data or queued offline row is at risk.
+### What was wrong, and why the tests did not catch it
 
-### What was wrong in v1.8.0, and why the tests did not catch it
+The report was "the 2x2 widget steps by 30 seconds instead of 10". Driving the real widget
+over ADB on a Fold 7 (API 36) showed something narrower and worse: the `+` button announced
+**"Increase duration by 10 seconds"** and moved the counter to **30**. The label and the
+behaviour disagreed.
 
-`PurchaseFormState.clearedForNewSelection()` cleared the pending barcode, and selecting a
-Type calls it. A newly scanned product has nothing prefilled, so the user must select a
-Type - which erased the barcode before submission could learn it. The learning path was
-broken every time, not intermittently. Confirmed on device: a second scan of the same
-product still reported "New product".
+`PenWidgetUpdater` builds three `RemoteViews` per instance on API 31+ - buckets 110x110,
+140x160 and 280x320 - and `PenWidgetSizing.resolve` gave only the largest
+`stepSeconds = 30`. Each bucket asked `pendingIntent()` for a step-carrying intent, but
+that function derived uniqueness from `31 * appWidgetId + action.hashCode()` and the data
+URI `cannsheet://pen-widget/<id>/<action>`, neither of which encoded the step.
+`PendingIntent` equality ignores extras, so all three buckets resolved to one
+`PendingIntent`, `FLAG_UPDATE_CURRENT` made the last write win, and the large bucket was
+written last. Text and content descriptions live inside each bucket's own `RemoteViews`,
+so they stayed truthful while the effect did not.
 
-The camera, parser, navigation and permission flow were all correct. The camera bound
-cleanly on the device and the barcode was detected. The failure was form state alone.
+The size rule added in #110 therefore never gated anything. It only poisoned the shared
+intent, so **every** API 31+ pen widget without an explicit override stepped by 30 at every
+size, including compact.
 
-The unit test covering that transition **asserted the broken behaviour**, so it passed
-while the feature was dead. A test that encodes the wrong requirement is worse than no
-test, because it reads as proof. Its replacement was verified by reintroducing the defect
-locally and confirming exactly one test failed, at `PurchaseFormStateTest.kt:119`.
+The suite passed throughout, because `PenWidgetRendererTest` asserted the content
+description - precisely the half that was correct - and nothing asserted what a tap
+actually delivered. A test that checks only the announcement of a behaviour cannot see the
+behaviour diverge from it.
 
-The defect came from over-correcting a rarer case: scanning, abandoning the entry, and
-later entering a different product by hand would have mislinked the barcode. Guarding that
-cost the primary path.
+### What v1.9.0 changed
 
-### What v1.8.1 changed
+- `stepSeconds` is removed from `PenWidgetLayoutSpec` entirely, so "the buckets disagree
+  about the step" is no longer expressible rather than merely false. `PenWidgetUpdater`
+  resolves the step once per update and passes that one value to every bucket.
+- `EXTRA_STEP_SECONDS` is deleted. `PenWidgetActionRouter` reads the step from the config
+  repository it already held, so a stale `PendingIntent` issued by a pre-upgrade build is
+  inert rather than authoritative - the fix applies on the next tap, before any repaint.
+- `pendingIntent()`'s data URI now encodes `commitId` too, under a comment recording the
+  rule that the URI must cover every extra that changes the intent's effect.
+- An app-wide default step lives under an unsuffixed key in the existing
+  `pen_widget_config` DataStore. `PenWidgetConfigRepository.effectiveStepSeconds` is the
+  only resolver of `override ?: default`. The key is excluded from `clear`,
+  `remapWidgetIds` and legacy adoption, and an invalid stored value falls back in memory
+  without being rewritten.
+- `stepSecondsOverride == null` inherits that default. The configure screen previously read
+  null as 10 and wrote it back as an explicit 10, so merely opening and saving it detached
+  that widget from the default forever; it now carries null through and offers Default.
+- Full layouts render `+10s` / `-10s`. The compact layout keeps bare symbols, where a
+  four-glyph label clips at roughly 45dp. The step's invisibility is why this survived.
+- The provider is `reconfigurable`, and Settings gains a Widgets section with the app
+  default plus a per-widget list. Before this the picker existed but could only be reached
+  by deleting the widget and adding it again.
+- Both Settings write paths await their repaint. A durable configuration write paired with
+  a dropped render would reproduce the same label/behaviour split, so
+  `PenWidgetUpdater.updateAllNow` suspends until the render lands rather than enqueueing it.
 
-- The barcode survives every form edit and is dropped only by a successful submission or a
-  reset. Editing the form is how the user tells the app what the barcode belongs to.
-- A persistent line states that a barcode is attached, and carries a **Remove** action. It
-  renders whenever a barcode is attached rather than only once the transient message
-  clears, so the control exists at every moment attachment does. Attachment is never silent
-  and never unrevocable.
-- The rarer mislinking case is handled by that explicit control rather than by a heuristic.
-  Detaching on a type change would silently drop the barcode when the user merely corrects
-  a mis-tapped type, and would still miss an abandoned entry whose type is already set.
-  Guessing at intent is what produced the original defect.
+### Behaviour change on upgrade
+
+Every placed pen widget without an explicit override steps by 10 after this release,
+**including a large one that stepped by 30 before**. No migration runs. An individual
+widget can be raised to 30 in Settings, or by long-pressing it and reconfiguring.
 
 ### Verification performed
 
-- Local: `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug` green,
-  587 unit tests, zero failures.
-- CI: 175 instrumentation tests green on Emulator API 24 and Emulator API 36, plus the six
-  required jobs on the tagged `main` SHA.
-- Publication re-verified independently after the workflow's own self-check.
+- Local, `--rerun-tasks` so nothing came off a cache:
+  `testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug`,
+  `BUILD SUCCESSFUL in 8m 12s`, **588 unit tests, 0 failures, 0 errors, 0 skipped**
+  (the `main` baseline was 587: three deleted size-to-step assertions, four new
+  default-step tests).
+- 8 Node backend suites pass; `python3 -m unittest tests/test_backend_sync_benchmark.py`
+  reports 13 tests, OK.
+- Pull request `noamvb/cannsheet-mobile#169`: all five checks green, including
+  Emulator API 24 at 4m53s, which is the first actual execution of the new instrumentation
+  coverage.
+
+New coverage aimed squarely at the gap that let this ship:
+
+- `PenWidgetActionRouterTest.incrementUsesEffectiveStepAndIgnoresAStaleIntentExtra` puts
+  the literal legacy extra name with value `30` on the intent and asserts the draft still
+  moves by the effective step. It fails against the pre-fix code.
+- `PenWidgetRendererTest.everyBucketKeepsVisibleLabelsAndDescriptionsAlignedWithTheEffectiveStep`
+  asserts visible text and content description **together** across all three buckets, with
+  a step of 5 so it cannot pass by coincidence.
+- `PenWidgetDefaultStepTest` covers inheritance, clamping, `clear`/`remapWidgetIds`
+  preservation, and that an invalid stored value falls back without being repaired.
+- `PenWidgetConfigureActivityTest` proves a null override selects Default and Save emits
+  null.
+
+### Release provenance
+
+**Not yet recorded - this release is not published.** Once Phases 5-7 of the ship-release
+skill have run, replace this section with: the merged pull request and its squashed SHA,
+the proving `main` run id and confirmation that all six required jobs passed on that exact
+SHA, that the annotated tag points at that commit, the published asset names, the APK
+SHA-256 re-verified after download, and the signing-certificate comparison against v1.8.1.
+
+The previous release for comparison: v1.8.1 (code 53), squashed commit
+`b20088a7a0089c9ea7e18f9d4439812538582ae6`, proving run `33010663275`, APK SHA-256
+`2ad6ba29a33c918a89a6c8c89b2087975bfb7936a5f325093c348f43d1a0bcb7`, signing certificate
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e` (`CN=Android Debug`).
+**The new APK's certificate must match that digest**, or the phone cannot update in place
+and an uninstall would destroy the Room database and every pending offline queue row.
 
 ### Known limitations
 
-- End-to-end scanning against physical product labels was not re-tested before this
-  release. The app learns a barcode only on submit, and there is no purchase-deletion path
-  in the app or the backend, so a synthetic test run would leave a duplicate purchase row
-  removable only by hand-editing the spreadsheet. The owner's next genuine purchase
-  exercises the flow at no cost: the first scan teaches it, the scan after that should
-  prefill.
-- The local emulator could not run the instrumentation suite reliably on this machine; it
-  aborted with `INSTRUMENTATION_ABORTED: System has crashed` under memory pressure. CI
-  covers it on both API levels.
-- OCR and receipt scanning remain deliberately unimplemented. `cost` is still typed by hand.
+- Instrumentation tests were compiled locally but not executed there.
+  `connectedDebugAndroidTest` targets every attached device, and the owner's phone carries
+  the release build; a debug build shares its application id but is signed differently, so
+  running them would force an uninstall and destroy user data. CI covers them on both API
+  levels.
+- No screenshots accompany the pull request, for the same reason: the only attached device
+  is the owner's phone, and no local emulator is provisioned. The visible change is
+  asserted mechanically instead, by the renderer test checking exact button text at each
+  bucket.
+- On-device confirmation that the shipped build steps by 10 has **not** happened and cannot
+  happen until the owner installs 1.9.0 through Obtainium. The pre-fix behaviour was
+  confirmed on hardware; the post-fix behaviour is currently proven only by CI.
+- The `+10s` / `-10s` labels need a widget repaint to appear, so they may briefly lag after
+  install. The stepping itself is correct from the first tap, because the router reads
+  configuration rather than an intent extra.
 
 ### Operational notes worth keeping
 
@@ -101,9 +145,20 @@ cost the primary path.
 - `main` is governed by a repository ruleset, not classic branch protection, and it sets
   `required_review_thread_resolution`. An unresolved review thread blocks the merge even
   with every check green, and `gh pr merge` reports only "the base branch policy prohibits
-  the merge".
+  the merge". The `chatgpt-codex-connector` bot posts review threads automatically, so a
+  pull request can arrive at "all checks green" and still be unmergeable until those
+  threads are read and resolved. Resolving requires the GraphQL `resolveReviewThread`
+  mutation; `gh pr review` does not do it.
+- A delegated run can be killed by the orchestrator's own harness restarting, leaving every
+  file written, no verification build ever run, and no report. A complete-looking working
+  tree says nothing about whether the code compiles. Run acceptance yourself.
 
 ### Next step for the phone owner
 
-v1.8.1 is published. Open Obtainium, pull to refresh or tap **Check for updates**, and
-install Cannsheet Mobile 1.8.1.
+**Nothing yet.** v1.9.0 is validated but unpublished; v1.8.1 remains the current release
+and the installed build. When the tag is pushed and the release workflow completes, the
+instruction becomes: open Obtainium, pull to refresh or tap **Check for updates**, and
+install Cannsheet Mobile 1.9.0.
+
+After installing, the fix is worth one check: tap `+` once on the small pen widget and
+confirm the counter moves to 10, not 30.
