@@ -30,6 +30,7 @@ object PenWidgetUpdater {
         val repository = PenWidgetStateRepository(appContext)
         val configRepository = PenWidgetConfigRepository(appContext)
         val config = configRepository.read(appWidgetId)
+        val stepSeconds = configRepository.effectiveStepSeconds(appWidgetId)
         val state = repository.read(appWidgetId)
         val draft = state.pendingCommit?.let(PenWidgetDraft::AwaitingCommit)
             ?: PenWidgetDraft.Composing(state.draftSeconds)
@@ -53,29 +54,21 @@ object PenWidgetUpdater {
             heightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0),
             compactBreakpointHeightDp = compactBreakpointHeightDp,
         )
-        val spec = config.stepSecondsOverride?.let { resolvedSpec.copy(stepSeconds = it) }
-            ?: resolvedSpec
         val compactSpec = PenWidgetSizing.resolve(
             widthDp = 110,
             heightDp = 110,
             compactBreakpointHeightDp = compactBreakpointHeightDp,
-        ).let { resolved ->
-            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
-        }
+        )
         val baseSpec = PenWidgetSizing.resolve(
             widthDp = 140,
             heightDp = 160,
             compactBreakpointHeightDp = compactBreakpointHeightDp,
-        ).let { resolved ->
-            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
-        }
+        )
         val largeSpec = PenWidgetSizing.resolve(
             widthDp = 280,
             heightDp = 320,
             compactBreakpointHeightDp = compactBreakpointHeightDp,
-        ).let { resolved ->
-            config.stepSecondsOverride?.let { resolved.copy(stepSeconds = it) } ?: resolved
-        }
+        )
 
         val views = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             RemoteViews(
@@ -85,18 +78,21 @@ object PenWidgetUpdater {
                         appWidgetId,
                         model,
                         compactSpec,
+                        stepSeconds,
                     ),
                     SizeF(140f, 160f) to PenWidgetRenderer.buildRemoteViews(
                         appContext,
                         appWidgetId,
                         model,
                         baseSpec,
+                        stepSeconds,
                     ),
                     SizeF(280f, 320f) to PenWidgetRenderer.buildRemoteViews(
                         appContext,
                         appWidgetId,
                         model,
                         largeSpec,
+                        stepSeconds,
                     ),
                 ),
             )
@@ -105,7 +101,8 @@ object PenWidgetUpdater {
                 appContext,
                 appWidgetId,
                 model,
-                spec,
+                resolvedSpec,
+                stepSeconds,
             )
         }
 

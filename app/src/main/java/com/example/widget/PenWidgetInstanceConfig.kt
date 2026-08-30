@@ -8,6 +8,7 @@ package com.example.widget
 data class PenWidgetInstanceConfig(
     val pinnedProductId: String? = null,
     val discreet: Boolean = false,
+    /** Null inherits the app-wide pen-widget step default. */
     val stepSecondsOverride: Int? = null,
 ) {
     companion object {

@@ -31,7 +31,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,7 +56,7 @@ class PenWidgetConfigureActivity : ComponentActivity() {
     private var selectablePens by mutableStateOf<List<Product>>(emptyList())
     private var selectedProductId by mutableStateOf<String?>(null)
     private var discreet by mutableStateOf(false)
-    private var stepSeconds by mutableIntStateOf(STEP_SECONDS)
+    private var stepSeconds by mutableStateOf<Int?>(null)
     private var isLoading by mutableStateOf(true)
     private var isSaving by mutableStateOf(false)
 
@@ -94,12 +93,12 @@ class PenWidgetConfigureActivity : ComponentActivity() {
                     onProductSelected = { selectedProductId = it },
                     onDiscreetChanged = { discreet = it },
                     onStepSecondsSelected = { stepSeconds = it },
-                    onSave = {
+                    onSave = { selectedStepSeconds ->
                         save(
                             PenWidgetInstanceConfig(
                                 pinnedProductId = selectedProductId,
                                 discreet = discreet,
-                                stepSecondsOverride = stepSeconds,
+                                stepSecondsOverride = selectedStepSeconds,
                             ),
                         )
                     },
@@ -128,7 +127,7 @@ class PenWidgetConfigureActivity : ComponentActivity() {
                 selectedProductId = config.pinnedProductId
                     ?.takeIf { id -> products.any { it.id == id } }
                 discreet = config.discreet
-                stepSeconds = config.stepSecondsOverride ?: STEP_SECONDS
+                stepSeconds = config.stepSecondsOverride
                 isLoading = false
             }.onFailure {
                 // Leave RESULT_CANCELED in place when the catalog cannot be read.
@@ -161,17 +160,17 @@ class PenWidgetConfigureActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PenWidgetConfigureScreen(
+internal fun PenWidgetConfigureScreen(
     products: List<Product>,
     selectedProductId: String?,
     discreet: Boolean,
-    stepSeconds: Int,
+    stepSeconds: Int?,
     isLoading: Boolean,
     isSaving: Boolean,
     onProductSelected: (String?) -> Unit,
     onDiscreetChanged: (Boolean) -> Unit,
-    onStepSecondsSelected: (Int) -> Unit,
-    onSave: () -> Unit,
+    onStepSecondsSelected: (Int?) -> Unit,
+    onSave: (Int?) -> Unit,
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -239,8 +238,12 @@ private fun PenWidgetConfigureScreen(
                     text = stringResource(R.string.pen_widget_step_size),
                     style = MaterialTheme.typography.titleMedium,
                 )
+                Text(
+                    text = stringResource(R.string.pen_widget_step_size_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 Spacer(modifier = Modifier.height(8.dp))
-                val stepOptions = listOf(5, STEP_SECONDS, 30)
+                val stepOptions = listOf<Int?>(null, 5, STEP_SECONDS, 30)
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     stepOptions.forEachIndexed { index, option ->
                         SegmentedButton(
@@ -251,14 +254,19 @@ private fun PenWidgetConfigureScreen(
                                 count = stepOptions.size,
                             ),
                             modifier = Modifier.weight(1f),
-                            label = { Text("${option}s") },
+                            label = {
+                                Text(
+                                    option?.let { "${it}s" }
+                                        ?: stringResource(R.string.pen_widget_step_inherit),
+                                )
+                            },
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
                 Button(
-                    onClick = onSave,
+                    onClick = { onSave(stepSeconds) },
                     enabled = !isSaving,
                     modifier = Modifier.fillMaxWidth(),
                 ) {

@@ -1,6 +1,43 @@
 # Project state
 
-Last updated: 2026-08-26
+Last updated: 2026-08-30
+
+## Pen widget step size (released v1.9.0, code 54)
+
+The pen widget's `+`/`-` step is configuration and never a function of widget size.
+See ADR-050.
+
+- The shipped defect was a `PendingIntent` identity collision, not a wrong threshold.
+  `PenWidgetUpdater` builds three `RemoteViews` buckets per instance on API 31+ and only
+  the 280x320 one carried `stepSeconds = 30`, but `pendingIntent()` keyed uniqueness on
+  `(appWidgetId, action)` alone. `PendingIntent` equality ignores extras, so all three
+  buckets shared one intent and `FLAG_UPDATE_CURRENT` let the last write - the large
+  bucket - win. Labels are per-bucket, so a 2x2 announced "Increase duration by 10
+  seconds" and moved the counter by 30. Confirmed over ADB on a Fold 7 (API 36) before
+  the fix, and the effect reached every API 31+ widget at every size.
+- `stepSeconds` no longer exists on `PenWidgetLayoutSpec`; `PenWidgetUpdater` resolves it
+  once per update and passes the same value to every bucket. `EXTRA_STEP_SECONDS` is
+  deleted and `PenWidgetActionRouter` reads the step from configuration, so a stale
+  pre-upgrade `PendingIntent` carrying 30 is inert.
+- `PenWidgetConfigRepository` holds an app-wide default under an unsuffixed
+  `default_step_seconds` key in the existing `pen_widget_config` DataStore.
+  `effectiveStepSeconds` is the only resolver of `override ?: default`. The key is
+  excluded from `clear`, `remapWidgetIds` and legacy adoption, and an invalid stored
+  value falls back in memory without being rewritten.
+- `stepSecondsOverride == null` inherits. The configure screen carries null through and
+  offers Default / 5s / 10s / 30s; it previously read null as 10 and wrote it back,
+  silently detaching a widget from the default.
+- Full layouts render `+10s` / `-10s`; the compact layout keeps bare symbols because a
+  four-glyph label clips at roughly 45dp.
+- The provider is `reconfigurable`, and Settings gains a Widgets section
+  (`WidgetSettingsSection.kt`) with the app default plus a per-widget list labelled
+  `<cart> - <size word> - <width> x <height>`. Both write paths repaint the affected
+  widgets.
+- Coverage: 4 unit tests for default/inheritance/clear/remap plus no-repair-on-invalid;
+  instrumentation tests asserting a tap ignores a stale step extra, that visible text and
+  content description agree across all three buckets, and that a null override
+  round-trips through the configure screen. The three size-to-step assertions in
+  `PenWidgetSizingTest` were deleted with the rule they encoded.
 
 ## Barcode purchase autofill (released v1.8.0, repaired in v1.8.1 code 53)
 

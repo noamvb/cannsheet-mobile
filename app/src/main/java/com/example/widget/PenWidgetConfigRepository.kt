@@ -10,7 +10,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 
 private val Context.penWidgetConfigDataStore by preferencesDataStore(name = "pen_widget_config")
 
@@ -92,6 +94,22 @@ class PenWidgetConfigRepository internal constructor(
             preferences[migratedKey(appWidgetId)] = true
         }
     }
+
+    suspend fun readDefaultStepSeconds(): Int =
+        dataStore.data.first().defaultStepSeconds()
+
+    suspend fun writeDefaultStepSeconds(seconds: Int) {
+        dataStore.edit { preferences ->
+            preferences[DEFAULT_STEP_SECONDS_KEY] = seconds.coerceIn(1, MAX_SECONDS)
+        }
+    }
+
+    fun defaultStepSecondsFlow(): Flow<Int> =
+        dataStore.data.map { preferences -> preferences.defaultStepSeconds() }
+
+    suspend fun effectiveStepSeconds(appWidgetId: Int): Int =
+        (read(appWidgetId).stepSecondsOverride ?: readDefaultStepSeconds())
+            .coerceIn(1, MAX_SECONDS)
 
     suspend fun clear(appWidgetId: Int) {
         requireValidWidgetId(appWidgetId)
@@ -186,7 +204,11 @@ class PenWidgetConfigRepository internal constructor(
     private fun stepOverrideKey(appWidgetId: Int) =
         intPreferencesKey("$STEP_OVERRIDE_PREFIX$appWidgetId")
 
+    private fun Preferences.defaultStepSeconds(): Int =
+        this[DEFAULT_STEP_SECONDS_KEY]?.takeIf { it in 1..MAX_SECONDS } ?: STEP_SECONDS
+
     private companion object {
+        val DEFAULT_STEP_SECONDS_KEY = intPreferencesKey("default_step_seconds")
         const val MIGRATED_PREFIX = "migrated_"
         const val PINNED_PRODUCT_PREFIX = "pinned_product_"
         const val DISCREET_PREFIX = "discreet_"

@@ -13,6 +13,7 @@ object PenWidgetRenderer {
         appWidgetId: Int,
         model: PenWidgetUiModel,
         spec: PenWidgetLayoutSpec = PenWidgetSizing.base,
+        stepSeconds: Int,
     ): RemoteViews = when (model) {
         is PenWidgetUiModel.Message -> buildMessageViews(context, appWidgetId, model, spec)
         is PenWidgetUiModel.Composing -> buildInteractiveViews(
@@ -22,6 +23,7 @@ object PenWidgetRenderer {
             subtitle = model.subtitle,
             seconds = model.seconds,
             spec = spec,
+            stepSeconds = stepSeconds,
             recentlyQueued = model.recentlyQueued,
             awaitingCommit = null,
             canDecrement = model.canDecrement,
@@ -37,6 +39,7 @@ object PenWidgetRenderer {
             subtitle = model.subtitle,
             seconds = model.frozenSeconds,
             spec = spec,
+            stepSeconds = stepSeconds,
             recentlyQueued = false,
             awaitingCommit = model,
             canDecrement = false,
@@ -77,6 +80,7 @@ object PenWidgetRenderer {
         subtitle: PenWidgetText,
         seconds: Int,
         spec: PenWidgetLayoutSpec,
+        stepSeconds: Int,
         recentlyQueued: Boolean,
         awaitingCommit: PenWidgetUiModel.AwaitingCommit?,
         canDecrement: Boolean,
@@ -211,16 +215,11 @@ object PenWidgetRenderer {
 
         setContentDescription(
             R.id.widget_pen_minus,
-            context.getString(R.string.pen_widget_decrease, spec.stepSeconds),
+            context.getString(R.string.pen_widget_decrease, stepSeconds),
         )
         setOnClickPendingIntent(
             R.id.widget_pen_minus,
-            pendingIntent(
-                context = context,
-                appWidgetId = appWidgetId,
-                action = ACTION_DECREMENT,
-                stepSeconds = spec.stepSeconds,
-            ),
+            pendingIntent(context, appWidgetId, ACTION_DECREMENT),
         )
         setStepButtonEnabled(
             remoteViews = this,
@@ -230,16 +229,11 @@ object PenWidgetRenderer {
 
         setContentDescription(
             R.id.widget_pen_plus,
-            context.getString(R.string.pen_widget_increase, spec.stepSeconds),
+            context.getString(R.string.pen_widget_increase, stepSeconds),
         )
         setOnClickPendingIntent(
             R.id.widget_pen_plus,
-            pendingIntent(
-                context = context,
-                appWidgetId = appWidgetId,
-                action = ACTION_INCREMENT,
-                stepSeconds = spec.stepSeconds,
-            ),
+            pendingIntent(context, appWidgetId, ACTION_INCREMENT),
         )
         setStepButtonEnabled(
             remoteViews = this,
@@ -249,6 +243,14 @@ object PenWidgetRenderer {
         setSubmitButtonEnabled(this, R.id.widget_pen_submit, submitEnabled && !isSaving)
 
         if (!compact) {
+            setTextViewText(
+                R.id.widget_pen_minus,
+                context.getString(R.string.pen_widget_minus_labelled, stepSeconds),
+            )
+            setTextViewText(
+                R.id.widget_pen_plus,
+                context.getString(R.string.pen_widget_plus_labelled, stepSeconds),
+            )
             setViewVisibility(
                 R.id.widget_pen_preset_row,
                 if (spec.showPresets && presetSeconds.isNotEmpty()) View.VISIBLE else View.GONE,

@@ -20,7 +20,6 @@ data class PenWidgetTextSizes(
 data class PenWidgetLayoutSpec(
     val compact: Boolean,
     val textSizes: PenWidgetTextSizes,
-    val stepSeconds: Int = STEP_SECONDS,
     /** Whether the full layout has enough vertical space for the preset row. */
     val showPresets: Boolean = true,
 )
@@ -98,25 +97,21 @@ object PenWidgetSizing {
             return PenWidgetLayoutSpec(
                 compact = true,
                 textSizes = compactSizes,
-                stepSeconds = STEP_SECONDS,
                 showPresets = false,
             )
         }
         val showPresets = heightDp <= 0 || heightDp >= PRESET_MIN_HEIGHT_DP
         val fraction = growthFraction(widthDp, heightDp)
-        val stepSeconds = if (fraction >= 0.5f) 30 else STEP_SECONDS
         if (fraction <= 0f) {
             return PenWidgetLayoutSpec(
                 compact = false,
                 textSizes = baseSizes,
-                stepSeconds = STEP_SECONDS,
                 showPresets = showPresets,
             )
         }
         return PenWidgetLayoutSpec(
             compact = false,
             textSizes = interpolate(baseSizes, largestSizes, fraction),
-            stepSeconds = stepSeconds,
             showPresets = showPresets,
         )
     }

@@ -2112,3 +2112,76 @@ permanently dead chain.
   `app/src/main/java/com/example/ui/PurchaseScreen.kt`,
   `app/src/main/java/com/example/ui/scan/BarcodeScanScreen.kt`,
   `gradle/libs.versions.toml`, `app/src/main/AndroidManifest.xml`
+
+## ADR-050: The pen widget step is configuration, never a function of widget size
+
+- Status: Accepted; implemented and released in 1.9.0 (code 54)
+- Date: 2026-08-30
+- Context: The owner reported that the 2x2 pen widget stepped by 30 seconds
+  instead of 10. Driving the real widget over ADB confirmed something narrower
+  and worse than a wrong threshold: the `+` button announced "Increase duration
+  by 10 seconds" and moved the counter to 30. Label and behaviour disagreed.
+  The cause was a `PendingIntent` identity collision. `PenWidgetUpdater` builds
+  three `RemoteViews` per instance on API 31+ - buckets 110x110, 140x160 and
+  280x320 - and `PenWidgetSizing.resolve` gave only the largest bucket
+  `stepSeconds = 30`. Each bucket asked `pendingIntent()` for a step-carrying
+  intent, but that function derived uniqueness from `31 * appWidgetId +
+  action.hashCode()` and the data URI `cannsheet://pen-widget/<id>/<action>`,
+  neither of which encoded the step. `PendingIntent` equality ignores extras, so
+  all three buckets resolved to one `PendingIntent`, `FLAG_UPDATE_CURRENT` made
+  the last write win, and the large bucket was written last. The text and the
+  content description live inside each bucket's own `RemoteViews`, so they
+  stayed truthful while the effect did not. The practical consequence was that
+  every API 31+ pen widget without an explicit override stepped by 30 at every
+  size, including compact. The size rule introduced in #110 never gated
+  anything; it only poisoned the shared intent. The existing suite passed
+  throughout, because `PenWidgetRendererTest` asserted the content description -
+  precisely the half that was correct - and nothing asserted what a tap
+  delivered.
+- Decision:
+  1. Widget size has no influence on the step. `stepSeconds` is removed from
+     `PenWidgetLayoutSpec` entirely, so "the buckets disagree about the step" is
+     no longer expressible rather than merely false. Size continues to drive
+     text sizes and preset-row visibility only.
+  2. No step travels in an intent extra. `EXTRA_STEP_SECONDS` is deleted and
+     `PenWidgetActionRouter` resolves the step from the configuration
+     repository it already holds. A stale `PendingIntent` issued by a
+     pre-upgrade build still carries `30`; it is now inert rather than
+     authoritative, so the fix takes effect before any widget repaint.
+  3. `pendingIntent()`'s data URI must encode every extra that changes the
+     intent's effect. `commitId` is now part of the URI for the same reason, and
+     a comment records the rule so a future extra is added in the same change.
+  4. The effective step is resolved in exactly one function,
+     `PenWidgetConfigRepository.effectiveStepSeconds`. Nothing else re-derives
+     `override ?: default`.
+  5. `stepSecondsOverride == null` means "inherit the app-wide default". The
+     configure screen previously read null as 10 and wrote it back as an
+     explicit 10, so merely opening and saving it detached a widget from the
+     default forever. It now carries null through and offers a Default choice.
+  6. The step is stated on the button. The full layouts render `+10s` / `-10s`;
+     the compact layout keeps bare symbols, where a four-glyph label would clip
+     in roughly 45dp. The invisibility of the step is why this defect survived.
+  7. The app-wide default lives in the existing `pen_widget_config` DataStore
+     under an unsuffixed key, and is deliberately excluded from `clear`,
+     `remapWidgetIds` and legacy adoption: deleting one widget, or a device
+     restore remapping ids, must not reset the app's default. An invalid stored
+     value falls back in memory and is never repaired by writing.
+  8. The widget is `reconfigurable`, and Settings gains a Widgets section, so
+     the step is reachable after placement. Before this, the picker existed but
+     could only be reached by deleting the widget and adding it again.
+- Consequences: Every placed pen widget without an explicit override steps by 10
+  after this release, including a large one that stepped by 30 before. No
+  migration runs; the owner can raise an individual widget to 30 in Settings.
+  Regression coverage now asserts what a tap delivers, not only what it
+  announces, and the renderer test checks visible text and content description
+  together across all three buckets.
+- Files: `app/src/main/java/com/example/widget/PenWidgetActions.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetActionRouter.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetSizing.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetRenderer.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetUpdater.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetConfigRepository.kt`,
+  `app/src/main/java/com/example/widget/PenWidgetConfigureActivity.kt`,
+  `app/src/main/java/com/example/widget/WidgetSettingsSection.kt`,
+  `app/src/main/java/com/example/ui/SettingsScreen.kt`,
+  `app/src/main/res/xml/pen_consumption_widget_info.xml`

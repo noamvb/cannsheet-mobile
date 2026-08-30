@@ -98,11 +98,31 @@ class PenWidgetActionRouterTest {
     }
 
     @Test
-    fun incrementAndDecrementUseTheRenderedStep() = runBlocking {
-        route(ACTION_INCREMENT, stepSeconds = 30)
-        route(ACTION_DECREMENT, stepSeconds = 30)
+    fun incrementAndDecrementUseTheEffectiveStep() = runBlocking {
+        configRepository.write(
+            WIDGET_ID,
+            PenWidgetInstanceConfig(stepSecondsOverride = 30),
+        )
+
+        route(ACTION_INCREMENT)
+        route(ACTION_DECREMENT)
 
         assertEquals(0, repository.read(WIDGET_ID).draftSeconds)
+    }
+
+    @Test
+    fun incrementUsesEffectiveStepAndIgnoresAStaleIntentExtra() = runBlocking {
+        configRepository.write(
+            WIDGET_ID,
+            PenWidgetInstanceConfig(stepSecondsOverride = 5),
+        )
+        val intent = Intent().apply {
+            putExtra("com.noamv.cannsheet.mobile.widget.STEP_SECONDS", 30)
+        }
+
+        router.handle(context, ACTION_INCREMENT, WIDGET_ID, intent)
+
+        assertEquals(5, repository.read(WIDGET_ID).draftSeconds)
     }
 
     @Test
@@ -192,11 +212,9 @@ class PenWidgetActionRouterTest {
     private suspend fun route(
         action: String,
         commitId: String? = null,
-        stepSeconds: Int? = null,
     ) {
         val intent = Intent().apply {
             putExtra(EXTRA_COMMIT_ID, commitId)
-            stepSeconds?.let { putExtra(EXTRA_STEP_SECONDS, it) }
         }
         router.handle(context, action, WIDGET_ID, intent)
     }

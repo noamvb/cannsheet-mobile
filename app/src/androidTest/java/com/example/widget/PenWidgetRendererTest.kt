@@ -37,6 +37,7 @@ class PenWidgetRendererTest {
                 canIncrement = true,
                 canSubmit = true,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -56,38 +57,43 @@ class PenWidgetRendererTest {
     }
 
     @Test
-    fun largeWidgetDescriptionsUseTheLargerStep() {
-        val views = PenWidgetRenderer.buildRemoteViews(
-            context,
-            8,
-            PenWidgetUiModel.Composing(
-                productName = PenWidgetText.Literal("Loaded pen"),
-                subtitle = PenWidgetText.Resource(
-                    R.string.pen_widget_status_synced,
-                    listOf("Active", "12"),
+    fun everyBucketKeepsVisibleLabelsAndDescriptionsAlignedWithTheEffectiveStep() {
+        listOf(
+            Triple(110, 110, true),
+            Triple(140, 160, false),
+            Triple(280, 320, false),
+        ).forEach { (widthDp, heightDp, compact) ->
+            val views = PenWidgetRenderer.buildRemoteViews(
+                context,
+                8 + widthDp,
+                PenWidgetUiModel.Composing(
+                    productName = PenWidgetText.Literal("Loaded pen"),
+                    subtitle = PenWidgetText.Resource(
+                        R.string.pen_widget_status_synced,
+                        listOf("Active", "12"),
+                    ),
+                    seconds = 30,
+                    recentlyQueued = false,
+                    canDecrement = true,
+                    canIncrement = true,
+                    canSubmit = true,
                 ),
-                seconds = 30,
-                recentlyQueued = false,
-                canDecrement = true,
-                canIncrement = true,
-                canSubmit = true,
-            ),
-            spec = PenWidgetSizing.resolve(
-                widthDp = 210,
-                heightDp = 240,
-                compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
-            ),
-        )
-        val root = views.apply(context, FrameLayout(context))
+                spec = PenWidgetSizing.resolve(
+                    widthDp = widthDp,
+                    heightDp = heightDp,
+                    compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
+                ),
+                stepSeconds = 5,
+            )
+            val root = views.apply(context, FrameLayout(context))
+            val plus = root.findViewById<Button>(R.id.widget_pen_plus)
+            val minus = root.findViewById<Button>(R.id.widget_pen_minus)
 
-        assertEquals(
-            "Increase duration by 30 seconds",
-            root.findViewById<Button>(R.id.widget_pen_plus).contentDescription,
-        )
-        assertEquals(
-            "Decrease duration by 30 seconds",
-            root.findViewById<Button>(R.id.widget_pen_minus).contentDescription,
-        )
+            assertEquals(if (compact) "+" else "+5s", plus.text.toString())
+            assertEquals(if (compact) "−" else "−5s", minus.text.toString())
+            assertEquals("Increase duration by 5 seconds", plus.contentDescription)
+            assertEquals("Decrease duration by 5 seconds", minus.contentDescription)
+        }
     }
 
     @Test
@@ -105,6 +111,7 @@ class PenWidgetRendererTest {
                 commitId = "commit-1",
                 remainingMillis = 3_000L,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -129,6 +136,7 @@ class PenWidgetRendererTest {
                 hint = PenWidgetText.Resource(R.string.pen_widget_rate_off_hint),
                 openTarget = PenWidgetOpenTarget.Settings,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -149,6 +157,7 @@ class PenWidgetRendererTest {
                 commitId = "commit-1",
                 remainingMillis = 0L,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -251,6 +260,7 @@ class PenWidgetRendererTest {
                 heightDp = 110,
                 compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -281,6 +291,7 @@ class PenWidgetRendererTest {
                 heightDp = 160,
                 compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
 
@@ -308,6 +319,7 @@ class PenWidgetRendererTest {
                 heightDp = heightDp,
                 compactBreakpointHeightDp = COMPACT_BREAKPOINT_HEIGHT_DP,
             ),
+            stepSeconds = STEP_SECONDS,
         )
         val root = views.apply(context, FrameLayout(context))
         val width = dp(widthDp)
