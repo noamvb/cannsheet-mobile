@@ -77,6 +77,7 @@ class PenWidgetRendererTest {
                     canDecrement = true,
                     canIncrement = true,
                     canSubmit = true,
+                    presetSeconds = listOf(10, 20, 30),
                 ),
                 spec = PenWidgetSizing.resolve(
                     widthDp = widthDp,
@@ -89,10 +90,16 @@ class PenWidgetRendererTest {
             val plus = root.findViewById<Button>(R.id.widget_pen_plus)
             val minus = root.findViewById<Button>(R.id.widget_pen_minus)
 
-            assertEquals(if (compact) "+" else "+5s", plus.text.toString())
-            assertEquals(if (compact) "−" else "−5s", minus.text.toString())
+            assertEquals(if (compact) "+" else "+5s", drawnText(plus))
+            assertEquals(if (compact) "−" else "−5s", drawnText(minus))
             assertEquals("Increase duration by 5 seconds", plus.contentDescription)
             assertEquals("Decrease duration by 5 seconds", minus.contentDescription)
+
+            // The preset row carries the same lowercase second suffix and the same allCaps risk.
+            val preset = root.findViewById<Button>(R.id.widget_pen_preset_1)
+            if (preset.visibility == View.VISIBLE) {
+                assertEquals("10s", drawnText(preset))
+            }
         }
     }
 
@@ -334,6 +341,17 @@ class PenWidgetRendererTest {
 
     private fun dp(value: Int): Int =
         (value * context.resources.displayMetrics.density).toInt()
+
+    /**
+     * The glyphs a [TextView] actually draws, which is not always what [TextView.getText] holds.
+     * `Button` styles default to `textAllCaps`, applied as a [android.text.method.TransformationMethod]
+     * at draw time, so a lowercase "+10s" reached the screen as "+10S" and read as "+105" while an
+     * assertion on `getText()` stayed green. Asserting the stored string rather than the rendered
+     * one is the same mistake that let the step defect ship.
+     */
+    private fun drawnText(view: TextView): String =
+        view.transformationMethod?.getTransformation(view.text, view)?.toString()
+            ?: view.text.toString()
 
     private companion object {
         /** Mirrors `R.dimen.widget_compact_breakpoint_height`. */
