@@ -47,28 +47,6 @@ class PenWidgetSizingTest {
     }
 
     @Test
-    fun baseSizeUsesTheDefaultStep() {
-        assertEquals(
-            STEP_SECONDS,
-            PenWidgetSizing.resolve(
-                PenWidgetSizing.BASE_WIDTH_DP,
-                PenWidgetSizing.BASE_HEIGHT_DP,
-                breakpoint,
-            ).stepSeconds,
-        )
-    }
-
-    @Test
-    fun largeWidgetUsesTheLargerStep() {
-        assertEquals(30, PenWidgetSizing.resolve(210, 240, breakpoint).stepSeconds)
-    }
-
-    @Test
-    fun compactAlwaysUsesTheDefaultStep() {
-        assertEquals(STEP_SECONDS, PenWidgetSizing.resolve(280, 120, breakpoint).stepSeconds)
-    }
-
-    @Test
     fun fullScaleSizeReachesLargestTextSizes() {
         val sizes = PenWidgetSizing.resolve(
             PenWidgetSizing.FULL_SCALE_WIDTH_DP,

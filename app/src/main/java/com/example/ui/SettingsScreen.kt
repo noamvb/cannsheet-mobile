@@ -30,6 +30,7 @@ import com.example.data.ProductTypeKey
 import com.example.domain.formatQuantityInInputUnit
 import com.example.domain.PenQuickLogState
 import com.example.nfc.NfcQuickLogSettingsCoordinator
+import com.example.widget.WidgetSettingsCoordinator
 import java.math.BigDecimal
 import java.net.URI
 import androidx.compose.ui.semantics.contentDescription
@@ -115,6 +116,9 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             onSaveSecondsPerUse = viewModel::updateSecondsPerUseForType,
             onClearSecondsPerUse = viewModel::clearSecondsPerUseForType,
         )
+
+        Spacer(modifier = Modifier.height(32.dp))
+        WidgetSettingsCoordinator()
 
         Spacer(modifier = Modifier.height(32.dp))
         NfcQuickLogSettingsCoordinator(

@@ -47,6 +47,10 @@
     <string name="pen_widget_discreet_mode">Discreet mode</string>
     <string name="pen_widget_discreet_mode_hint">Hide the product name and use counts</string>
     <string name="pen_widget_step_size">Step size</string>
+    <string name="pen_widget_step_size_hint">Overrides the default set in Settings</string>
+    <string name="pen_widget_step_inherit">Default</string>
+    <string name="pen_widget_minus_labelled" translatable="false">−%1$ds</string>
+    <string name="pen_widget_plus_labelled" translatable="false">+%1$ds</string>
     <string name="pen_widget_save">Save</string>
     <string name="pen_widget_open_app_description">%1$s. Double tap to open Cannsheet Mobile.</string>
     <string name="pen_widget_open_picker_description">%1$s. Double tap to choose a different cart.</string>
@@ -133,4 +137,13 @@
     <string name="multi_cart_widget_description">Log a default amount from an active pen cart.</string>
     <string name="multi_cart_widget_title">Quick log</string>
     <string name="multi_cart_more">+%1$d more · open app</string>
+    <string name="settings_widgets_title">Widgets</string>
+    <string name="settings_widget_step_default">Pen widget step size</string>
+    <string name="settings_widget_step_default_hint">How much the + and − buttons change the duration</string>
+    <string name="settings_widget_instances">Placed pen widgets</string>
+    <string name="settings_widget_instances_empty">No pen widgets are on your home screen</string>
+    <string name="settings_widget_size_compact">Small</string>
+    <string name="settings_widget_size_base">Medium</string>
+    <string name="settings_widget_size_large">Large</string>
+    <string name="settings_widget_instance_label" translatable="false">%1$s · %2$s · %3$d × %4$d</string>
 </resources>

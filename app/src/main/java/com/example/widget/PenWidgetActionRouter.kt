@@ -35,11 +35,15 @@ internal class PenWidgetActionRouter(
     suspend fun handle(context: Context, action: String, appWidgetId: Int, intent: Intent) {
         val state = stateRepository(context)
         val config = configRepository(context)
-        val step = intent.getIntExtra(EXTRA_STEP_SECONDS, STEP_SECONDS)
-            .coerceIn(1, MAX_SECONDS)
         when (action) {
-            ACTION_DECREMENT -> state.adjustDraftSeconds(appWidgetId, -step)
-            ACTION_INCREMENT -> state.adjustDraftSeconds(appWidgetId, step)
+            ACTION_DECREMENT -> {
+                val step = config.effectiveStepSeconds(appWidgetId).coerceIn(1, MAX_SECONDS)
+                state.adjustDraftSeconds(appWidgetId, -step)
+            }
+            ACTION_INCREMENT -> {
+                val step = config.effectiveStepSeconds(appWidgetId).coerceIn(1, MAX_SECONDS)
+                state.adjustDraftSeconds(appWidgetId, step)
+            }
             ACTION_RESET -> state.resetDraftSeconds(appWidgetId)
             in PRESET_ACTIONS -> {
                 val index = PRESET_ACTIONS.indexOf(action)
