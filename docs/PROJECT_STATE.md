@@ -4,6 +4,10 @@ Last updated: 2026-08-30
 
 ## Pen widget step size (released v1.9.0, code 54; label case repaired in v1.9.1 code 55)
 
+Current release v1.9.1 from `main` commit `d599258`; APK SHA-256
+`71795b64d0fb3caa9e0fa920c1997c76a5b1e3d3792984678324318c88a50ed8`, signing certificate
+unchanged from v1.8.1.
+
 Published 2026-08-30 from `main` commit `7e9eb58`; APK SHA-256
 `cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`, signing certificate
 unchanged from v1.8.1.
