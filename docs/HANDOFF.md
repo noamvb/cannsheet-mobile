@@ -158,9 +158,11 @@ New coverage aimed squarely at the gap that let this ship:
   is the owner's phone, and no local emulator is provisioned. The visible change is
   asserted mechanically instead, by the renderer test checking exact button text at each
   bucket.
-- On-device confirmation that the shipped build steps by 10 has **not** happened and cannot
-  happen until the owner installs 1.9.0 through Obtainium. The pre-fix behaviour was
-  confirmed on hardware; the post-fix behaviour is currently proven only by CI.
+- On-device confirmation of the shipped v1.9.1 build has **not** happened, for either the
+  stepping fix or the label case, and cannot until the owner installs 1.9.1 through
+  Obtainium. The pre-fix behaviour of both was confirmed on hardware - the step defect over
+  ADB, the `+10S` label by the owner reading their own home screen - but neither fix is
+  proven anywhere except CI.
 - The `+10s` / `-10s` labels need a widget repaint to appear, so they may briefly lag after
   install. The stepping itself is correct from the first tap, because the router reads
   configuration rather than an intent extra.
