@@ -6,9 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 
-**Status: v1.9.0 published and independently verified on 2026-08-30. v1.9.1 (code 55)
-corrects a label-case defect found on the owner's phone immediately after that install and
-is being released on top of it.**
+**Status: v1.9.1 published and independently verified on 2026-08-31.** It corrects a
+label-case defect the owner found on their phone immediately after installing v1.9.0.
 
 ### The v1.9.0 follow-up defect
 
@@ -117,26 +116,36 @@ New coverage aimed squarely at the gap that let this ship:
 
 ### Release provenance
 
-- Pull request merged: `noamvb/cannsheet-mobile#169`, squash merged
-- Squashed commit on `main`: `7e9eb58f4dcb9687d8594deb324be7ae4926b97f`
-- Proving `main` run: `33315508424`, `event=push`, `conclusion=success`
-- All six required jobs passed on that exact SHA: `Classify changes and scan repository`,
-  `Backend validation`, `Android static validation`, `Emulator API 24`, `Emulator API 36`,
-  and `Cannsheet Android PR validation`. Emulator API 36 only ever runs on `main`, which is
-  why a green pull-request check can never satisfy the publish workflow.
-- Annotated tag `v1.9.0` points at exactly that validated commit: `git rev-list -n 1 v1.9.0`
-  returns `7e9eb58f4dcb9687d8594deb324be7ae4926b97f`
-- Published by release workflow run `33315829391` at 2026-08-30T14:10:40Z:
-  `Cannsheet-Mobile-1.9.0.apk` (38,003,753 bytes) and `Cannsheet-Mobile-1.9.0.apk.sha256`
-- APK SHA-256: `cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`,
-  re-downloaded and checked independently with `shasum -a 256 -c` after publication: OK.
-  `aapt dump badging` reports package `com.noamv.cannsheet.mobile`, versionCode 54,
-  versionName 1.9.0, sdkVersion 24, targetSdkVersion 36.
+**v1.9.1 (code 55) - current release**
+
+- Pull request merged: `noamvb/cannsheet-mobile#171`, squash merged
+- Squashed commit on `main`: `d59925899880333eea133efc53993fde4f029d2b`
+- Proving `main` run: `33342371169`, `event=push`, `conclusion=success`, all six required
+  jobs green on that exact SHA. The first attempt failed in `Emulator API 36` on
+  `PurchaseContentTest.changingTypeClearsFieldsButReselectingTypePreservesThem` with
+  `Failed to inject touch input`, alongside `Failed to start Emulator console for 5554` and
+  repeated `adb` exit-code-1 lines - the documented emulator flakiness, unrelated to the
+  change, which touched only a widget layout and a widget renderer test. Re-running the
+  failed jobs on the same commit passed.
+- Annotated tag `v1.9.1` points at exactly that commit
+- Published at 2026-08-31T00:44:16Z: `Cannsheet-Mobile-1.9.1.apk` (38,003,769 bytes) and
+  `Cannsheet-Mobile-1.9.1.apk.sha256`
+- APK SHA-256: `71795b64d0fb3caa9e0fa920c1997c76a5b1e3d3792984678324318c88a50ed8`,
+  re-downloaded and checked with `shasum -a 256 -c` after publication: OK. `aapt dump
+  badging` reports package `com.noamv.cannsheet.mobile`, versionCode 55, versionName 1.9.1,
+  compileSdk 36.
 - Signing certificate: `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
-  (`CN=Android Debug`), byte-identical to the certificate on the published v1.8.1 APK.
-  `apksigner verify` reports `Verifies` with APK Signature Scheme v2 and no other scheme.
-  The phone updates in place; no uninstall is required and no Room data or queued offline
-  row is at risk.
+  (`CN=Android Debug`), unchanged from v1.9.0 and v1.8.1. `apksigner verify` reports
+  `Verifies` with APK Signature Scheme v2. The phone updates in place; no Room data or
+  queued offline row is at risk.
+
+**v1.9.0 (code 54) - superseded after a few hours**
+
+- Squashed commit `7e9eb58f4dcb9687d8594deb324be7ae4926b97f` via `#169`, proving run
+  `33315508424`, published 2026-08-30T14:10:40Z, APK SHA-256
+  `cdb44ae9fd126e0b987b62f0f8bba6a1a5d87cac9e56ff6147321ec0f598eb6d`, same signing
+  certificate. Provenance recorded in `#170`. Superseded by v1.9.1 because its new step
+  labels drew as `+10S`.
 
 ### Known limitations
 
@@ -177,11 +186,12 @@ New coverage aimed squarely at the gap that let this ship:
 
 ### Next step for the phone owner
 
-v1.9.0 is published. Open Obtainium, pull to refresh or tap **Check for updates**, and
-install Cannsheet Mobile 1.9.0.
+v1.9.1 is published. Open Obtainium, pull to refresh or tap **Check for updates**, and
+install Cannsheet Mobile 1.9.1.
 
-After installing, the fix is worth one check: tap `+` once on the small pen widget and
-confirm the counter moves to 10, not 30. On-device confirmation of the shipped build has
-not been performed - the pre-fix behaviour was reproduced on hardware, but the post-fix
-behaviour is so far proven only by CI, because installing a debug build over the release
-build would have forced an uninstall and destroyed the Room database.
+Two things worth a look after installing: tap `+` once on the small pen widget and confirm
+the counter moves to 10 rather than 30, and confirm the buttons now read `+10s` / `-10s`
+rather than `+10S`. On-device confirmation of either has not been performed here - the
+pre-fix behaviour was reproduced on hardware, but both fixes are so far proven only by CI,
+because installing a debug build over the release build would force an uninstall and
+destroy the Room database.
