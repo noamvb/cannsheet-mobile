@@ -8,8 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -109,7 +111,7 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.THC).assertTextContains("23.45")
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).assertTextContains("7")
         composeRule.onNodeWithTag(PurchaseContentTestTags.BORROWED).assertIsOff()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.POST_TAX).assertIsOff()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_PRE_TAX).assertIsSelected()
         composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).assertIsOff()
     }
 
@@ -177,7 +179,7 @@ class PurchaseContentTest {
         selectType("E")
         composeRule.onNodeWithTag(PurchaseContentTestTags.APPLIED_AUTOFILL).assertDoesNotExist()
         composeRule.onNodeWithTag(PurchaseContentTestTags.BORROWED).assertIsOff()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.POST_TAX).assertIsOff()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_PRE_TAX).assertIsSelected()
     }
 
     @Test
@@ -301,11 +303,28 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.VALIDATION_ERROR).assertIsDisplayed()
     }
 
+    @Test
+    fun costTaxPreviewFollowsSelectedPriceBasisWithoutChangingCost() {
+        setPurchaseContent(taxRate = 0.13)
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST).performTextInput("50")
+        // The supporting text merges into the field's semantics node, so it is only
+        // addressable on its own in the unmerged tree.
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
+            .assertTextEquals("\$56.50 with 13% tax")
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_POST_TAX).performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST).assertTextContains("50")
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
+            .assertTextEquals("\$44.25 before 13% tax")
+    }
+
     private fun setPurchaseContent(
         products: List<Product> = emptyList(),
         purchaseDefaultsState: PurchaseDefaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
         onQueuePurchase: (PurchaseSubmission) -> Unit = {},
         initialFormState: PurchaseFormState = PurchaseFormState.initial(),
+        taxRate: Double? = null,
     ) {
         composeRule.setContent {
             MaterialTheme {
@@ -314,6 +333,7 @@ class PurchaseContentTest {
                     products = products,
                     purchaseDefaultsState = purchaseDefaultsState,
                     formState = formState,
+                    taxRate = taxRate,
                     onFormChange = { formState = it },
                     onQueuePurchase = onQueuePurchase,
                 )

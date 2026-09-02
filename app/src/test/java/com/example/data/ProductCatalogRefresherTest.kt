@@ -75,7 +75,50 @@ class ProductCatalogRefresherTest {
         assertTrue(gateway.products.isEmpty())
     }
 
-    private fun refresher(response: String, gateway: FakeProductCatalogGateway) =
+    @Test
+    fun feedTaxRateIsRecorded() = runBlocking {
+        val recordedRates = mutableListOf<Double?>()
+        val refresher = refresher(
+            response = """{"environment":"PRODUCTION","products":[],"taxRate":0.13}""",
+            gateway = FakeProductCatalogGateway(),
+            recordTaxRate = recordedRates::add,
+        )
+
+        assertEquals(ProductCatalogRefreshResult.Updated, refresher.refresh(ENDPOINT))
+        assertEquals(listOf(0.13), recordedRates)
+    }
+
+    @Test
+    fun feedWithoutTaxRateRecordsNull() = runBlocking {
+        val recordedRates = mutableListOf<Double?>()
+        val refresher = refresher(
+            response = """{"environment":"PRODUCTION","products":[]}""",
+            gateway = FakeProductCatalogGateway(),
+            recordTaxRate = recordedRates::add,
+        )
+
+        assertEquals(ProductCatalogRefreshResult.Updated, refresher.refresh(ENDPOINT))
+        assertEquals(listOf(null), recordedRates)
+    }
+
+    @Test
+    fun environmentMismatchNeverInvokesTaxRateRecorder() = runBlocking {
+        var recorderInvoked = false
+        val refresher = refresher(
+            response = """{"environment":"SANDBOX","products":[],"taxRate":0.99}""",
+            gateway = FakeProductCatalogGateway(),
+            recordTaxRate = { recorderInvoked = true },
+        )
+
+        assertEquals(ProductCatalogRefreshResult.EnvironmentMismatch, refresher.refresh(ENDPOINT))
+        assertEquals(false, recorderInvoked)
+    }
+
+    private fun refresher(
+        response: String,
+        gateway: FakeProductCatalogGateway,
+        recordTaxRate: suspend (Double?) -> Unit = {},
+    ) =
         ProductCatalogRefresher(
             api = object : GasApiService {
                 override suspend fun getProducts(url: String): ResponseBody =
@@ -87,6 +130,7 @@ class ProductCatalogRefresherTest {
             moshi = com.squareup.moshi.Moshi.Builder().build(),
             gateway = gateway,
             expectedEnvironment = "PRODUCTION",
+            recordTaxRate = recordTaxRate,
         )
 
     private class FakeProductCatalogGateway : ProductCatalogGateway {

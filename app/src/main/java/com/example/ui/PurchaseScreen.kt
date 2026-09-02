@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -17,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -29,6 +27,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +59,7 @@ fun PurchaseScreen(
     val products by viewModel.allProducts.collectAsState()
     val purchaseDefaultsState by viewModel.purchaseDefaultsState.collectAsState()
     val formState by viewModel.purchaseFormState.collectAsState()
+    val purchaseTaxRate by viewModel.purchaseTaxRate.collectAsState()
     val purchaseFeedback by viewModel.purchaseFeedback.collectAsState()
     val context = LocalContext.current
 
@@ -72,6 +74,7 @@ fun PurchaseScreen(
         products = products,
         purchaseDefaultsState = purchaseDefaultsState,
         formState = formState,
+        taxRate = purchaseTaxRate,
         onFormChange = viewModel::updatePurchaseForm,
         onQueuePurchase = { submission -> viewModel.queuePurchase(submission) },
         onScanRequested = onScanRequested,
@@ -84,6 +87,7 @@ fun PurchaseContent(
     products: List<Product>,
     purchaseDefaultsState: PurchaseDefaultsState,
     formState: PurchaseFormState,
+    taxRate: Double? = null,
     onFormChange: (PurchaseFormState) -> Unit,
     onQueuePurchase: (PurchaseSubmission) -> Unit,
     modifier: Modifier = Modifier,
@@ -92,6 +96,7 @@ fun PurchaseContent(
     var showDatePicker by remember { mutableStateOf(false) }
     var typeExpanded by remember { mutableStateOf(false) }
     var nameExpanded by remember { mutableStateOf(false) }
+    val costTaxPreview = purchaseTaxPreview(formState.cost, formState.postTax, taxRate)
 
     val categories = ProductTypes.CODES
     val suggestions = remember(products, purchaseDefaultsState, formState.type, formState.name) {
@@ -297,6 +302,35 @@ fun PurchaseContent(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "Price entered as",
+            style = MaterialTheme.typography.labelLarge,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SegmentedButton(
+                selected = !formState.postTax,
+                onClick = {
+                    onFormChange(formState.copy(postTax = false, validationMessage = null))
+                },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                modifier = Modifier.testTag(PurchaseContentTestTags.PRICE_BASIS_PRE_TAX),
+            ) {
+                Text("Pre-tax")
+            }
+            SegmentedButton(
+                selected = formState.postTax,
+                onClick = {
+                    onFormChange(formState.copy(postTax = true, validationMessage = null))
+                },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                modifier = Modifier.testTag(PurchaseContentTestTags.PRICE_BASIS_POST_TAX),
+            ) {
+                Text("Post-tax")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -306,7 +340,17 @@ fun PurchaseContent(
                 onValueChange = {
                     onFormChange(formState.copy(cost = it, validationMessage = null))
                 },
-                label = { Text("Pre-tax Cost") },
+                label = { Text(if (formState.postTax) "Post-tax cost" else "Pre-tax cost") },
+                supportingText = if (costTaxPreview != null) {
+                    {
+                        Text(
+                            text = costTaxPreview,
+                            modifier = Modifier.testTag(PurchaseContentTestTags.COST_TAX_PREVIEW),
+                        )
+                    }
+                } else {
+                    null
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 isError = formState.validationMessage != null &&
                     !isNonNegativeFinite(formState.cost),
@@ -376,22 +420,6 @@ fun PurchaseContent(
                 },
                 modifier = Modifier.testTag(PurchaseContentTestTags.BORROWED),
             )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = formState.postTax,
-                onCheckedChange = {
-                    onFormChange(formState.copy(postTax = it, validationMessage = null))
-                },
-                modifier = Modifier.testTag(PurchaseContentTestTags.POST_TAX),
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("Post-tax")
         }
 
         Spacer(modifier = Modifier.height(8.dp))

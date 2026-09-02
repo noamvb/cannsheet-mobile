@@ -26,6 +26,7 @@ class ProductCatalogRefresher(
     private val moshi: Moshi,
     private val gateway: ProductCatalogGateway,
     private val expectedEnvironment: String,
+    private val recordTaxRate: suspend (Double?) -> Unit = {},
 ) {
     suspend fun refresh(endpoint: String): ProductCatalogRefreshResult {
         return try {
@@ -42,6 +43,7 @@ class ProductCatalogRefresher(
                 return ProductCatalogRefreshResult.EnvironmentMismatch
             }
 
+            recordTaxRate(response.taxRate)
             val products = response.products.map(GasProduct::toProductEntity)
             val remoteInteractions = response.products.mapNotNull { product ->
                 val timestamp = product.lastLoggedAtEpochMillis

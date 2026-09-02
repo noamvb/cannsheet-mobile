@@ -231,7 +231,8 @@ function doGet(e) {
       apiVersion: CANN.API_VERSION,
       environment: environment,
       correctionVersion: correctionCapability.version,
-      correctionWritesEnabled: correctionCapability.writesEnabled
+      correctionWritesEnabled: correctionCapability.writesEnabled,
+      taxRate: taxRate_(ss)
     };
     recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
     addServerTimingFields_(response, timing, environment);

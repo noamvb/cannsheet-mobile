@@ -21,6 +21,7 @@ data class GasProductResponse(
     val environment: String? = null,
     val correctionVersion: Int? = null,
     val correctionWritesEnabled: Boolean? = null,
+    val taxRate: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)

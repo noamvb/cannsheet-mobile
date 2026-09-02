@@ -168,6 +168,7 @@ function buildRuntime(options = {}) {
           environment: 'SANDBOX',
           schemaVersion: options.schemaVersion ?? 2,
           interactionSummaryVersion: summaryReady ? 1 : options.interactionSummaryVersion,
+          taxRate: options.taxRate,
         }),
       },
       MigrationReport: { rows: [REPORT_HEADERS] },
@@ -187,6 +188,12 @@ function post(runtime, payload) {
 function get(runtime) {
   return runtime.parseTextOutput(runtime.context.doGet());
 }
+
+const defaultTaxRateResponse = get(buildRuntime());
+assert.equal(defaultTaxRateResponse.taxRate, 0.13);
+
+const customTaxRateResponse = get(buildRuntime({ taxRate: 0.05 }));
+assert.equal(customTaxRateResponse.taxRate, 0.05);
 
 function v2Payload(requestOrdinal, overrides = {}) {
   return Object.assign({

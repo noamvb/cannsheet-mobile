@@ -1,6 +1,56 @@
 # Project state
 
-Last updated: 2026-08-30
+Last updated: 2026-09-02
+
+## Purchase tax basis and converted-cost preview (implemented; not released)
+
+Implemented on the working tree; no version bump, tag, or release. The client half is
+inert until `backend_additions.gs` is redeployed, and degrades to a message rather than a
+wrong figure until then.
+
+The purchase form asked for a "Pre-tax Cost" and carried a separate "Post-tax" checkbox
+further down the same screen, so ticking the box meant typing a post-tax amount into a
+field labelled pre-tax. The sheet has the same shape: the `Purchases` column `Pre-tax
+cost` holds whatever was typed and the `Post-tax` boolean beside it says what that number
+meant, with `Final cost = postTax ? cost : cost * (1 + TAX_RATE)`.
+
+- The checkbox is replaced by a `SingleChoiceSegmentedButtonRow` headed `Price entered
+  as`, sited directly above the cost field rather than below the Borrowed row. The cost
+  field's label follows the choice: `Pre-tax cost` or `Post-tax cost`.
+- `postTax` is unchanged below the UI - same `Boolean` on `PurchaseFormState`,
+  `PurchaseSubmission`, Room and `SyncPurchase`. No schema change, no migration, no queue
+  or sync-payload change.
+- `doGet` now publishes `taxRate: taxRate_(ss)` on the products feed, the same helper the
+  `Final cost` write paths use, so the preview cannot drift from what the sheet computes.
+- `TaxRateRepository` (new, `tax_rate` DataStore) stores it, accepting only a finite rate
+  in `[0.0, 1.0)`. An absent or invalid rate leaves a previously learned rate in place: an
+  older backend deployment sends none, and clearing one would remove the preview from a
+  screen that was working. `ProductCatalogRefresher` records it only after the environment
+  check passes, so a rejected response never moves the stored rate.
+- `purchaseTaxPreview` in `PurchaseTaxPreview.kt` is a pure function rendering the
+  converted amount into the cost field's `supportingText`: `$56.50 with 13% tax` when
+  pre-tax is selected, `$44.25 before 13% tax` when post-tax, both for a typed `50` at
+  `0.13`. It reuses `formatCadCents`. The result is presentation-only and is never
+  persisted or transmitted. With no rate stored it renders `Tax rate not synced yet`
+  rather than a figure.
+- Coverage: 15 new tests (588 -> 603 unit, 0 failures). `PurchaseTaxPreviewTest` covers
+  both directions, a fractional `12.5%` rate, invalid rates, invalid costs, zero, and an
+  out-of-range cost; `TaxRateRepositoryTest` covers validity and retention;
+  `ProductCatalogRefresherTest` asserts the recorder is never invoked on an environment
+  mismatch. `tests/backend_spreadsheet_test.js` asserts the feed's rate at the default
+  `0.13` and at a configured `0.05`, the second being the control that would otherwise let
+  a hardcoded constant pass.
+- Verified: unit suite 603/0 under `--rerun-tasks`; `compileDebugAndroidTestKotlin` and
+  `lintDebug` green; `PurchaseContentTest` run on an API 36 emulator at `OK (14 tests)`;
+  and the screen driven by hand on that emulator to confirm the label flip leaves the
+  typed cost untouched. Three mutations were run and each reddened the intended
+  assertions: the feed's rate replaced by a constant, the post-tax division replaced by
+  multiplication, and the rate validity rule widened to accept anything non-null.
+- The instrumentation assertion on the preview needs `useUnmergedTree = true`. Compose
+  merges a `TextField`'s `supportingText` into the field's own semantics node, which is
+  correct for screen readers and means the tagged node is not addressable in the merged
+  tree.
+
 
 ## Pen widget step size (released v1.9.0, code 54; label case repaired in v1.9.1 code 55)
 
