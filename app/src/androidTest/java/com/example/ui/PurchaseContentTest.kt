@@ -95,6 +95,7 @@ class PurchaseContentTest {
             cost = 42.0,
             thc = 0.2345,
             grams = 7.0,
+            postTax = false,
             ),
         )
 
@@ -118,7 +119,15 @@ class PurchaseContentTest {
     @Test
     fun sameNameUsesDefaultsForTheSelectedTypeOnly() {
         val flower = Product("flower", "Same Name", "P", 0, cost = 11.0, grams = 1.0)
-        val edible = Product("edible", "Same Name", "E", 0, cost = 22.0, grams = 2.0)
+        val edible = Product(
+            "edible",
+            "Same Name",
+            "E",
+            0,
+            cost = 22.0,
+            grams = 2.0,
+            postTax = false,
+        )
         val defaults = mapOf(
             PurchaseDefaultKey("Same Name", "P") to PurchaseDefaultValues(99.0, 0.2, 9.0),
         )
@@ -141,7 +150,16 @@ class PurchaseContentTest {
 
     @Test
     fun catalogFallbackConvertsFractionAndRejectsInvalidThc() {
-        val fraction = Product("fraction", "Fraction", "P", 0, cost = 12.0, thc = 0.25, grams = 3.5)
+        val fraction = Product(
+            "fraction",
+            "Fraction",
+            "P",
+            0,
+            cost = 12.0,
+            thc = 0.25,
+            grams = 3.5,
+            postTax = false,
+        )
         val percent = Product("percent", "Percent", "P", 0, cost = 12.0, thc = 25.0, grams = 3.5)
         val invalid = Product("invalid", "Invalid", "P", 0, cost = 12.0, thc = 101.0, grams = 3.5)
 
@@ -161,7 +179,8 @@ class PurchaseContentTest {
     fun changingTypeClearsFieldsButReselectingTypePreservesThem() {
         val product = Product("p1", "Blue Dream", "P", 0)
         val defaults = mapOf(
-            PurchaseDefaultKey("Blue Dream", "P") to PurchaseDefaultValues(10.0, 0.2, 3.5),
+            PurchaseDefaultKey("Blue Dream", "P") to
+                PurchaseDefaultValues(10.0, 0.2, 3.5, postTax = false),
         )
 
         setPurchaseContent(

@@ -54,6 +54,7 @@ class PurchaseFormStateTest {
                     cost = 42.0,
                     thc = 0.2345,
                     grams = 7.0,
+                    postTax = false,
                 ),
             ),
         )
@@ -69,7 +70,16 @@ class PurchaseFormStateTest {
 
     @Test
     fun `autofill falls back to catalog values without a saved default`() {
-        val product = Product("product", "Blue Dream", "P", 0, cost = 12.5, thc = 23.0, grams = 3.5)
+        val product = Product(
+            "product",
+            "Blue Dream",
+            "P",
+            0,
+            cost = 12.5,
+            thc = 23.0,
+            grams = 3.5,
+            postTax = false,
+        )
 
         val autofilled = populatedState().withAutofillFor(
             product = product,
@@ -79,6 +89,92 @@ class PurchaseFormStateTest {
         assertEquals("12.5", autofilled.cost)
         assertEquals("23", autofilled.thc)
         assertEquals("3.5", autofilled.grams)
+        assertNull(autofilled.appliedAutofillMessage)
+    }
+
+    @Test
+    fun `saved default carries a known post-tax basis`() {
+        val product = Product("product", "Blue Dream", "P", 0)
+        val defaults = PurchaseDefaultsState.Loaded(
+            mapOf(
+                PurchaseDefaultKey("Blue Dream", "P") to PurchaseDefaultValues(
+                    cost = 42.0,
+                    thc = 0.2,
+                    grams = 3.5,
+                    postTax = true,
+                ),
+            ),
+        )
+
+        val autofilled = populatedState().withAutofillFor(product, defaults)
+
+        assertTrue(autofilled.postTax)
+        assertEquals("Saved defaults applied.", autofilled.appliedAutofillMessage)
+    }
+
+    @Test
+    fun `saved default warns when its tax basis is unknown`() {
+        val product = Product("product", "Blue Dream", "P", 0)
+        val defaults = PurchaseDefaultsState.Loaded(
+            mapOf(
+                PurchaseDefaultKey("Blue Dream", "P") to PurchaseDefaultValues(
+                    cost = 42.0,
+                    thc = 0.2,
+                    grams = 3.5,
+                    postTax = null,
+                ),
+            ),
+        )
+
+        val autofilled = populatedState().withAutofillFor(product, defaults)
+
+        assertFalse(autofilled.postTax)
+        assertEquals(
+            "Saved defaults applied. Tax basis wasn't recorded - check it.",
+            autofilled.appliedAutofillMessage,
+        )
+    }
+
+    @Test
+    fun `catalog product carries a known post-tax basis`() {
+        val product = Product("product", "Blue Dream", "P", 0, cost = 12.5, postTax = true)
+
+        val autofilled = populatedState().withAutofillFor(
+            product = product,
+            defaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
+        )
+
+        assertTrue(autofilled.postTax)
+        assertNull(autofilled.appliedAutofillMessage)
+    }
+
+    @Test
+    fun `catalog product warns when a filled cost has an unknown tax basis`() {
+        val product = Product("product", "Blue Dream", "P", 0, cost = 12.5, postTax = null)
+
+        val autofilled = populatedState().withAutofillFor(
+            product = product,
+            defaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
+        )
+
+        assertFalse(autofilled.postTax)
+        assertEquals(
+            "Tax basis wasn't recorded - check it.",
+            autofilled.appliedAutofillMessage,
+        )
+    }
+
+    @Test
+    fun `catalog product without a cost does not warn about an unknown tax basis`() {
+        val product = Product("product", "Blue Dream", "P", 0, cost = 0.0, postTax = null)
+
+        val autofilled = populatedState().withAutofillFor(
+            product = product,
+            defaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
+        )
+
+        assertEquals("", autofilled.cost)
+        assertFalse(autofilled.postTax)
         assertNull(autofilled.appliedAutofillMessage)
     }
 

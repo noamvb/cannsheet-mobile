@@ -195,6 +195,15 @@ assert.equal(defaultTaxRateResponse.taxRate, 0.13);
 const customTaxRateResponse = get(buildRuntime({ taxRate: 0.05 }));
 assert.equal(customTaxRateResponse.taxRate, 0.05);
 
+const productBasisResponse = get(buildRuntime({
+  purchases: [
+    Object.assign({}, purchaseRecords()[0], { 'Post-tax': true }),
+    Object.assign({}, purchaseRecords()[1], { 'Post-tax': false }),
+  ],
+}));
+assert.equal(productBasisResponse.products[0].postTax, true);
+assert.equal(productBasisResponse.products[1].postTax, false);
+
 function v2Payload(requestOrdinal, overrides = {}) {
   return Object.assign({
     apiVersion: 2,

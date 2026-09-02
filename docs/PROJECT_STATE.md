@@ -2,6 +2,99 @@
 
 Last updated: 2026-09-02
 
+## Autofill carries the tax basis (implemented; not released)
+
+Implemented on the working tree; no version bump, tag, or release. Builds on the
+tax-basis change above and on ADR-052.
+
+An autofilled cost arrived without the basis it was recorded under. The
+`Purchases` sheet stores the typed number in `Pre-tax cost` and what it meant in
+the `Post-tax` boolean beside it, but `doGet` sent only the number and
+`PurchaseDefaultValues` was `(cost, thc, grams)`. Re-buying a product first
+entered post-tax autofilled its post-tax number under a Pre-tax selection, and
+the sheet then added tax to a figure that already included it. The new
+converted-cost preview made this worse by displaying the wrong figure
+confidently.
+
+- An unrecorded basis is `null`, deliberately distinct from `false`, so the form
+  can say it does not know rather than assume pre-tax.
+- `doGet` sends `postTax` beside `cost` on each product. `Post-tax` was already a
+  column on the same `Purchases` sheet the feed reads, so this is one line.
+- `GasProduct` and the Room `Product` entity carry `postTax: Boolean?`, mapped
+  through `toProductEntity` without the `?: false` coercion the other optional
+  numbers use. Room is at version 13; `MIGRATION_12_13` adds a nullable column
+  with no default, because every pre-existing row genuinely has an unknown basis.
+  The column is repopulated wholesale on the next catalog refresh, so the unknown
+  window closes on its own.
+- The three `Product(...)` sites that record a just-queued purchase
+  (`Database.kt`, `Repository.kt` twice) are deliberately unchanged. They do not
+  set `cost` either, so asserting a basis there would describe a number that does
+  not exist.
+- `PurchaseDefaultValues` and `PersistedPurchaseDefault` gain a nullable
+  `postTax`. `PURCHASE_DEFAULTS_PAYLOAD_VERSION` is deliberately NOT bumped:
+  `decodePurchaseDefaults` returns an empty map when the stored version does not
+  match exactly, so a bump would silently discard every saved default the user
+  already has. Encode and decode are asymmetric in that file - encode goes
+  through Moshi and `PersistedPurchaseDefault`, decode reads a generic map by
+  field name - so both were edited.
+- `withAutofillFor` sets the form's basis from whichever source supplied the
+  cost. When that source's basis is `null` it leaves the toggle pre-tax and warns
+  in `appliedAutofillMessage`: `Saved defaults applied. Tax basis wasn't recorded
+  - check it.` on the saved-default branch, `Tax basis wasn't recorded - check
+  it.` on the catalog branch. It warns only when a cost was actually filled;
+  a catalog product with a non-positive cost fills nothing and says nothing.
+- Coverage: 603 -> 611 unit tests, 0 failures. Verified here: unit suite 611/0
+  under `--rerun-tasks`, `compileDebugAndroidTestKotlin` and `lintDebug` green,
+  `node tests/backend_spreadsheet_test.js` green, and on an API 36 emulator
+  `DatabaseMigrationTest` at `OK (12 tests)`. Two mutations each reddened the
+  intended assertion: dropping the cost-filled guard on the warning, and making
+  the decode stop reading `postTax` - the latter proving the asymmetric
+  encode/decode pair is exercised end to end rather than only its Moshi half.
+
+  Measured on an API 36 emulator against the live production feed on 2026-09-02:
+  selecting a real catalog product autofills its cost and shows BOTH
+  `Tax basis wasn't recorded - check it.` and `Tax rate not synced yet`, because
+  the deployed backend publishes neither `postTax` nor `taxRate`. Both messages
+  are true and both disappear once the backend ships the two fields, but until
+  then every catalog autofill carries two advisory lines. This is why the release
+  was held rather than cut - see the divergence section below.
+
+## Production Apps Script divergence (open; nothing changed)
+
+Recorded 2026-09-02 from a read-only inspection of the live editor. **No edit was
+made to the Apps Script project.**
+
+Production project `1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2`
+holds a `Code.gs` of 303,099 characters, byte-identical to this repository's
+`backend_additions.gs` at commit `0392591` (2026-08-09). It therefore predates:
+
+- `0462e38` (2026-08-14, #83), the analytics response caching, batch Sheets
+  retrieval and mutation-watermark work; and
+- `b3c869b` (2026-08-15), its follow-up defect fix.
+
+Fifteen functions defined in this repository are absent from the live script -
+`fetchAnalyticsRawData_`, `fetchAnalyticsDataSheetsBatch_`,
+`fetchAnalyticsDataSheetsSequential_`, `buildAnalyticsCacheKey_`,
+`buildAnalyticsRowsFromValues_`, `getChunkedScriptCache_`,
+`putChunkedScriptCache_`, `bumpMutationWatermark_`, `getMutationWatermark_`,
+`configValuesFromRows_`, `dateFromSpreadsheetSerial_`, `headerMapFromRow_`,
+`normalizeBatchDateColumns_`, `padBatchRowWidth_` and
+`recoverableApplyEvidenceFromValues_`. The live script defines nothing this
+repository lacks and has no dangling references to the missing names, so it is a
+coherent earlier revision rather than a damaged one.
+
+This contradicts `BACKEND_SYNC_PERFORMANCE_REPORT.md` ("production version 8 is
+live on the unchanged endpoint") and `BACKEND_ANALYTICS_ROLLBACK.md` ("Current
+analytics version: Apps Script version `9`").
+
+Unresolved: `/exec` serves a numbered version rather than the editor's HEAD, so
+it remains possible that a version containing the performance work is still being
+served while HEAD was later reverted. The Deploy > Manage deployments dialog was
+not readable through automation and the active version number has not been
+established. Until it is, **publishing a new version from the current HEAD risks
+silently reverting the backend performance work**, which is why the `taxRate` and
+`postTax` feed fields have not been applied to the live project.
+
 ## Purchase tax basis and converted-cost preview (implemented; not released)
 
 Implemented on the working tree; no version bump, tag, or release. The client half is

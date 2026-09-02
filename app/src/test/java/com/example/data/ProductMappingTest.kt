@@ -27,11 +27,24 @@ class ProductMappingTest {
         gasProduct(totalUses = Double.NaN).toProductEntity()
     }
 
-    private fun gasProduct(totalUses: Double?): GasProduct = GasProduct(
+    @Test
+    fun postTaxBasisMapsStraightThrough() {
+        assertEquals(true, gasProduct(totalUses = null, postTax = true).toProductEntity().postTax)
+        assertEquals(false, gasProduct(totalUses = null, postTax = false).toProductEntity().postTax)
+    }
+
+    @Test
+    fun missingPostTaxBasisRemainsUnknown() {
+        // Missing must remain unknown rather than silently becoming pre-tax.
+        assertEquals(null, gasProduct(totalUses = null).toProductEntity().postTax)
+    }
+
+    private fun gasProduct(totalUses: Double?, postTax: Boolean? = null): GasProduct = GasProduct(
         id = "p1",
         name = "Blue Dream",
         type = "F",
         status = 0,
+        postTax = postTax,
         totalUses = totalUses,
     )
 }

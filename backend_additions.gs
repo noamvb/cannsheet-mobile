@@ -210,6 +210,7 @@ function doGet(e) {
           name: text_(value_(row, headers, 'Product name')),
           type: text_(value_(row, headers, 'Type')),
           cost: finiteNumberOr_(value_(row, headers, 'Pre-tax cost'), 0),
+          postTax: truthy_(value_(row, headers, 'Post-tax')),
           thc: finiteNumberOr_(value_(row, headers, 'THC%'), 0),
           grams: finiteNumberOr_(value_(row, headers, 'Grams'), 0),
           status: allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE),

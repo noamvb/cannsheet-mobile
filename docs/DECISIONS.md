@@ -2242,3 +2242,57 @@ permanently dead chain.
   `app/src/main/java/com/example/ui/PurchaseTaxPreview.kt`,
   `app/src/main/java/com/example/ui/PurchaseScreen.kt`,
   `app/src/main/java/com/example/ui/PurchaseAutofill.kt`
+
+## ADR-052: An unrecorded tax basis is null, and autofill says so rather than assuming
+
+- Status: Accepted; implemented, not yet released
+- Date: 2026-09-02
+- Context: ADR-051 made the purchase form's tax basis an explicit choice and
+  added a converted-cost preview, but left a gap it named: an autofilled cost
+  arrived without the basis it was recorded under. The `Purchases` sheet keeps
+  the typed number in `Pre-tax cost` and its meaning in the `Post-tax` boolean
+  beside it, yet `doGet` sent only the number and `PurchaseDefaultValues` was
+  `(cost, thc, grams)`. `clearedForNewSelection()` resets the basis to pre-tax on
+  every product selection, so re-buying a product first entered post-tax
+  autofilled its post-tax figure, marked it pre-tax, and let the sheet add tax to
+  a number that already included it. The preview added by ADR-051 then displayed
+  that wrong figure confidently, which raised the priority rather than creating
+  the bug.
+- Decision:
+  1. The basis travels with the cost in both refill paths - the products feed and
+     a saved default - because a number whose meaning is stored elsewhere is a
+     number that will eventually be read wrongly.
+  2. An unrecorded basis is `null`, deliberately distinct from `false`. Coercing
+     a missing flag to pre-tax is what the old behaviour did, and it is precisely
+     the silent assumption this change exists to remove. `toProductEntity` maps
+     `postTax` through without the `?: false` coercion applied to the optional
+     numbers beside it, and the Room column is nullable with no default.
+  3. An unknown basis is spoken aloud, not guessed. Autofill fills the cost,
+     leaves the toggle pre-tax, and warns in the message the screen already
+     shows. Refusing to fill the cost was rejected: it would degrade autofill for
+     every product saved before this change, to avoid a case the user can see and
+     correct in one tap. Filling silently was rejected because the preview now
+     makes a wrong basis look authoritative.
+  4. The warning is conditional on a cost actually being filled. A catalog
+     product with a non-positive cost fills nothing, so there is no number whose
+     basis could be wrong and nothing to warn about. This is the one behaviour a
+     warning that fired unconditionally would still have passed every other test,
+     so it carries its own test.
+  5. `PURCHASE_DEFAULTS_PAYLOAD_VERSION` is NOT bumped for the added field.
+     `decodePurchaseDefaults` returns an empty map when the stored version does
+     not match exactly, so a bump would silently discard every saved default the
+     user already has. A nullable added field needs no bump: an old payload
+     decodes with `postTax = null`, which is the correct "not recorded" value.
+- Consequences: The unknown-basis window is transient for catalog products, whose
+  rows are replaced wholesale on the next refresh, and indefinite for saved
+  defaults until each is re-saved - which is why the warning matters more on that
+  branch. Both halves depend on a backend that publishes `postTax`; see the
+  production Apps Script divergence recorded in `docs/PROJECT_STATE.md`, which is
+  unresolved and is why nothing has been deployed.
+- Files: `backend_additions.gs`,
+  `app/src/main/java/com/example/data/Network.kt`,
+  `app/src/main/java/com/example/data/Database.kt`,
+  `app/src/main/java/com/example/data/CannsheetGraph.kt`,
+  `app/src/main/java/com/example/data/ProductMapping.kt`,
+  `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt`,
+  `app/src/main/java/com/example/ui/PurchaseFormState.kt`

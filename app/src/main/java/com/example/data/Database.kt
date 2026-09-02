@@ -26,6 +26,7 @@ data class Product(
     val cost: Double = 0.0,
     val thc: Double = 0.0,
     val grams: Double = 0.0,
+    val postTax: Boolean? = null,
     val productUuid: String? = null,
     val totalUses: Double? = null,
 )
@@ -430,7 +431,7 @@ interface CannsheetDao {
         AnalyticsCacheEntity::class,
         ScannedProductLink::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = false,
 )
 @TypeConverters(CannsheetTypeConverters::class)
@@ -691,6 +692,12 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent(),
                 )
+            }
+        }
+
+        val MIGRATION_12_13: Migration = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `products` ADD COLUMN `postTax` INTEGER")
             }
         }
     }
