@@ -315,7 +315,11 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.NAME).performTextInput("Defaultable")
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST).performTextInput("10")
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).performTextInput("1")
-        composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).performClick()
+        // Scroll first: the form grew when the price-basis control was added, and on a
+        // short screen this switch sits below the fold, where a bare click never lands.
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT)
+            .performScrollTo()
+            .performClick()
         composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().performClick()
 
         composeRule.runOnIdle { assertNull(submission) }
