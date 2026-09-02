@@ -114,6 +114,27 @@ class ProductCatalogRefresherTest {
         assertEquals(false, recorderInvoked)
     }
 
+    @Test
+    fun taxRatePersistenceFailureStillRefreshesTheCatalog() = runBlocking {
+        val gateway = FakeProductCatalogGateway()
+        val refresher = refresher(
+            response = """
+                {
+                  "environment":"PRODUCTION",
+                  "taxRate":0.13,
+                  "products":[{"id":"product-1","name":"Test","type":"Flower","status":1,"totalUses":1.0}]
+                }
+            """.trimIndent(),
+            gateway = gateway,
+            recordTaxRate = { throw IOException("datastore unavailable") },
+        )
+
+        // The rate is an auxiliary preview preference; losing it must not cost the
+        // user their catalog refresh.
+        assertEquals(ProductCatalogRefreshResult.Updated, refresher.refresh(ENDPOINT))
+        assertEquals(1, gateway.products.size)
+    }
+
     private fun refresher(
         response: String,
         gateway: FakeProductCatalogGateway,

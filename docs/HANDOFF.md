@@ -1,8 +1,35 @@
 # Current handoff
 
-Last updated: 2026-08-30
+Last updated: 2026-09-02
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## In flight: v1.10.0 (code 56) - prepared, not yet published
+
+**v1.9.1 (code 55) is still the installed release.** v1.10.0 is committed on `main`
+with `versionCode` 56 and `versionName` 1.10.0, but **no tag exists and nothing has
+been published**, so the phone is unaffected until the tag lands.
+
+It carries three changes to the purchase form: the tax basis as an explicit Pre-tax /
+Post-tax choice with a converted-cost preview (ADR-051), that basis carried onto every
+autofilled cost with an explicit warning when it was never recorded (ADR-052), and a
+float artifact in the autofilled THC percent. See `docs/PROJECT_STATE.md`.
+
+The backend half **is** already live: production Apps Script version `14` on the
+unchanged deployment `AKfycbys-9r8...`, verified against the live endpoint returning
+`taxRate: 0.13` with every product carrying `postTax` where the sheet records it. A
+blank `Post-tax` cell deliberately leaves the field absent so the client reads it as
+unknown rather than assuming pre-tax.
+
+Also corrected during this work: the live Apps Script was found to be running this
+repository's `backend_additions.gs` as of commit `0392591` (9 Aug), and the analytics
+caching and batch-fetch work of `0462e38` has **never** served production.
+`BACKEND_SYNC_PERFORMANCE_REPORT.md` and `BACKEND_ANALYTICS_ROLLBACK.md` are both
+wrong about the live state and still need correcting.
+
+Remaining before v1.10.0 can publish: merge, prove the exact `main` SHA green across
+all six jobs, tag `v1.10.0`, and verify the published APK.
+
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 

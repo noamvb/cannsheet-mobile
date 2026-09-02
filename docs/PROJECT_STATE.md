@@ -2,10 +2,12 @@
 
 Last updated: 2026-09-02
 
-## Release 1.10.0 (code 56)
+## Release 1.10.0 (code 56) - prepared, not yet published
 
-Two purchase-form features plus one defect found while validating them, released
-together at the owner's request. The backend half is deployed: production Apps
+Two purchase-form features plus one defect found while validating them, prepared for
+release together at the owner's request. `versionCode` 56 and `versionName` 1.10.0
+are committed; **no tag exists and nothing has been published**, so v1.9.1 (code 55)
+remains the installed release until the tag lands. The backend half is deployed: production Apps
 Script version `14` on the unchanged deployment
 `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
 verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
@@ -20,10 +22,10 @@ verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
   decision.
 
 
-## Autofill carries the tax basis (implemented; not released)
+## Autofill carries the tax basis (in 1.10.0; not yet published)
 
-Implemented on the working tree; no version bump, tag, or release. Builds on the
-tax-basis change above and on ADR-052.
+Carried by the unreleased 1.10.0 (code 56). Builds on the tax-basis change above
+and on ADR-052.
 
 An autofilled cost arrived without the basis it was recorded under. The
 `Purchases` sheet stores the typed number in `Pre-tax cost` and what it meant in
@@ -133,11 +135,11 @@ Two consequences:
    would revert nothing, because no newer code is serving. The earlier concern
    that a publish could silently roll back the performance work does not apply.
 
-## Purchase tax basis and converted-cost preview (implemented; not released)
+## Purchase tax basis and converted-cost preview (in 1.10.0; not yet published)
 
-Implemented on the working tree; no version bump, tag, or release. The client half is
-inert until `backend_additions.gs` is redeployed, and degrades to a message rather than a
-wrong figure until then.
+Carried by the unreleased 1.10.0 (code 56). The backend half is deployed as Apps
+Script version 14, so the client no longer degrades to a message once 1.10.0 is
+installed.
 
 The purchase form asked for a "Pre-tax Cost" and carried a separate "Post-tax" checkbox
 further down the same screen, so ticking the box meant typing a post-tax amount into a

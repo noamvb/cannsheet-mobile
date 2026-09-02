@@ -195,6 +195,39 @@ assert.equal(defaultTaxRateResponse.taxRate, 0.13);
 const customTaxRateResponse = get(buildRuntime({ taxRate: 0.05 }));
 assert.equal(customTaxRateResponse.taxRate, 0.05);
 
+// A blank Post-tax cell means the basis was never recorded. The feed must leave the
+// field absent so the client reads it as unknown, rather than coercing it to false
+// and silently presenting a post-tax amount as pre-tax. The blank row is the control:
+// without it, `truthy_` would satisfy the true and false cases just as well.
+function basisPurchase(ordinal, name, id, postTaxCell) {
+  return {
+    Date: '2025-01-0' + ordinal, Type: 'P', 'Product name': name,
+    'Pre-tax cost': 10, 'THC%': 20, Grams: 3.5, Borrowed: 0,
+    Finished: 0, 'Product ID': id, Uses: 0, 'Post-tax': postTaxCell,
+    'Final cost': 10, 'Most recent use': '',
+    'Product UUID': deterministicUuid(400 + ordinal),
+    'Client Action UUID': deterministicUuid(500 + ordinal),
+    'Created At': new Date('2025-01-0' + ordinal + 'T09:00:00Z'), 'Finished At': '',
+    'Last quantity': '',
+  };
+}
+
+const basisResponse = get(buildRuntime({
+  purchases: [
+    basisPurchase(1, 'Explicit post-tax', '*P1', true),
+    basisPurchase(2, 'Explicit pre-tax', '*P2', false),
+    basisPurchase(3, 'Unrecorded basis', '*P3', ''),
+  ],
+}));
+const basisById = Object.fromEntries(basisResponse.products.map((p) => [p.id, p]));
+assert.equal(basisById['*P1'].postTax, true);
+assert.equal(basisById['*P2'].postTax, false);
+assert.equal(
+  Object.prototype.hasOwnProperty.call(basisById['*P3'], 'postTax'),
+  false,
+  'a blank Post-tax cell must leave postTax absent, not coerce it to false'
+);
+
 const productBasisResponse = get(buildRuntime({
   purchases: [
     Object.assign({}, purchaseRecords()[0], { 'Post-tax': true }),
