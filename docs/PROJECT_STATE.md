@@ -9,10 +9,13 @@ together at the owner's request. Tag `v1.10.0` points at `9144353`, proven by ma
 run `33690914527` with all six jobs green; APK SHA-256
 `dac9d2b6dc5283f850d6a03e94ae613039e4f00227d4cf13538383a69d002497`, signing
 certificate unchanged from v1.9.1. Full provenance in `docs/HANDOFF.md`. The backend half is deployed: production Apps
-Script version `14` on the unchanged deployment
+Script **version 15** on the unchanged deployment
 `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
 verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
-(106 true, 267 false).
+(106 true, 267 false). Version 14 was published first and superseded within
+the hour: it used `truthy_`, which never returns null, so it could not express
+an unrecorded tax basis. Version 15 uses `strictPostTax_` and omits the field
+unless the sheet records it.
 
 - Tax basis is an explicit Pre-tax / Post-tax choice with a converted-cost
   preview - ADR-051.
@@ -76,7 +79,7 @@ confidently.
   cost and showed BOTH `Tax basis wasn't recorded - check it.` and `Tax rate not
   synced yet`, because the then-deployed backend published neither `postTax` nor
   `taxRate`. The release was held for that reason. Both fields now ship in Apps
-  Script version 14, so both messages are expected to disappear for catalog
+  Script version 15, so both messages are expected to disappear for catalog
   autofills; they remain correct for a saved default stored before this change,
   which is exactly what they are for.
 
