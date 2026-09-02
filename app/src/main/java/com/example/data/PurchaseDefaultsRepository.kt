@@ -43,6 +43,7 @@ data class PurchaseDefaultValues(
     val cost: Double,
     val thc: Double,
     val grams: Double,
+    val postTax: Boolean? = null,
 )
 
 /**
@@ -93,7 +94,7 @@ fun isValidPurchaseSubmission(submission: PurchaseSubmission): Boolean =
 fun PurchaseSubmission.defaultKey(): PurchaseDefaultKey = PurchaseDefaultKey(name, type)
 
 fun PurchaseSubmission.defaultValues(): PurchaseDefaultValues =
-    PurchaseDefaultValues(cost = cost, thc = thc, grams = grams)
+    PurchaseDefaultValues(cost = cost, thc = thc, grams = grams, postTax = postTax)
 
 class PurchaseDefaultsRepository private constructor(
     private val dataStore: DataStore<Preferences>,
@@ -165,6 +166,7 @@ class PurchaseDefaultsRepository private constructor(
                         cost = values.cost,
                         thc = values.thc,
                         grams = values.grams,
+                        postTax = values.postTax,
                     )
                 },
         ),
@@ -197,6 +199,7 @@ internal fun decodePurchaseDefaults(payload: String?): Map<PurchaseDefaultKey, P
                     cost = (fields["cost"] as? Number)?.toDouble() ?: Double.NaN,
                     thc = thc ?: Double.NaN,
                     grams = (fields["grams"] as? Number)?.toDouble() ?: Double.NaN,
+                    postTax = fields["postTax"] as? Boolean,
                 )
                 if (isValidPurchaseDefaultKey(key) && isValidPurchaseDefaultValues(values)) {
                     defaults[key] = values
@@ -228,4 +231,5 @@ internal data class PersistedPurchaseDefault(
     val cost: Double? = null,
     val thc: Double? = null,
     val grams: Double? = null,
+    val postTax: Boolean? = null,
 )

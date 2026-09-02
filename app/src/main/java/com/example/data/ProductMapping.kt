@@ -12,6 +12,7 @@ internal fun GasProduct.toProductEntity(): Product {
         cost = cost ?: 0.0,
         thc = thc ?: 0.0,
         grams = grams ?: 0.0,
+        postTax = postTax,
         productUuid = productUuid,
         totalUses = totalUses,
     )

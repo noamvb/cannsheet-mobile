@@ -62,7 +62,10 @@ class PurchaseDefaultsRepositoryTest {
 
         assertTrue(isValidPurchaseSubmission(submission))
         assertEquals(PurchaseDefaultKey("blue dream", "F"), submission.defaultKey())
-        assertEquals(PurchaseDefaultValues(20.0, 0.0, 3.5), submission.defaultValues())
+        assertEquals(
+            PurchaseDefaultValues(20.0, 0.0, 3.5, postTax = true),
+            submission.defaultValues(),
+        )
         assertFalse(isValidPurchaseSubmission(submission.copy(date = "  ")))
     }
 
@@ -93,8 +96,38 @@ class PurchaseDefaultsRepositoryTest {
         )
 
         assertEquals(
-            linkedMapOf(PurchaseDefaultKey("blue dream", "F") to PurchaseDefaultValues(15.0, 0.0, 7.0)),
+            linkedMapOf(
+                PurchaseDefaultKey("blue dream", "F") to
+                    PurchaseDefaultValues(15.0, 0.0, 7.0, postTax = null),
+            ),
             defaults,
+        )
+    }
+
+    @Test
+    fun savedSubmissionPostTaxBasisRoundTripsThroughEncodeAndDecode() = runBlocking {
+        val dataStore = RecordingPreferencesDataStore()
+        val repository = PurchaseDefaultsRepository(dataStore)
+
+        repository.saveDefault(
+            PurchaseSubmission(
+                date = "2026-09-02",
+                type = "P",
+                name = "Blue Dream",
+                cost = 20.0,
+                thc = 0.2,
+                grams = 3.5,
+                borrowed = false,
+                postTax = true,
+                saveAsDefault = true,
+            ),
+        )
+
+        assertEquals(
+            true,
+            decodePurchaseDefaults(dataStore.currentJson())
+                .getValue(PurchaseDefaultKey("Blue Dream", "P"))
+                .postTax,
         )
     }
 

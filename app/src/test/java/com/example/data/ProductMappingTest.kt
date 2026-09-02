@@ -1,6 +1,7 @@
 package com.example.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ProductMappingTest {
@@ -27,11 +28,39 @@ class ProductMappingTest {
         gasProduct(totalUses = Double.NaN).toProductEntity()
     }
 
-    private fun gasProduct(totalUses: Double?): GasProduct = GasProduct(
+    @Test
+    fun postTaxBasisMapsStraightThrough() {
+        assertEquals(true, gasProduct(totalUses = null, postTax = true).toProductEntity().postTax)
+        assertEquals(false, gasProduct(totalUses = null, postTax = false).toProductEntity().postTax)
+    }
+
+    @Test
+    fun missingPostTaxBasisRemainsUnknown() {
+        // Missing must remain unknown rather than silently becoming pre-tax.
+        assertEquals(null, gasProduct(totalUses = null).toProductEntity().postTax)
+    }
+
+    private fun gasProduct(totalUses: Double?, postTax: Boolean? = null): GasProduct = GasProduct(
         id = "p1",
         name = "Blue Dream",
         type = "F",
         status = 0,
+        postTax = postTax,
         totalUses = totalUses,
     )
+
+    @Test
+    fun absentPostTaxStaysUnknownRatherThanBecomingPreTax() {
+        val product = GasProduct(
+            id = "product-1",
+            name = "Test",
+            type = "Flower",
+            status = 1,
+            postTax = null,
+        ).toProductEntity()
+
+        // null is not false. A feed that omits the flag has not recorded the basis,
+        // and coercing it to pre-tax is exactly the silent assumption ADR-052 removes.
+        assertNull(product.postTax)
+    }
 }

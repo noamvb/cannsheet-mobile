@@ -5,6 +5,7 @@ import com.example.data.PurchaseDefaultKey
 import com.example.data.PurchaseDefaultValues
 import com.example.data.PurchaseDefaultsState
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Locale
 
 object PurchaseContentTestTags {
@@ -17,7 +18,9 @@ object PurchaseContentTestTags {
     const val THC = "purchase_thc"
     const val GRAMS = "purchase_grams"
     const val BORROWED = "purchase_borrowed"
-    const val POST_TAX = "purchase_post_tax"
+    const val PRICE_BASIS_PRE_TAX = "purchase_price_basis_pre_tax"
+    const val PRICE_BASIS_POST_TAX = "purchase_price_basis_post_tax"
+    const val COST_TAX_PREVIEW = "purchase_cost_tax_preview"
     const val SAVE_AS_DEFAULT = "purchase_save_as_default"
     const val SUBMIT = "purchase_submit"
     const val VALIDATION_ERROR = "purchase_validation_error"
@@ -73,3 +76,12 @@ internal fun canonicalPurchaseNumber(value: Double): String =
     BigDecimal.valueOf(if (value == -0.0) 0.0 else value)
         .stripTrailingZeros()
         .toPlainString()
+
+internal fun canonicalThcPercentText(percent: Double): String {
+    if (!percent.isFinite()) return ""
+
+    return BigDecimal.valueOf(percent)
+        .setScale(2, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}

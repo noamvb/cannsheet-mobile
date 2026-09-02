@@ -21,6 +21,7 @@ data class GasProductResponse(
     val environment: String? = null,
     val correctionVersion: Int? = null,
     val correctionWritesEnabled: Boolean? = null,
+    val taxRate: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -32,6 +33,7 @@ data class GasProduct(
     val cost: Double? = 0.0,
     val thc: Double? = 0.0,
     val grams: Double? = 0.0,
+    val postTax: Boolean? = null,
     val productUuid: String? = null,
     val lastLoggedAtEpochMillis: Long? = null,
     val lastQuantity: Double? = null,

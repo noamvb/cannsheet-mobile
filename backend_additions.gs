@@ -215,6 +215,13 @@ function doGet(e) {
           status: allowedStatusOr_(value_(row, headers, 'Finished'), CANN.STATUS.ACTIVE),
           totalUses: analyticsRounded_(totalUses)
         };
+        // A blank or unrecognised Post-tax cell means the basis was never recorded,
+        // which is not the same as pre-tax. Leave the field absent so the client
+        // reads it as unknown and says so, rather than silently assuming pre-tax
+        // and letting tax be added to an amount that already included it. This is
+        // the same distinction analyticsCost_ makes when it refuses a final cost.
+        const productPostTax = strictPostTax_(value_(row, headers, 'Post-tax'));
+        if (productPostTax.known) product.postTax = productPostTax.value;
         if (headers['Product UUID'] !== undefined) {
           const productUuid = text_(value_(row, headers, 'Product UUID'));
           if (productUuid) product.productUuid = productUuid;
@@ -231,7 +238,8 @@ function doGet(e) {
       apiVersion: CANN.API_VERSION,
       environment: environment,
       correctionVersion: correctionCapability.version,
-      correctionWritesEnabled: correctionCapability.writesEnabled
+      correctionWritesEnabled: correctionCapability.writesEnabled,
+      taxRate: taxRate_(ss)
     };
     recordBackendPhase_(timing, 'responseConstruction', responseConstructionStarted);
     addServerTimingFields_(response, timing, environment);

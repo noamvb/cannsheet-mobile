@@ -50,6 +50,7 @@ class CannsheetGraph private constructor(context: Context) {
         AppDatabase.MIGRATION_9_10,
         AppDatabase.MIGRATION_10_11,
         AppDatabase.MIGRATION_11_12,
+        AppDatabase.MIGRATION_12_13,
     ).build()
 
     val repository = CannsheetRepository(database)
@@ -57,6 +58,7 @@ class CannsheetGraph private constructor(context: Context) {
     val consumptionLogger = ConsumptionLogger(repository, consumptionPreferences, repository)
     val purchaseDefaultsRepository = PurchaseDefaultsRepository(context.applicationContext)
     val syncPreferences = SyncPreferencesRepository(context.applicationContext)
+    val taxRateRepository = TaxRateRepository(context.applicationContext)
 
     internal val queueAlertDelivery = QueueAlertDeliveryCoordinator(
         presenter = { queueAlertPresenter },
@@ -112,6 +114,7 @@ class CannsheetGraph private constructor(context: Context) {
         moshi = moshi,
         gateway = repository,
         expectedEnvironment = BuildConfig.APP_ENVIRONMENT,
+        recordTaxRate = taxRateRepository::record,
     )
 
     private val mutableBackgroundSyncEvents = MutableSharedFlow<BackgroundSyncEvent>(

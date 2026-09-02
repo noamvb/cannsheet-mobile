@@ -130,6 +130,13 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             PurchaseDefaultsState.NotLoaded,
         )
 
+    val purchaseTaxRate: StateFlow<Double?> =
+        graph.taxRateRepository.taxRate.stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            null,
+        )
+
     private val _purchaseFeedback = MutableStateFlow<PurchaseFeedback?>(null)
     val purchaseFeedback: StateFlow<PurchaseFeedback?> = _purchaseFeedback
 

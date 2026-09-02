@@ -8,8 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -93,6 +95,7 @@ class PurchaseContentTest {
             cost = 42.0,
             thc = 0.2345,
             grams = 7.0,
+            postTax = false,
             ),
         )
 
@@ -109,14 +112,22 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.THC).assertTextContains("23.45")
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).assertTextContains("7")
         composeRule.onNodeWithTag(PurchaseContentTestTags.BORROWED).assertIsOff()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.POST_TAX).assertIsOff()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_PRE_TAX).assertIsSelected()
         composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).assertIsOff()
     }
 
     @Test
     fun sameNameUsesDefaultsForTheSelectedTypeOnly() {
         val flower = Product("flower", "Same Name", "P", 0, cost = 11.0, grams = 1.0)
-        val edible = Product("edible", "Same Name", "E", 0, cost = 22.0, grams = 2.0)
+        val edible = Product(
+            "edible",
+            "Same Name",
+            "E",
+            0,
+            cost = 22.0,
+            grams = 2.0,
+            postTax = false,
+        )
         val defaults = mapOf(
             PurchaseDefaultKey("Same Name", "P") to PurchaseDefaultValues(99.0, 0.2, 9.0),
         )
@@ -139,7 +150,16 @@ class PurchaseContentTest {
 
     @Test
     fun catalogFallbackConvertsFractionAndRejectsInvalidThc() {
-        val fraction = Product("fraction", "Fraction", "P", 0, cost = 12.0, thc = 0.25, grams = 3.5)
+        val fraction = Product(
+            "fraction",
+            "Fraction",
+            "P",
+            0,
+            cost = 12.0,
+            thc = 0.25,
+            grams = 3.5,
+            postTax = false,
+        )
         val percent = Product("percent", "Percent", "P", 0, cost = 12.0, thc = 25.0, grams = 3.5)
         val invalid = Product("invalid", "Invalid", "P", 0, cost = 12.0, thc = 101.0, grams = 3.5)
 
@@ -159,7 +179,8 @@ class PurchaseContentTest {
     fun changingTypeClearsFieldsButReselectingTypePreservesThem() {
         val product = Product("p1", "Blue Dream", "P", 0)
         val defaults = mapOf(
-            PurchaseDefaultKey("Blue Dream", "P") to PurchaseDefaultValues(10.0, 0.2, 3.5),
+            PurchaseDefaultKey("Blue Dream", "P") to
+                PurchaseDefaultValues(10.0, 0.2, 3.5, postTax = false),
         )
 
         setPurchaseContent(
@@ -177,7 +198,7 @@ class PurchaseContentTest {
         selectType("E")
         composeRule.onNodeWithTag(PurchaseContentTestTags.APPLIED_AUTOFILL).assertDoesNotExist()
         composeRule.onNodeWithTag(PurchaseContentTestTags.BORROWED).assertIsOff()
-        composeRule.onNodeWithTag(PurchaseContentTestTags.POST_TAX).assertIsOff()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_PRE_TAX).assertIsSelected()
     }
 
     @Test
@@ -294,11 +315,31 @@ class PurchaseContentTest {
         composeRule.onNodeWithTag(PurchaseContentTestTags.NAME).performTextInput("Defaultable")
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST).performTextInput("10")
         composeRule.onNodeWithTag(PurchaseContentTestTags.GRAMS).performTextInput("1")
-        composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT).performClick()
+        // Scroll first: the form grew when the price-basis control was added, and on a
+        // short screen this switch sits below the fold, where a bare click never lands.
+        composeRule.onNodeWithTag(PurchaseContentTestTags.SAVE_AS_DEFAULT)
+            .performScrollTo()
+            .performClick()
         composeRule.onNodeWithTag(PurchaseContentTestTags.SUBMIT).performScrollTo().performClick()
 
         composeRule.runOnIdle { assertNull(submission) }
         composeRule.onNodeWithTag(PurchaseContentTestTags.VALIDATION_ERROR).assertIsDisplayed()
+    }
+
+    @Test
+    fun costTaxPreviewFollowsSelectedPriceBasisWithoutChangingCost() {
+        setPurchaseContent(taxRate = 0.13)
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST).performTextInput("50")
+        // The supporting text merges into the field's semantics node, so it is only
+        // addressable on its own in the unmerged tree.
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
+            .assertTextEquals("\$56.50 with 13% tax")
+
+        composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_POST_TAX).performClick()
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST).assertTextContains("50")
+        composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
+            .assertTextEquals("\$44.25 before 13% tax")
     }
 
     private fun setPurchaseContent(
@@ -306,6 +347,7 @@ class PurchaseContentTest {
         purchaseDefaultsState: PurchaseDefaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
         onQueuePurchase: (PurchaseSubmission) -> Unit = {},
         initialFormState: PurchaseFormState = PurchaseFormState.initial(),
+        taxRate: Double? = null,
     ) {
         composeRule.setContent {
             MaterialTheme {
@@ -314,6 +356,7 @@ class PurchaseContentTest {
                     products = products,
                     purchaseDefaultsState = purchaseDefaultsState,
                     formState = formState,
+                    taxRate = taxRate,
                     onFormChange = { formState = it },
                     onQueuePurchase = onQueuePurchase,
                 )

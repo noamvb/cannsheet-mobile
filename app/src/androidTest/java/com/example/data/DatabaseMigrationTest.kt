@@ -626,6 +626,7 @@ class DatabaseMigrationTest {
         ).addMigrations(
             AppDatabase.MIGRATION_10_11,
             AppDatabase.MIGRATION_11_12,
+            AppDatabase.MIGRATION_12_13,
         ).build()
 
         try {
@@ -780,6 +781,7 @@ class DatabaseMigrationTest {
         ).addMigrations(
             AppDatabase.MIGRATION_10_11,
             AppDatabase.MIGRATION_11_12,
+            AppDatabase.MIGRATION_12_13,
         ).build()
 
         try {
@@ -809,6 +811,58 @@ class DatabaseMigrationTest {
         } finally {
             database.close()
         }
+    }
+
+    @Test
+    fun migrationFrom12To13PreservesProductsWithUnknownTaxBasis() {
+        val factory = FrameworkSQLiteOpenHelperFactory()
+        val version12 = factory.create(
+            configuration(12, object : SupportSQLiteOpenHelper.Callback(12) {
+                override fun onCreate(db: SupportSQLiteDatabase) {
+                    this@DatabaseMigrationTest.createVersion12Schema(db)
+                    db.execSQL(
+                        "INSERT INTO products VALUES " +
+                            "('p1', 'Keep me', 'F', 0, 10.0, 0.2, 3.5, 'uuid-p1', 4.5)",
+                    )
+                }
+
+                override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+            }),
+        )
+        version12.writableDatabase
+        version12.close()
+
+        val database = Room.databaseBuilder(
+            context,
+            AppDatabase::class.java,
+            databaseName,
+        ).addMigrations(AppDatabase.MIGRATION_12_13).build()
+
+        try {
+            database.openHelper.writableDatabase.query(
+                "SELECT name, type, status, cost, thc, grams, productUuid, totalUses, postTax " +
+                    "FROM products WHERE id = 'p1'",
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Keep me", cursor.getString(0))
+                assertEquals("F", cursor.getString(1))
+                assertEquals(0, cursor.getInt(2))
+                assertEquals(10.0, cursor.getDouble(3), 0.0)
+                assertEquals(0.2, cursor.getDouble(4), 0.0)
+                assertEquals(3.5, cursor.getDouble(5), 0.0)
+                assertEquals("uuid-p1", cursor.getString(6))
+                assertEquals(4.5, cursor.getDouble(7), 0.0)
+                assertTrue(cursor.isNull(8))
+            }
+        } finally {
+            database.close()
+        }
+    }
+
+    private fun createVersion12Schema(db: SupportSQLiteDatabase) {
+        createVersion10Schema(db)
+        AppDatabase.MIGRATION_10_11.migrate(db)
+        AppDatabase.MIGRATION_11_12.migrate(db)
     }
 
     private fun createVersion10Schema(db: SupportSQLiteDatabase) {

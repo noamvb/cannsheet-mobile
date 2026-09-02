@@ -1,6 +1,7 @@
 package com.example.data
 
 import com.squareup.moshi.Moshi
+import kotlinx.coroutines.CancellationException
 
 interface ProductCatalogGateway {
     suspend fun refreshProducts(
@@ -26,6 +27,7 @@ class ProductCatalogRefresher(
     private val moshi: Moshi,
     private val gateway: ProductCatalogGateway,
     private val expectedEnvironment: String,
+    private val recordTaxRate: suspend (Double?) -> Unit = {},
 ) {
     suspend fun refresh(endpoint: String): ProductCatalogRefreshResult {
         return try {
@@ -42,6 +44,17 @@ class ProductCatalogRefresher(
                 return ProductCatalogRefreshResult.EnvironmentMismatch
             }
 
+            // The rate is an auxiliary preference for a preview, so a DataStore
+            // failure must not stop an otherwise valid catalog response from
+            // reaching Room. It still runs only after the environment check, so a
+            // rejected response can never move the stored rate.
+            try {
+                recordTaxRate(response.taxRate)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                // Deliberately ignored: the catalog refresh is the caller's contract.
+            }
             val products = response.products.map(GasProduct::toProductEntity)
             val remoteInteractions = response.products.mapNotNull { product ->
                 val timestamp = product.lastLoggedAtEpochMillis

@@ -80,21 +80,33 @@ fun PurchaseFormState.withAutofillFor(
     return if (savedDefault != null) {
         cleared.copy(
             cost = canonicalPurchaseNumber(savedDefault.cost),
-            thc = canonicalPurchaseNumber(savedDefault.thc * 100.0),
+            thc = canonicalThcPercentText(savedDefault.thc * 100.0),
             grams = canonicalPurchaseNumber(savedDefault.grams),
-            appliedAutofillMessage = "Saved defaults applied.",
+            postTax = savedDefault.postTax ?: false,
+            appliedAutofillMessage = if (savedDefault.postTax == null) {
+                "Saved defaults applied. Tax basis wasn't recorded - check it."
+            } else {
+                "Saved defaults applied."
+            },
         )
     } else {
+        val catalogCost = product.cost.takeIf { it.isFinite() && it > 0.0 }
         cleared.copy(
-            cost = product.cost.takeIf { it.isFinite() && it > 0.0 }
+            cost = catalogCost
                 ?.let(::canonicalPurchaseNumber)
                 .orEmpty(),
             thc = catalogThcPercent(product.thc)
-                ?.let(::canonicalPurchaseNumber)
+                ?.let(::canonicalThcPercentText)
                 .orEmpty(),
             grams = product.grams.takeIf { it.isFinite() && it > 0.0 }
                 ?.let(::canonicalPurchaseNumber)
                 .orEmpty(),
+            postTax = product.postTax ?: false,
+            appliedAutofillMessage = if (catalogCost != null && product.postTax == null) {
+                "Tax basis wasn't recorded - check it."
+            } else {
+                null
+            },
         )
     }
 }
