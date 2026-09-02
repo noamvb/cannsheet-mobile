@@ -93,6 +93,24 @@ class PurchaseFormStateTest {
     }
 
     @Test
+    fun `catalog autofill rounds a noisy fractional thc percent`() {
+        val product = Product(
+            "product",
+            "Potluck Beaver tail",
+            "F",
+            0,
+            thc = 0.27140000000000003,
+        )
+
+        val autofilled = PurchaseFormState(date = "2026-09-02", type = "F").withAutofillFor(
+            product = product,
+            defaultsState = PurchaseDefaultsState.Loaded(emptyMap()),
+        )
+
+        assertEquals("27.14", autofilled.thc)
+    }
+
+    @Test
     fun `saved default carries a known post-tax basis`() {
         val product = Product("product", "Blue Dream", "P", 0)
         val defaults = PurchaseDefaultsState.Loaded(

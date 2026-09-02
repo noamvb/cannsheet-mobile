@@ -5,6 +5,7 @@ import com.example.data.PurchaseDefaultKey
 import com.example.data.PurchaseDefaultValues
 import com.example.data.PurchaseDefaultsState
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.Locale
 
 object PurchaseContentTestTags {
@@ -75,3 +76,12 @@ internal fun canonicalPurchaseNumber(value: Double): String =
     BigDecimal.valueOf(if (value == -0.0) 0.0 else value)
         .stripTrailingZeros()
         .toPlainString()
+
+internal fun canonicalThcPercentText(percent: Double): String {
+    if (!percent.isFinite()) return ""
+
+    return BigDecimal.valueOf(percent)
+        .setScale(2, RoundingMode.HALF_UP)
+        .stripTrailingZeros()
+        .toPlainString()
+}

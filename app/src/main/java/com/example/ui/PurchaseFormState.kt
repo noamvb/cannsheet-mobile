@@ -80,7 +80,7 @@ fun PurchaseFormState.withAutofillFor(
     return if (savedDefault != null) {
         cleared.copy(
             cost = canonicalPurchaseNumber(savedDefault.cost),
-            thc = canonicalPurchaseNumber(savedDefault.thc * 100.0),
+            thc = canonicalThcPercentText(savedDefault.thc * 100.0),
             grams = canonicalPurchaseNumber(savedDefault.grams),
             postTax = savedDefault.postTax ?: false,
             appliedAutofillMessage = if (savedDefault.postTax == null) {
@@ -96,7 +96,7 @@ fun PurchaseFormState.withAutofillFor(
                 ?.let(::canonicalPurchaseNumber)
                 .orEmpty(),
             thc = catalogThcPercent(product.thc)
-                ?.let(::canonicalPurchaseNumber)
+                ?.let(::canonicalThcPercentText)
                 .orEmpty(),
             grams = product.grams.takeIf { it.isFinite() && it > 0.0 }
                 ?.let(::canonicalPurchaseNumber)
