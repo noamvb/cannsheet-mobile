@@ -2,12 +2,13 @@
 
 Last updated: 2026-09-02
 
-## Release 1.10.0 (code 56) - prepared, not yet published
+## Release 1.10.0 (code 56) - published 2026-09-02
 
-Two purchase-form features plus one defect found while validating them, prepared for
-release together at the owner's request. `versionCode` 56 and `versionName` 1.10.0
-are committed; **no tag exists and nothing has been published**, so v1.9.1 (code 55)
-remains the installed release until the tag lands. The backend half is deployed: production Apps
+Two purchase-form features plus one defect found while validating them, released
+together at the owner's request. Tag `v1.10.0` points at `9144353`, proven by main
+run `33690914527` with all six jobs green; APK SHA-256
+`dac9d2b6dc5283f850d6a03e94ae613039e4f00227d4cf13538383a69d002497`, signing
+certificate unchanged from v1.9.1. Full provenance in `docs/HANDOFF.md`. The backend half is deployed: production Apps
 Script version `14` on the unchanged deployment
 `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
 verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
@@ -22,10 +23,9 @@ verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
   decision.
 
 
-## Autofill carries the tax basis (in 1.10.0; not yet published)
+## Autofill carries the tax basis (released in 1.10.0)
 
-Carried by the unreleased 1.10.0 (code 56). Builds on the tax-basis change above
-and on ADR-052.
+Released in 1.10.0 (code 56). Builds on the tax-basis change above and on ADR-052.
 
 An autofilled cost arrived without the basis it was recorded under. The
 `Purchases` sheet stores the typed number in `Pre-tax cost` and what it meant in
@@ -85,8 +85,9 @@ confidently.
 Recorded 2026-09-02 from a read-only inspection of the live editor. **No edit was
 made to the Apps Script project.**
 
-Production project `1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2`
-holds a `Code.gs` of 303,099 characters, byte-identical to this repository's
+At the time of inspection, production project
+`1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2` held a `Code.gs` of
+303,099 characters, byte-identical to this repository's
 `backend_additions.gs` at commit `0392591` (2026-08-09). It therefore predates:
 
 - `0462e38` (2026-08-14, #83), the analytics response caching, batch Sheets
@@ -135,11 +136,10 @@ Two consequences:
    would revert nothing, because no newer code is serving. The earlier concern
    that a publish could silently roll back the performance work does not apply.
 
-## Purchase tax basis and converted-cost preview (in 1.10.0; not yet published)
+## Purchase tax basis and converted-cost preview (released in 1.10.0)
 
-Carried by the unreleased 1.10.0 (code 56). The backend half is deployed as Apps
-Script version 14, so the client no longer degrades to a message once 1.10.0 is
-installed.
+Released in 1.10.0 (code 56). The backend half is deployed as Apps Script version
+15, so the converted figure renders rather than the "not synced" message.
 
 The purchase form asked for a "Pre-tax Cost" and carried a separate "Post-tax" checkbox
 further down the same screen, so ticking the box meant typing a post-tax amount into a

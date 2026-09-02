@@ -4,32 +4,101 @@ Last updated: 2026-09-02
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## In flight: v1.10.0 (code 56) - prepared, not yet published
+## Cannsheet Mobile v1.10.0 (code 56) - purchase tax basis, autofill basis, THC formatting
 
-**v1.9.1 (code 55) is still the installed release.** v1.10.0 is committed on `main`
-with `versionCode` 56 and `versionName` 1.10.0, but **no tag exists and nothing has
-been published**, so the phone is unaffected until the tag lands.
+**Status: v1.10.0 published and independently verified on 2026-09-02.** On-device
+confirmation by the owner has not happened yet and cannot until they install it
+through Obtainium.
 
-It carries three changes to the purchase form: the tax basis as an explicit Pre-tax /
-Post-tax choice with a converted-cost preview (ADR-051), that basis carried onto every
-autofilled cost with an explicit warning when it was never recorded (ADR-052), and a
-float artifact in the autofilled THC percent. See `docs/PROJECT_STATE.md`.
+### What shipped
 
-The backend half **is** already live: production Apps Script version `14` on the
-unchanged deployment `AKfycbys-9r8...`, verified against the live endpoint returning
-`taxRate: 0.13` with every product carrying `postTax` where the sheet records it. A
-blank `Post-tax` cell deliberately leaves the field absent so the client reads it as
-unknown rather than assuming pre-tax.
+Three changes to the purchase form:
 
-Also corrected during this work: the live Apps Script was found to be running this
-repository's `backend_additions.gs` as of commit `0392591` (9 Aug), and the analytics
-caching and batch-fetch work of `0462e38` has **never** served production.
-`BACKEND_SYNC_PERFORMANCE_REPORT.md` and `BACKEND_ANALYTICS_ROLLBACK.md` are both
-wrong about the live state and still need correcting.
+- The tax basis is an explicit Pre-tax / Post-tax segmented choice headed "Price
+  entered as", sited above the cost field, whose label follows the choice. The
+  converted amount shows under the field - `$56.50 with 13% tax`, or `$44.25 before
+  13% tax`. ADR-051.
+- That basis now travels with every autofilled cost. An unrecorded basis is `null`,
+  deliberately distinct from `false`, and autofill warns rather than assuming
+  pre-tax. ADR-052.
+- The autofilled THC percent is rounded to two decimals, ending a float artifact
+  (`27.140000000000004`) that predated both features.
 
-Remaining before v1.10.0 can publish: merge, prove the exact `main` SHA green across
-all six jobs, tag `v1.10.0`, and verify the published APK.
+### Release provenance
 
+**Pull request merged**
+
+- `#173` "Purchase tax basis, autofill basis, and THC formatting (release 1.10.0)",
+  squash-merged as `9144353326ef3e0a033b53524902c27cae4d4fb6`.
+
+**Main validation**
+
+- Run `33690914527`, `event: push`, `headSha`
+  `9144353326ef3e0a033b53524902c27cae4d4fb6`, final conclusion `success`.
+- All six required jobs individually `success`: Classify changes and scan
+  repository, Backend validation, Android static validation, Emulator API 24,
+  Emulator API 36, Cannsheet Android PR validation.
+- `Emulator API 24` failed on the first attempt with
+  `Failed to install split APK(s)` / `ShellCommandUnresponsiveException` and an
+  emulator console that never started - the install flake the workflow itself
+  documents, not a test failure. `Emulator API 36` passed on that same attempt with
+  the same commit. The failed jobs were re-run on the **same run id**, so the green
+  result still carries `event: push` at the required SHA.
+
+**Tag**
+
+- Annotated tag `v1.10.0` points at exactly `9144353326ef3e0a033b53524902c27cae4d4fb6`,
+  which was the tip of `origin/main` when the tag was pushed.
+
+**Published assets** (`noamvb/cannsheet-mobile-releases`, 2026-09-02T22:52:21Z)
+
+- `Cannsheet-Mobile-1.10.0.apk` (38,003,765 bytes)
+- `Cannsheet-Mobile-1.10.0.apk.sha256`
+- APK SHA-256 `dac9d2b6dc5283f850d6a03e94ae613039e4f00227d4cf13538383a69d002497`,
+  recomputed from the downloaded asset and matching the published checksum file.
+- `aapt2 dump badging` reports package `com.noamv.cannsheet.mobile`, versionCode 56,
+  versionName 1.10.0.
+- Signing certificate SHA-256
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, **identical to
+  v1.9.1**, so the phone updates in place.
+
+### Backend
+
+The client half needs a backend that publishes two fields, and that backend is live.
+
+- Production Apps Script **version 15** on the unchanged deployment
+  `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`;
+  the `/exec` URL never changed.
+- Verified against the live endpoint: `taxRate: 0.13`, 373 products, every one
+  carrying `postTax` where the sheet records it.
+- Version 14 was published first and was **wrong**: it used `truthy_`, which never
+  returns null, so a blank `Post-tax` cell became `false` and the client's
+  unknown-basis warning could never fire. Version 15 uses `strictPostTax_` - the
+  same helper `analyticsCost_` uses to refuse a final cost rather than guess - and
+  omits the field unless the sheet records it.
+- **The live sheet has no blank `Post-tax` cells**, so versions 14 and 15 return
+  identical data for it (106 true, 267 false, 0 absent). The live feed therefore
+  cannot distinguish them. What proves version 15's behaviour is the backend test
+  seeding an explicit blank row, which is mutation-verified: reverting to `truthy_`
+  reds it. The unknown-basis warning is correspondingly dormant for catalog products
+  on this data, and active for saved defaults stored before this release.
+
+### Still outstanding
+
+- **The signing certificate is `CN=Android Debug`** and has been for every release,
+  including 1.9.1. Updates work and nothing is broken, but this is a weaker signing
+  story than a dedicated release key. Changing it would break in-place updates and
+  force a reinstall, so it is a deliberate decision to make rather than drift into.
+- `BACKEND_SYNC_PERFORMANCE_REPORT.md` claims "production version 8 is live on the
+  unchanged endpoint" and `BACKEND_ANALYTICS_ROLLBACK.md` claims "Current analytics
+  version: Apps Script version 9". Both are **wrong**. The live project was running
+  this repository's `backend_additions.gs` as of commit `0392591` (9 Aug) before this
+  release, its deployment description naming that commit, and the analytics caching
+  and batch-fetch work of `0462e38` (14 Aug) has never served production - a
+  deployment titled "Backend sync performance and recoverable atomic apply" sits in
+  the project's Archived list. Those two documents still need correcting, and the
+  question of whether that performance work should ever be deployed is open.
+- On-device confirmation of 1.10.0 by the owner.
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 
