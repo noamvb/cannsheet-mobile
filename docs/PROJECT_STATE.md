@@ -2,6 +2,24 @@
 
 Last updated: 2026-09-02
 
+## Release 1.10.0 (code 56)
+
+Two purchase-form features plus one defect found while validating them, released
+together at the owner's request. The backend half is deployed: production Apps
+Script version `14` on the unchanged deployment
+`AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
+verified live at `taxRate: 0.13` with all 373 products carrying `postTax`
+(106 true, 267 false).
+
+- Tax basis is an explicit Pre-tax / Post-tax choice with a converted-cost
+  preview - ADR-051.
+- The basis now travels with every autofilled cost, and an unrecorded basis warns
+  rather than assuming pre-tax - ADR-052.
+- The autofilled THC percent is rounded to two decimals, ending a float artifact
+  that predates both - see the commit, no ADR, because it changes no durable
+  decision.
+
+
 ## Autofill carries the tax basis (implemented; not released)
 
 Implemented on the working tree; no version bump, tag, or release. Builds on the
@@ -51,13 +69,14 @@ confidently.
   the decode stop reading `postTax` - the latter proving the asymmetric
   encode/decode pair is exercised end to end rather than only its Moshi half.
 
-  Measured on an API 36 emulator against the live production feed on 2026-09-02:
-  selecting a real catalog product autofills its cost and shows BOTH
-  `Tax basis wasn't recorded - check it.` and `Tax rate not synced yet`, because
-  the deployed backend publishes neither `postTax` nor `taxRate`. Both messages
-  are true and both disappear once the backend ships the two fields, but until
-  then every catalog autofill carries two advisory lines. This is why the release
-  was held rather than cut - see the divergence section below.
+  Measured on an API 36 emulator against the live production feed on 2026-09-02,
+  BEFORE the backend was updated: selecting a real catalog product autofilled its
+  cost and showed BOTH `Tax basis wasn't recorded - check it.` and `Tax rate not
+  synced yet`, because the then-deployed backend published neither `postTax` nor
+  `taxRate`. The release was held for that reason. Both fields now ship in Apps
+  Script version 14, so both messages are expected to disappear for catalog
+  autofills; they remain correct for a saved default stored before this change,
+  which is exactly what they are for.
 
 ## Production Apps Script divergence (resolved 2026-09-02; nothing changed)
 
