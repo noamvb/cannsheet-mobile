@@ -125,12 +125,19 @@ production.
 
 Two consequences:
 
-1. `BACKEND_SYNC_PERFORMANCE_REPORT.md` ("production version 8 is live on the
-   unchanged endpoint... verified end to end") and `BACKEND_ANALYTICS_ROLLBACK.md`
-   ("Current analytics version: Apps Script version `9`") are both wrong about the
-   live state, and their version numbers do not correspond to this project's
-   numbering - the active version is 13. These documents should be corrected
-   rather than trusted.
+1. The four July backend documents are **stale, not false**, and an earlier
+   revision of this section overstated that. `BACKEND_SYNC_PERFORMANCE_REPORT.md`
+   ("production version 8 is live") and `BACKEND_ANALYTICS_ROLLBACK.md` ("Current
+   analytics version: Apps Script version `9`") were committed on 2026-07-17 and
+   2026-07-18, when versions 8 and 9 respectively were live. They are accurate
+   records of July work whose present-tense status lines production has since
+   moved past. Note also that the "Backend sync performance" they describe is the
+   July work of version 8, a different thing from the analytics caching and
+   batch-fetch commit `0462e38` of 14 Aug, which postdates them by a month and
+   which they never claimed was deployed. All four now carry a dated
+   historical-record banner; the two rollback documents additionally warn that
+   following their version targets today would discard every backend change since
+   July.
 2. Publishing a new version from the current editor HEAD is **safe**: it would
    move production from version 13 to 14, both built on the `0392591` code, and
    would revert nothing, because no newer code is serving. The earlier concern

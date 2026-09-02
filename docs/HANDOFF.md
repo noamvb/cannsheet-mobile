@@ -89,15 +89,21 @@ The client half needs a backend that publishes two fields, and that backend is l
   including 1.9.1. Updates work and nothing is broken, but this is a weaker signing
   story than a dedicated release key. Changing it would break in-place updates and
   force a reinstall, so it is a deliberate decision to make rather than drift into.
-- `BACKEND_SYNC_PERFORMANCE_REPORT.md` claims "production version 8 is live on the
-  unchanged endpoint" and `BACKEND_ANALYTICS_ROLLBACK.md` claims "Current analytics
-  version: Apps Script version 9". Both are **wrong**. The live project was running
-  this repository's `backend_additions.gs` as of commit `0392591` (9 Aug) before this
-  release, its deployment description naming that commit, and the analytics caching
-  and batch-fetch work of `0462e38` (14 Aug) has never served production - a
-  deployment titled "Backend sync performance and recoverable atomic apply" sits in
-  the project's Archived list. Those two documents still need correcting, and the
-  question of whether that performance work should ever be deployed is open.
+- The four July backend documents were **stale rather than wrong**, and an earlier
+  revision of this file said "wrong", which overstated it.
+  `BACKEND_SYNC_PERFORMANCE_REPORT.md` and `BACKEND_ANALYTICS_ROLLBACK.md` were
+  committed on 2026-07-17 and 2026-07-18, when versions 8 and 9 were in fact live;
+  their present-tense status lines simply stopped being true as production moved
+  on. All four now carry a dated historical-record banner pointing at this file and
+  `docs/PROJECT_STATE.md`, and the two rollback documents warn that following their
+  version targets today would discard every backend change since July - the sync
+  one names version 7, which would undo the tax-basis fields v1.10.0 depends on.
+- Still genuinely open: the analytics caching and batch-fetch work of `0462e38`
+  (14 Aug, #83) has **never served production**. It is a separate thing from the
+  July "backend sync performance" of version 8, which is what the similarly named
+  document describes. A deployment titled "Backend sync performance and recoverable
+  atomic apply" sits in the project's Archived list. Whether `0462e38` should ever
+  be deployed is undecided.
 - On-device confirmation of 1.10.0 by the owner.
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected

@@ -1,5 +1,21 @@
 # Cannsheet backend sync performance report
 
+> **Historical record - superseded. Do not act on the version numbers below.**
+>
+> This document was written on 2026-07-17 and was accurate then. Its status lines
+> are present-tense as of that date and have not been true since. Production has
+> moved through Apps Script versions 10, 11, 12 and 13 and is now on **version
+> 15**, published 2026-09-02 on the same unchanged deployment
+> `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`.
+>
+> The version 8 named throughout is the July deployment of this work, not a current target.
+>
+> For the current backend state, read `docs/PROJECT_STATE.md` and
+> `docs/HANDOFF.md`, which are the maintained records. Keep this file for what it
+> documents - the July 2026 backend sync performance work, its measurements, and its backups - not for what
+> is live.
+
+
 Status: implementation complete. All sandbox gates pass, the normal sandbox
 baseline is restored, production version 8 is live on the unchanged endpoint,
 and the first genuine production sync has been verified end to end.
