@@ -6,9 +6,11 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.10.0 (code 56) - purchase tax basis, autofill basis, THC formatting
 
-**Status: v1.10.0 published, independently verified, and confirmed working against
-the live backend on 2026-09-02.** Confirmation by the owner on their own phone has
-not happened yet and cannot until they install it through Obtainium.
+**Status: v1.10.0 published, independently verified, confirmed working against the
+live backend, and confirmed on the owner's phone on 2026-09-02.** The owner
+installed it through Obtainium and reported the converted figure rendering under
+the cost field, matching the emulator result below. Nothing about this release is
+outstanding.
 
 The published APK - the release artifact, not a local build - was installed fresh
 on an API 36 emulator with the network enabled and driven against production:
@@ -122,9 +124,8 @@ The client half needs a backend that publishes two fields, and that backend is l
   document describes. A deployment titled "Backend sync performance and recoverable
   atomic apply" sits in the project's Archived list. Whether `0462e38` should ever
   be deployed is undecided.
-- On-device confirmation of 1.10.0 by the owner on their own phone. The published
-  build is confirmed working against production on an emulator (see above), so what
-  remains is confirmation on the real device.
+- ~~On-device confirmation of 1.10.0 by the owner.~~ Done 2026-09-02: installed
+  through Obtainium, converted figure rendering under the cost field.
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 
