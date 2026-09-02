@@ -6,9 +6,27 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.10.0 (code 56) - purchase tax basis, autofill basis, THC formatting
 
-**Status: v1.10.0 published and independently verified on 2026-09-02.** On-device
-confirmation by the owner has not happened yet and cannot until they install it
-through Obtainium.
+**Status: v1.10.0 published, independently verified, and confirmed working against
+the live backend on 2026-09-02.** Confirmation by the owner on their own phone has
+not happened yet and cannot until they install it through Obtainium.
+
+The published APK - the release artifact, not a local build - was installed fresh
+on an API 36 emulator with the network enabled and driven against production:
+
+- The catalog synced from the live feed.
+- Typing `50` under Pre-tax showed `$56.50 with 13% tax`; switching to Post-tax
+  left the typed `50` alone and showed `$44.25 before 13% tax`.
+- Autofilling a real product (`1964 GLTO #41`) filled cost `41` and previewed
+  `$46.33 with 13% tax`, which is `41 * 1.13` to the cent.
+- Its THC autofilled as `75.76` - two decimals, no float artifact.
+- **No "Tax basis wasn't recorded" warning appeared**, which is the positive
+  evidence that the feed delivered a known basis for that product rather than
+  omitting the field. Version 15's behaviour is therefore confirmed from the
+  client side as well as from `curl`.
+
+The emulator's queues were empty before the network was enabled (`purchase_actions`,
+`consumption_actions` and `finish_actions` all 0), so nothing could be written to
+the production spreadsheet by this exercise; the app only read the catalog.
 
 ### What shipped
 
@@ -104,7 +122,9 @@ The client half needs a backend that publishes two fields, and that backend is l
   document describes. A deployment titled "Backend sync performance and recoverable
   atomic apply" sits in the project's Archived list. Whether `0462e38` should ever
   be deployed is undecided.
-- On-device confirmation of 1.10.0 by the owner.
+- On-device confirmation of 1.10.0 by the owner on their own phone. The published
+  build is confirmed working against production on an emulator (see above), so what
+  remains is confirmation on the real device.
 
 ## Cannsheet Mobile v1.9.1 (code 55) - pen widget step repaired, label case corrected
 
