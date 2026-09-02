@@ -1,5 +1,24 @@
 # Cannsheet backend sync performance rollback
 
+> **Historical record - superseded. Do not act on the version numbers below.**
+>
+> This document was written on 2026-07-17 and was accurate then. Its status lines
+> are present-tense as of that date and have not been true since. Production has
+> moved through Apps Script versions 10, 11, 12 and 13 and is now on **version
+> 15**, published 2026-09-02 on the same unchanged deployment
+> `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`.
+>
+> **Rolling production back to version 7 as this file instructs would discard every
+> backend change since 2026-07-17**, including the analytics work, the product usage
+> totals projection, and the tax-basis fields v1.10.0 depends on. Establish the
+> current version from Deploy > Manage deployments before any rollback.
+>
+> For the current backend state, read `docs/PROJECT_STATE.md` and
+> `docs/HANDOFF.md`, which are the maintained records. Keep this file for what it
+> documents - the July 2026 backend sync performance work, its measurements, and its backups - not for what
+> is live.
+
+
 Status: production version 8 is live and verified. Version 7 is the immediate
 production code rollback target on the same deployment and endpoint.
 
