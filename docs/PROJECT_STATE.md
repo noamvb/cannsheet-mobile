@@ -17,6 +17,13 @@ the hour: it used `truthy_`, which never returns null, so it could not express
 an unrecorded tax basis. Version 15 uses `strictPostTax_` and omits the field
 unless the sheet records it.
 
+Confirmed end to end on 2026-09-02: the published APK, installed fresh on an API
+36 emulator with the network enabled, autofilled a real product at cost `41` and
+previewed `$46.33 with 13% tax` (`41 * 1.13` to the cent), with THC rendering
+`75.76` and no unrecorded-basis warning - the positive evidence that version 15
+delivered a known `postTax` for that product. Emulator queues were empty
+beforehand, so nothing was written to the spreadsheet.
+
 - Tax basis is an explicit Pre-tax / Post-tax choice with a converted-cost
   preview - ADR-051.
 - The basis now travels with every autofilled cost, and an unrecorded basis warns
