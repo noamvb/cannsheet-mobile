@@ -59,7 +59,7 @@ confidently.
   then every catalog autofill carries two advisory lines. This is why the release
   was held rather than cut - see the divergence section below.
 
-## Production Apps Script divergence (open; nothing changed)
+## Production Apps Script divergence (resolved 2026-09-02; nothing changed)
 
 Recorded 2026-09-02 from a read-only inspection of the live editor. **No edit was
 made to the Apps Script project.**
@@ -87,13 +87,32 @@ This contradicts `BACKEND_SYNC_PERFORMANCE_REPORT.md` ("production version 8 is
 live on the unchanged endpoint") and `BACKEND_ANALYTICS_ROLLBACK.md` ("Current
 analytics version: Apps Script version `9`").
 
-Unresolved: `/exec` serves a numbered version rather than the editor's HEAD, so
-it remains possible that a version containing the performance work is still being
-served while HEAD was later reverted. The Deploy > Manage deployments dialog was
-not readable through automation and the active version number has not been
-established. Until it is, **publishing a new version from the current HEAD risks
-silently reverting the backend performance work**, which is why the `taxRate` and
-`postTax` feed fields have not been applied to the live project.
+**Resolved by reading Deploy > Manage deployments in the live project.** The
+active deployment is:
+
+- Version `13`, created 2026-08-09 17:24
+- Description: `Product usage totals catalog response (main 0392591)`
+- Deployment ID `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
+  serving the production `/exec` URL, executing as the owner, accessible to anyone.
+
+The deployment's own description names commit `0392591`, independently confirming
+the byte comparison above. A deployment titled `Backend sync performance and
+recoverable atomic apply` exists in the project's **Archived** list; it is not the
+active deployment. The performance work of `0462e38` has therefore never served
+production.
+
+Two consequences:
+
+1. `BACKEND_SYNC_PERFORMANCE_REPORT.md` ("production version 8 is live on the
+   unchanged endpoint... verified end to end") and `BACKEND_ANALYTICS_ROLLBACK.md`
+   ("Current analytics version: Apps Script version `9`") are both wrong about the
+   live state, and their version numbers do not correspond to this project's
+   numbering - the active version is 13. These documents should be corrected
+   rather than trusted.
+2. Publishing a new version from the current editor HEAD is **safe**: it would
+   move production from version 13 to 14, both built on the `0392591` code, and
+   would revert nothing, because no newer code is serving. The earlier concern
+   that a publish could silently roll back the performance work does not apply.
 
 ## Purchase tax basis and converted-cost preview (implemented; not released)
 
