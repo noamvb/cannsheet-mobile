@@ -339,15 +339,23 @@ const purchaseWrites = writes(normalRuntime, 'Purchases');
 assert.deepEqual(purchaseWrites.map(entry => entry.row), [2, 2, 2, 2]);
 assert.deepEqual(purchaseWrites.map(entry => entry.column), [8, 10, 13, 17]);
 assert.equal(purchaseWrites.every(entry => entry.numRows === 1 && entry.numColumns === 1), true);
-// A committed sync bumps MUTATION_WATERMARK, which (as of v1.3.3 Fix 1) is
-// persisted to ScriptProperties as well as CacheService; that persistence is
-// the only structural change a normal sync should make.
-assert.equal(normalRuntime.audit.structural.length, 1);
+// A committed sync bumps MUTATION_WATERMARK twice, and it is persisted to
+// ScriptProperties as well as CacheService (as of v1.3.3 Fix 1). The first bump
+// runs before the sync's first spreadsheet write, so an execution that dies
+// mid-write still invalidates the cached analytics response instead of serving
+// it for up to CACHE_DEFAULT_TTL_SECONDS. The second runs after, so a read
+// landing between the pre-write bump and the write itself cannot cache
+// pre-write data under the new watermark. That persistence is still the only
+// structural change a normal sync should make.
+assert.equal(normalRuntime.audit.structural.length, 2);
 assert.deepEqual(
   normalRuntime.audit.structural.map(entry => entry.operation),
-  ['setScriptProperty'],
+  ['setScriptProperty', 'setScriptProperty'],
 );
-assert.equal(normalRuntime.audit.structural[0].name, 'MUTATION_WATERMARK');
+assert.deepEqual(
+  normalRuntime.audit.structural.map(entry => entry.name),
+  ['MUTATION_WATERMARK', 'MUTATION_WATERMARK'],
+);
 assert.equal(
   normalRuntime.audit.services.filter(entry => entry.service === 'SpreadsheetApp' && entry.method === 'openById').length,
   1,
@@ -616,13 +624,20 @@ assert.equal(legacyResponse.message, 'Sync complete');
 assert.deepEqual(legacyResponse.productIdMap, {});
 assert.equal(productRow(legacyRuntime, '*P1')[headerIndex(PURCHASE_HEADERS, 'Uses')], 2.5);
 // A committed legacy sync also bumps MUTATION_WATERMARK, persisted to
-// ScriptProperties (v1.3.3 Fix 1).
-assert.equal(legacyRuntime.audit.structural.length, 1);
+// ScriptProperties (v1.3.3 Fix 1). Like v2 it bumps twice: once before its
+// first spreadsheet write so an execution that dies mid-write still
+// invalidates the cached analytics response, and once after so a read landing
+// between that bump and the write cannot cache pre-write data under the new
+// watermark.
+assert.equal(legacyRuntime.audit.structural.length, 2);
 assert.deepEqual(
   legacyRuntime.audit.structural.map(entry => entry.operation),
-  ['setScriptProperty'],
+  ['setScriptProperty', 'setScriptProperty'],
 );
-assert.equal(legacyRuntime.audit.structural[0].name, 'MUTATION_WATERMARK');
+assert.deepEqual(
+  legacyRuntime.audit.structural.map(entry => entry.name),
+  ['MUTATION_WATERMARK', 'MUTATION_WATERMARK'],
+);
 
 // Before migration, GET uses the exact legacy canonical-history calculation.
 // The projection migration must reproduce that response byte-for-byte at the

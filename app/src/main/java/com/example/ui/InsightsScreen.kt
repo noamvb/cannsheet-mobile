@@ -1516,13 +1516,22 @@ private fun SnapshotNotice(
     error: AnalyticsUiError?,
     modifier: Modifier = Modifier,
 ) {
-    if (!fromCache && !stale && error == null) return
+    val freshness = snapshotFreshnessText(fromCache, stale, updatedAt?.let { formatTimestamp(it) })
+    if (freshness == null && error == null) return
     Column(modifier.padding(vertical = 4.dp)) {
-        if (fromCache || stale) {
-            Text(
-                "Showing saved data${updatedAt?.let { " from ${formatTimestamp(it)}" }.orEmpty()}",
-                color = MaterialTheme.colorScheme.tertiary,
-            )
+        if (freshness != null) {
+            if (fromCache || stale) {
+                Text(freshness, color = MaterialTheme.colorScheme.tertiary)
+            } else {
+                // A successful network response can still be a backend cache
+                // hit carrying an older generatedAt, so state the age instead
+                // of leaving the figures undated.
+                Text(
+                    freshness,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         error?.let { Text("${it.message} (${it.code})", color = MaterialTheme.colorScheme.error) }
     }

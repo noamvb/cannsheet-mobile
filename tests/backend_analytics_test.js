@@ -2207,4 +2207,106 @@ function assertNoMutation(runtime) {
   assert.equal(runtime.lock.hasLock(), false, 'Lock must be released before return');
 }
 
+// REGRESSION: a V2 mutation on the legacy write path must invalidate an
+// already-warm response even when its later ledger write fails.
+{
+  const runtime = buildRuntime();
+  const before = history(runtime, { limit: 5 });
+  assert.equal(before.success, true);
+  const beforeSignature = `${before.success}:${before.sourceRevision.dataVersion}`;
+
+  runtime.resetAudit();
+  const warm = history(runtime, { limit: 5 });
+  assert.equal(
+    `${warm.success}:${warm.sourceRevision.dataVersion}`,
+    beforeSignature,
+  );
+  assert.equal(runtime.audit.reads.length, 0, 'the W1 payload must exist in cache');
+
+  runtime.context.setConfigValue_(
+    runtime.spreadsheet,
+    'RECOVERABLE_SYNC_APPLY_VERSION',
+    0,
+    'Recoverable multi-sheet apply version',
+  );
+  runtime.context.upsertLedger_ = () => {
+    throw new Error('injected failure after V2 spreadsheet writes');
+  };
+  const failed = post(runtime, {
+    apiVersion: 2,
+    requestId: deterministicUuid(993001),
+    environment: 'SANDBOX',
+    purchases: [],
+    consumptions: [{
+      eventId: deterministicUuid(993002),
+      date: '2026-07-18',
+      time: '09:30:00',
+      productId: '*P1',
+      productUuid: deterministicUuid(101),
+      uses: 0.25,
+      isFinished: false,
+      weightCode: 'STANDARD',
+    }],
+    finishActions: [],
+    consumptionCorrections: [],
+  });
+  assert.equal(failed.success, false);
+  assert.match(failed.message, /injected failure after V2 spreadsheet writes/);
+
+  const after = history(runtime, { limit: 5 });
+  const afterSignature = `${after.success}:${after.sourceRevision?.dataVersion}`;
+  assert.notEqual(
+    afterSignature,
+    beforeSignature,
+    'a failed V2 sync returned the stale W1 cached payload',
+  );
+}
+
+// REGRESSION: a recoverable core commit must invalidate an already-warm
+// analytics response even when execution fails before finalization.
+{
+  const runtime = buildRuntime();
+  const before = insights(runtime);
+  assert.equal(before.success, true);
+  const beforeSignature = `${before.success}:${before.sourceRevision.dataVersion}`;
+
+  runtime.resetAudit();
+  const warm = insights(runtime);
+  assert.equal(
+    `${warm.success}:${warm.sourceRevision.dataVersion}`,
+    beforeSignature,
+  );
+  assert.equal(runtime.audit.reads.length, 0, 'the W1 payload must exist in cache');
+
+  runtime.context.setSandboxSyncApplyFault('AFTER_CORE_COMMIT');
+  const failed = post(runtime, {
+    apiVersion: 2,
+    requestId: deterministicUuid(994001),
+    environment: 'SANDBOX',
+    purchases: [],
+    consumptions: [{
+      eventId: deterministicUuid(994002),
+      date: '2026-07-18',
+      time: '10:00:00',
+      productId: '*P1',
+      productUuid: deterministicUuid(101),
+      uses: 0.5,
+      isFinished: false,
+      weightCode: 'STANDARD',
+    }],
+    finishActions: [],
+    consumptionCorrections: [],
+  });
+  assert.equal(failed.success, false);
+  assert.match(failed.message, /SANDBOX_INJECTED_SYNC_APPLY_STOP/);
+
+  const after = insights(runtime);
+  const afterSignature = `${after.success}:${after.sourceRevision?.dataVersion}`;
+  assert.notEqual(
+    afterSignature,
+    beforeSignature,
+    'a failed recoverable apply returned the stale W1 cached payload',
+  );
+}
+
 console.log('backend analytics tests passed');
