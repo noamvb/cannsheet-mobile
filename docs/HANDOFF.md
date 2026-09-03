@@ -6,8 +6,9 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.11.0 (code 57) - analytics cache deployed, invalidated before writes
 
-**Status: the backend is deployed and verified; the Android release is in
-preparation.** Production Apps Script is on **version 16**, published
+**Status: published and independently verified against the release artifact; not
+yet driven on the owner's phone.** Production Apps Script is on **version 16**,
+published
 2026-09-02 22:33 EDT from `main` commit `bda15e6` on the unchanged deployment
 `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`.
 Version 15 is the rollback target. The full deployment record, measurements and
@@ -61,10 +62,28 @@ A verified full spreadsheet backup was taken first:
 `CannsheetG Production Backup 2026-09-02 21-40 EDT - before analytics caching deploy`,
 882,829 bytes against the original's 882,022.
 
+### Release provenance
+
+Tag `v1.11.0` points at `a1b4bfc`. Main run `33709160407` at that commit was green
+on all six jobs including Emulator API 36; release run `33709172010` was green on
+all three of `Verify and build signed APK`, `Confirm tested main commit` and
+`Publish verified Cannsheet APK`.
+
+The published artifact is `Cannsheet-Mobile-1.11.0.apk`, 38,003,765 bytes,
+SHA-256 `400a802672a1a500ce15162f6303ea99f30397925f83705405948d091dcc99e3`, on
+`noamvb/cannsheet-mobile-releases`. It was downloaded here independently of CI and
+verified against its own published `.sha256`.
+
+The main run at `bda15e6` (#178) failed Emulator API 36 on an infrastructure
+flake - repeated `adb` exit code 1 and `InstallException: Broken pipe (32)`, with
+no test failure anywhere in the log. The identical code passed API 36 at
+`a1b4bfc`, so that job is green on evidence rather than by assumption.
+
 ### Outstanding
 
-- The Android release is not yet tagged or published; nothing on the phone has
-  been driven against version 16 yet.
+- Nothing on the phone has been driven against version 16. The phone was locked
+  at release time, so the after-measurements were taken against the live endpoint
+  with `curl` rather than through the app.
 - No screenshot of the new `Updated <time>` line has been captured.
 - Duplicate-safe retries already bumped the watermark before this change and
   still do. Pre-existing, out of scope here, and worth revisiting only if cache
