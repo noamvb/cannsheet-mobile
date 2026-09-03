@@ -102,10 +102,23 @@ range.
 Version 15 is `0392591` plus the v1.10.0 tax-basis fields, SHA-256
 `ae10a86f3df7d289017aab727f07f67638c3fe61dd1f3f17841a172ba4460e49`, 303,698
 bytes. It has no response cache, so rolling back restores the 10-13 second
-Insights reads and nothing else. The v1.10.0 tax-basis behaviour survives a
-rollback; do **not** roll back past version 15, which would remove `taxRate` and
-per-product `postTax` from the products feed and break the purchase form's
-preview.
+Insights reads and nothing else. The v1.10.0 tax-basis behaviour survives it.
+
+If an incident ever requires stepping back further, the targets differ and the
+difference matters:
+
+- **Version 14** also returns `taxRate` and per-product `postTax`, so the
+  purchase form and its preview keep working. It differs from 15 in one respect:
+  it parses the sheet with `truthy_`, which never returns null, so a blank
+  `Post-tax` cell is reported as `false` rather than omitted. An unrecorded basis
+  would therefore be presented as pre-tax, and the "Tax basis wasn't recorded"
+  warning from ADR-052 could never fire. When version 15 was published the live
+  sheet had no blanks in that column (106 true, 267 false), so this was latent
+  rather than active. Version 14 is a viable emergency target with that caveat
+  understood.
+- **Version 13 and earlier** do not carry `taxRate` or per-product `postTax` at
+  all. Rolling back that far removes the fields the purchase form's preview
+  depends on. Do not go past 14 to resolve a caching problem.
 
 ## Spreadsheet backup
 
