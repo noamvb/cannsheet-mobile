@@ -2296,3 +2296,99 @@ permanently dead chain.
   `app/src/main/java/com/example/data/ProductMapping.kt`,
   `app/src/main/java/com/example/data/PurchaseDefaultsRepository.kt`,
   `app/src/main/java/com/example/ui/PurchaseFormState.kt`
+
+## ADR-053: The analytics cache is invalidated before the write, and the screen states the data's age
+
+- Status: Accepted; implemented and deployed as production Apps Script version 16
+  on 2026-09-02.
+- Date: 2026-09-02
+- Context: The analytics response cache from ADR-021 (`0462e38`, #83, 14 August)
+  and its corrections in ADR-022 (`b3c869b`, #87) had never been deployed. Its
+  client half shipped and has been in every release since v1.3.2; only the
+  backend half - chunked `CacheService` keyed on `MUTATION_WATERMARK`,
+  `Sheets.Spreadsheets.Values.batchGet`, and a scoped `ScriptLock` - sat
+  unpublished for nineteen days. Production ran Apps Script version 15, which is
+  `0392591` plus the v1.10.0 tax-basis fields and contains none of it. Insights
+  was correspondingly slow: measured on the owner's SM-F966W against version 15,
+  reading 4,132 events and 373 purchases, the on-screen server duration was
+  10,853 to 13,413 ms across three samples.
+
+  Preparing that deploy exposed a defect in the caching design itself. Bumping
+  the watermark is the only cache invalidation there is, because the watermark is
+  part of every cache key. Every `bumpMutationWatermark_()` call sat *after* its
+  function's spreadsheet writes. In `applyRecoverableSyncLocked_` the mutating
+  batch runs roughly 98 lines before the bump, with `updateFormAndDescriptionLocked_`
+  - a Google Forms call that can hit the Apps Script execution time limit -
+  in between. An execution stopping in that window leaves the spreadsheet changed
+  and the watermark unchanged, so later reads hit the stale pre-mutation cached
+  response and return it with `status: success` for up to
+  `CACHE_DEFAULT_TTL_SECONDS` (21600, six hours) or until a later mutation
+  completes its own bump. Nothing surfaced it to the client.
+
+  Separately, `SnapshotNotice` returned early unless the data came from the
+  phone's own Room cache, was stale, or carried an error. `isFromCache` is false
+  on every network response, so a successful response rendered no age at all -
+  although the screen already held the snapshot's true generation time in
+  `lastUpdatedEpochMillis`. With a response cache live this matters more: the
+  backend preserves the payload's original `generatedAtEpochMillis` on a cache
+  hit and overwrites only `serverDurationMs`, so a six-hour-old answer looked
+  identical on screen to one generated a second ago.
+- Decision:
+  1. Each request path that already bumped the watermark after its writes now
+     also bumps immediately before its first spreadsheet write. Both bumps are
+     required and neither replaces the other: the pre-write bump closes the
+     crash window, and the trailing bump closes the window in which a read
+     landing between the pre-write bump and the write itself would cache
+     pre-write data under the new watermark. A bump before a write that then
+     fails costs one wasted cache generation - the next read misses and
+     recomputes the same data - and can never serve wrong data. The pre-write
+     bump is deliberately not made conditional on the write succeeding, because
+     that reintroduces the defect.
+  2. Three places deliberately do not get a pre-write bump, each for a reason
+     stated at the call site. Empty, rejected-only and duplicate requests write
+     nothing on that path, so `hasCoreMutation` guards the bump; bumping there
+     would invalidate the whole cache on the app's most frequent request. The
+     ledger-only write is left unguarded because losing it costs cosmetic
+     `syncHealth` counts and guarding it would double a `PropertiesService`
+     write on that same frequent path. `rebuildInteractionSummaryLocked_` is a
+     supervised maintenance operation whose re-run must leave durable state
+     byte-identical, which a second bump would break.
+  3. The cache-hit guard bypass accepted in ADR-022 stays exactly as it is. A
+     cache hit still returns before `readAnalyticsSnapshot_` and so skips the
+     environment, schema-version, timezone and `PENDING_APPLY` checks a cache
+     miss enforces. Re-checking them would require a Sheets read on every
+     request, which is the cost the cache exists to avoid. The environment is
+     part of the cache key, so this is not cross-environment exposure.
+  4. Insights and History state the age of the figures on screen for every dated
+     response, not only for Room-cached ones. This does not make a lost
+     invalidation detectable and is not intended to: with the cache working
+     correctly an old timestamp honestly means nothing has changed since. It is
+     the age of the data, stated rather than hidden. The wording and appearance
+     of the existing saved-data and error notices are unchanged.
+- Consequences: Measured against production version 16 immediately after
+  deployment, a cold Insights read cost 15,429 ms and the next three cache hits
+  cost 120, 118 and 100 ms, with `generatedAtEpochMillis` identical across all
+  four - which is both the speed result and the direct evidence for decision 4.
+  History behaved the same: 16,577 ms cold, 122 ms on the next read. Wall-clock
+  for a full Insights request fell from 17.6 s to 2.4 s. Correctness was checked
+  against the pre-deploy fingerprint: `purchaseRowCount` held at 373 and every
+  data-quality warning matched (3 unknown personal costs, 16 unknown borrowed
+  costs, 10 invalid THC, 14 invalid grams, 3572 local date mismatches), with only
+  the two counts that move with `eventRowCount` shifting by exactly one for a
+  real new log.
+
+  Every mutation now performs two `PropertiesService` writes rather than one.
+  That is a few tens of milliseconds on an operation already measured in
+  seconds, and `backend_spreadsheet_test.js` pins the count at two for both a
+  committed v2 sync and a committed legacy sync, still asserting that watermark
+  persistence is the only structural change either makes.
+
+  Duplicate-safe retries already bumped the watermark before this change and
+  still do. That is pre-existing behaviour, out of scope here, and worth
+  revisiting only if cache hit rates prove disappointing in use.
+- Files: `backend_additions.gs`,
+  `app/src/main/java/com/example/ui/SnapshotFreshness.kt`,
+  `app/src/main/java/com/example/ui/InsightsScreen.kt`,
+  `tests/backend_analytics_test.js`,
+  `tests/backend_spreadsheet_test.js`,
+  `app/src/test/java/com/example/ui/SnapshotFreshnessTest.kt`

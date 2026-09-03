@@ -2,6 +2,42 @@
 
 Last updated: 2026-09-02
 
+## Release 1.11.0 (code 57) - in preparation
+
+The analytics response cache is finally in production, and the defect that
+preparing its deployment exposed is fixed. See ADR-053, and
+`BACKEND_ANALYTICS_CACHE_ROLLBACK.md` for the deployment record, the measured
+before/after, and the rollback procedure.
+
+Production Apps Script is now **version 16** on the unchanged deployment
+`AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
+published 2026-09-02 22:33 EDT from `main` commit `bda15e6`, source SHA-256
+`795126ac202e57153dec75392d9e1466a899bdc224e95cb01fa6a92490b56a16`. **Version 15
+is the rollback target.**
+
+Measured on the live endpoint immediately after deployment: a cold Insights read
+cost 15,429 ms and the next three cache hits cost 120, 118 and 100 ms, with
+`generatedAtEpochMillis` identical across all four. History was 16,577 ms cold
+and 122 ms warm. Wall clock for a full Insights request fell from 17.6 s to
+2.4 s. The baseline it replaced was 10,853-13,413 ms, measured on the owner's
+SM-F966W against version 15 across three samples.
+
+Correctness was checked against a fingerprint captured before the deploy:
+`purchaseRowCount` held at 373 and every data-quality warning matched, with only
+the two counts that track `eventRowCount` moving by exactly one for a real new
+log.
+
+- The cache is invalidated before a write as well as after it, closing a window
+  in which an execution that died mid-write left the spreadsheet changed, the
+  watermark unchanged, and a stale response served as `success` for up to six
+  hours - ADR-053.
+- Insights and History now state the age of the figures on screen for every dated
+  response, not only for Room-cached ones - ADR-053.
+
+The backend half of `0462e38` (#83, 14 August) and its corrections in `b3c869b`
+(#87) had sat undeployed for nineteen days while their client half shipped in
+every release since v1.3.2. That is what made Insights slow; it is now closed.
+
 ## Release 1.10.0 (code 56) - published 2026-09-02
 
 Two purchase-form features plus one defect found while validating them, released
