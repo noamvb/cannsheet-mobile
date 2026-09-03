@@ -4,9 +4,11 @@
 >
 > This document was written on 2026-07-17 and was accurate then. Its status lines
 > are present-tense as of that date and have not been true since. Production has
-> moved through Apps Script versions 10, 11, 12 and 13 and is now on **version
-> 15**, published 2026-09-02 on the same unchanged deployment
+> moved through Apps Script versions 10 to 15 and is now on **version 16**,
+> published 2026-09-02 on the same unchanged deployment
 > `AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`.
+> The current deployment record and rollback procedure are in
+> `BACKEND_ANALYTICS_CACHE_ROLLBACK.md`, not here.
 >
 > **Rolling production back to version 7 as this file instructs would discard every
 > backend change since 2026-07-17**, including the analytics work, the product usage

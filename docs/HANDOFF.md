@@ -4,6 +4,72 @@ Last updated: 2026-09-02
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.11.0 (code 57) - analytics cache deployed, invalidated before writes
+
+**Status: the backend is deployed and verified; the Android release is in
+preparation.** Production Apps Script is on **version 16**, published
+2026-09-02 22:33 EDT from `main` commit `bda15e6` on the unchanged deployment
+`AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`.
+Version 15 is the rollback target. The full deployment record, measurements and
+rollback procedure are in `BACKEND_ANALYTICS_CACHE_ROLLBACK.md`; the reasoning is
+ADR-053.
+
+### What changed and why
+
+The analytics response cache from `0462e38` (#83, 14 August) had never been
+deployed. Its client half shipped in every release since v1.3.2, so Insights was
+re-reading the whole spreadsheet on every open: 10,853 to 13,413 ms of server
+duration across three samples on the owner's SM-F966W, reading 4,132 events and
+373 purchases.
+
+Preparing the deploy exposed a real defect in the caching design. Bumping
+`MUTATION_WATERMARK` is the only cache invalidation there is, and every bump sat
+*after* its function's spreadsheet writes - in `applyRecoverableSyncLocked_`,
+about 98 lines after, with a Google Forms call in between that can hit the Apps
+Script execution limit. An execution stopping in that window left the sheet
+changed, the watermark unchanged, and the pre-mutation response served as
+`success` for up to six hours. Each such path now bumps before its first write as
+well as after; both are needed, and three paths deliberately do not (see
+ADR-053).
+
+Separately, Insights and History showed the data's age only for Room-cached
+responses, so a backend cache hit rendered no timestamp at all. They now state it
+for every dated response.
+
+### Evidence
+
+Measured against version 16 on the live endpoint, four consecutive identical
+Insights GETs: **15,429 ms cold, then 120, 118 and 100 ms**, with
+`generatedAtEpochMillis` identical across all four - which is both the speed
+result and direct proof that a cache hit preserves the payload's original
+generation time. History: 16,577 ms cold, 122 ms warm. Wall clock 17.6 s to
+2.4 s.
+
+Correctness against the pre-deploy fingerprint: `purchaseRowCount` 373 unchanged
+and every data-quality warning identical (3 / 16 / 10 / 14 / 3572), with only the
+two counts tracking `eventRowCount` moving by exactly one for a real new log.
+
+All eight Node backend suites pass, and 624 unit tests pass under
+`--rerun-tasks`. Both new backend regression tests were confirmed red against
+unmodified code before the fix, and three mutations were run: removing the
+`applyRecoverableSyncLocked_` pre-write bump reds `a failed recoverable apply
+returned the stale W1 cached payload`, removing the V2 one reds `a failed V2 sync
+returned the stale W1 cached payload`, and removing the new UI branch reds
+`aFreshNetworkResponseStatesItsAge` and nothing else.
+
+A verified full spreadsheet backup was taken first:
+`CannsheetG Production Backup 2026-09-02 21-40 EDT - before analytics caching deploy`,
+882,829 bytes against the original's 882,022.
+
+### Outstanding
+
+- The Android release is not yet tagged or published; nothing on the phone has
+  been driven against version 16 yet.
+- No screenshot of the new `Updated <time>` line has been captured.
+- Duplicate-safe retries already bumped the watermark before this change and
+  still do. Pre-existing, out of scope here, and worth revisiting only if cache
+  hit rates disappoint in use.
+
 ## Cannsheet Mobile v1.10.0 (code 56) - purchase tax basis, autofill basis, THC formatting
 
 **Status: v1.10.0 published, independently verified, confirmed working against the
