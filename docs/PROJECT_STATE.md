@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-02
 
-## Release 1.11.0 (code 57) - in preparation
+## Release 1.11.0 (code 57) - published 2026-09-02
 
 The analytics response cache is finally in production, and the defect that
 preparing its deployment exposed is fixed. See ADR-053, and
@@ -37,6 +37,22 @@ log.
 The backend half of `0462e38` (#83, 14 August) and its corrections in `b3c869b`
 (#87) had sat undeployed for nineteen days while their client half shipped in
 every release since v1.3.2. That is what made Insights slow; it is now closed.
+
+Tag `v1.11.0` points at `a1b4bfc`. Main run `33709160407` at that commit was green
+on all six jobs, including Emulator API 36; release run `33709172010` was green on
+all three. The published APK is
+`Cannsheet-Mobile-1.11.0.apk`, 38,003,765 bytes, SHA-256
+`400a802672a1a500ce15162f6303ea99f30397925f83705405948d091dcc99e3`, on
+`noamvb/cannsheet-mobile-releases`; downloading it independently and checking it
+against its own published `.sha256` passes. Full provenance in `docs/HANDOFF.md`.
+
+The main run at `bda15e6` (#178) failed Emulator API 36 on an infrastructure
+flake - repeated `adb` exit code 1 and `InstallException: Broken pipe (32)`, no
+test failure. The same code passed API 36 at `a1b4bfc`, so it is verified green
+rather than assumed.
+
+Not yet verified: nothing on the phone has been driven against version 16, and no
+screenshot of the new `Updated <time>` line has been captured.
 
 ## Release 1.10.0 (code 56) - published 2026-09-02
 
