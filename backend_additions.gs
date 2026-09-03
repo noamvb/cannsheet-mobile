@@ -3290,6 +3290,7 @@ function handleLegacySyncLocked_(requestContext, timing) {
     });
   } else {
     phaseStarted = Date.now();
+    bumpMutationWatermark_();
     appendPurchaseRows_(context, staged.accepted, now, requestContext.config.TAX_RATE);
     recordBackendPhase_(timing, 'purchaseAppend', phaseStarted);
     appendConsumptionRows_(ss, stagedConsumptions, false, timing, requestContext);
@@ -3702,6 +3703,12 @@ function handleV2SyncLocked_(requestContext, started, timing) {
   } else {
     if (!recoverableReady) {
       phaseStarted = Date.now();
+      // Invalidate before the first write, not only after it: an execution that
+      // dies mid-write would otherwise leave the sheet changed, the watermark
+      // unchanged, and the pre-mutation analytics response served from cache
+      // for up to CANN.CACHE_DEFAULT_TTL_SECONDS. Empty, rejected-only and
+      // duplicate requests write nothing here, so they must not invalidate.
+      if (hasCoreMutation) bumpMutationWatermark_();
       appendPurchaseRows_(context, staged.accepted, now, requestContext.config.TAX_RATE);
       recordBackendPhase_(timing, 'purchaseAppend', phaseStarted);
       appendConsumptionRows_(ss, stagedConsumptions, false, timing, requestContext);
@@ -3845,6 +3852,7 @@ function onFormSubmit(e) {
     const context = productContext_(ss, { runtimeContext: runtimeContext });
     const product = context.byLegacyId[legacyId];
     if (!product) {
+      bumpMutationWatermark_();
       recordMigrationIssue_(ss, 'UNKNOWN_PRODUCT', responseSheet.getName(), rowNumber, legacyId, 'Form submission was preserved but could not be canonicalized');
       return;
     }
@@ -3926,6 +3934,7 @@ function onFormSubmit(e) {
         timing: null
       });
     } else {
+      bumpMutationWatermark_();
       appendConsumptionRows_(ss, [event], true, null, runtimeContext);
       applyProductEffects_(context, [event]);
       updateFormAndDescriptionLocked_(ss, runtimeContext);
@@ -3995,6 +4004,7 @@ function onInventoryEdit(e) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(CANN.LOCK_TIMEOUT_MS)) throw new Error('LOCK_TIMEOUT');
   try {
+    bumpMutationWatermark_();
     updateFormAndDescriptionLocked_(ss);
     bumpMutationWatermark_();
   } finally { lock.releaseLock(); }
@@ -4010,6 +4020,7 @@ function runReliabilityMigration() {
   try {
     const ss = spreadsheet_();
     assertConfigEnvironment_(ss);
+    bumpMutationWatermark_();
     ensureCoreSchema_(ss);
     const purchaseResult = backfillPurchases_(ss);
     const eventResult = backfillConsumptionEvents_(ss);
@@ -4149,6 +4160,12 @@ function reconcileInteractionSummary() {
 function rebuildInteractionSummaryLocked_(ss, enableFastPath) {
   // Fail over to the legacy read path before any projection cells move. This
   // marker is ignored by the previous deployment and understood by this one.
+  //
+  // Deliberately no pre-write watermark bump here. Re-running this migration
+  // must leave durable state byte-identical (see backend_spreadsheet_test.js
+  // "Running the migration again leaves all durable cells identical"), and this
+  // is a supervised maintenance operation rather than a request path, so the
+  // trailing bump below is sufficient.
   setConfigValue_(
     ss,
     'INTERACTION_SUMMARY_VERSION',
@@ -6392,6 +6409,7 @@ function rebuildEffectiveProductProjections() {
     const productIds = Array.from(new Set(
       Object.keys(context.byLegacyId).concat(Object.keys(projections))
     ));
+    bumpMutationWatermark_();
     const rebuilt = rebuildProductProjectionsFromCanonical_(
       ss,
       productIds
@@ -7421,6 +7439,7 @@ function applyRecoverableSyncLocked_(settings) {
   ));
 
   const coreStarted = Date.now();
+  bumpMutationWatermark_();
   sheetsBatchUpdate_(ss, coreRequests);
   recordBackendPhase_(settings.timing, 'recoverableCoreBatch', coreStarted);
   maybeInjectSandboxSyncApplyFault_(
@@ -7680,6 +7699,7 @@ function repairPendingSyncApplyLocked_(runtimeContext) {
     );
   }
   if (journalRecord.state === 'COMPLETE') {
+    bumpMutationWatermark_();
     sheetsBatchUpdate_(ss, [updateCellsRequest_(
       requiredSheet_(ss, CANN.SHEETS.CONFIG),
       findConfigRowNumber_(ss, CANN.PENDING_APPLY_KEY),
@@ -7700,6 +7720,7 @@ function repairPendingSyncApplyLocked_(runtimeContext) {
     );
   }
   const plan = JSON.parse(journalRecord.finalizationJson);
+  bumpMutationWatermark_();
   if (plan.formRefreshRequired) updateFormAndDescriptionLocked_(ss);
   const result = finalizeRecoverableApplyLocked_(ss, applyId);
   bumpMutationWatermark_();
