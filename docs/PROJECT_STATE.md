@@ -1,6 +1,24 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.1)
+Last updated: 2026-09-17 (v1.12.2 in progress)
+
+## Release 1.12.2 (code 60) - in progress 2026-09-17
+
+Retry with backoff for analytics GETs. Right after v1.12.1 was installed the
+Insights screen showed `HTTP 404 (INTERNAL_ERROR)`; OkHttp logged
+`<-- 404 https://script.googleusercontent.com/...` after 16-32 s and the same
+request succeeded seconds later. That hop is Google's redirect target behind
+the Apps Script 302 and fails intermittently; the app retried nothing on a
+non-2xx status. Not caused by 1.12.1.
+
+- `AnalyticsRepository.fetchWithRetry` (replaces `fetchWithBusyRetry`): up to
+  3 attempts with 1 s / 3 s backoff on `HttpException` 404/429/500/502/503/504
+  and on envelope `BACKEND_BUSY`. Every other error (401/403, other envelope
+  codes, `IOException`, timeouts, cancellation) propagates on the first
+  attempt; the last retryable error is rethrown unchanged.
+- `retryDelay` constructor parameter (defaults to `delay`) so tests do not
+  sleep. Worst case for the periodic prefetch is three 60 s reads plus 4 s.
+- No Room schema change, no wire change.
 
 ## Release 1.12.1 (code 59) - published 2026-09-17
 
@@ -31,9 +49,6 @@ window froze while the cache stayed fresh. See ADR-055; #186, squashed as
   recovers without a tap.
 - `customRangeForDays` is gone; `lastDaysWindow` is the one implementation.
 - No Room schema change. Release provenance in `docs/HANDOFF.md`.
-- Analytics GETs retry transient HTTP failures (404/429/5xx, BACKEND_BUSY) up to
-  3 attempts with 1 s / 3 s backoff; motivated by intermittent 404s from the
-  `script.googleusercontent.com` hop on 2026-09-17.
 
 ## Release 1.12.0 (code 58) - published 2026-09-17
 
