@@ -2433,14 +2433,19 @@ permanently dead chain.
      does not bump `MUTATION_WATERMARK`: the analytics data did not change, so
      the analytics cache must not be invalidated for it. The new read resource
      `resource=clientState` is not cached and reads only the four Config keys.
-  4. The phone ingests server-side history into `consumption_history` from
-     every page the analytics cache persists (`AnalyticsRepository.saveHistory`,
-     the one choke point for the periodic prefetch and the Analytics screen),
-     inserting only unknown `eventId`s (`OnConflictStrategy.IGNORE` on the
-     unique index), skipping voided events and anything older than the Today
-     widget's ten-day lookback, and refreshing the widgets when it inserted
-     something. Existing rows are never touched; the offline queues are not
-     involved.
+  4. The phone mirrors server-side history into `consumption_history`, driven
+     by lifecycle: an ORIGINAL event is inserted only if its `eventId` is
+     unknown (`OnConflictStrategy.IGNORE` on the unique index), so a locally
+     logged row is never rewritten; a CORRECTED event keeps its `eventId` and
+     is upserted with the server's values; a VOIDED event's row is deleted.
+     Anything older than the Today widget's ten-day lookback is ignored, and
+     date/time are derived from the instant in the device calendar (the
+     invariant `TodayUpdater` documents), not copied from the sheet's
+     timezone. Two feeds: every History page the analytics cache persists
+     (`AnalyticsRepository.saveHistory`), and the periodic worker's own
+     unfiltered ten-day fetch, so a product, type or text filter cached from
+     the Analytics screen cannot hide panel events. Widgets refresh when
+     anything changed. The offline queues are not involved.
 - Consequences: The panel follows the phone's pen within one sync plus one
   15-minute poll, and falls back to a pinned UUID until the phone has published
   once. Panel-logged events appear in Today after the next periodic prefetch
