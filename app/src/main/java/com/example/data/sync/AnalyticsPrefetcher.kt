@@ -55,7 +55,11 @@ class AnalyticsPrefetcher(
         if (cached != null && !isStaleEnough(cached.generatedAtEpochMillis)) {
             return AnalyticsPrefetchStatus.SKIPPED_FRESH
         }
-        val range = operations.readCachedInsightsRequest() ?: cached?.cachedInsightsRange() ?: InsightsRange.Default
+        // Best effort like every other read here: a failing request-key read must not stop
+        // History from warming, so it degrades to the range the cached payload was built for.
+        val range = runCatchingCancellable { operations.readCachedInsightsRequest() }.getOrNull()
+            ?: cached?.cachedInsightsRange()
+            ?: InsightsRange.Default
         return runCatchingCancellable { operations.fetchInsights(range) }
             .fold({ AnalyticsPrefetchStatus.REFRESHED }, { AnalyticsPrefetchStatus.FAILED })
     }
