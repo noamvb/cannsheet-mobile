@@ -2,7 +2,12 @@
 
 Last updated: 2026-09-17
 
-## Release 1.12.0 (code 58) - Cannsheet on the household panel
+## Release 1.12.0 (code 58) - published 2026-09-17
+
+Tag `v1.12.0` points at `b90d6df`, proven by main run `35187821255` with all six
+jobs green; release run `35188401194`; APK SHA-256
+`45f8f10b298f23837d4dba5d621adbafc59836a062fb0a4aee5f829ec6fec3ec`, signing
+certificate unchanged from v1.11.0.
 
 The phone now publishes its loaded pen to the backend and mirrors server-side
 consumption events into its local history, so the Home Assistant panel (Inbox
