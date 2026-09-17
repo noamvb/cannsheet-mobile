@@ -6,7 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
-**Status: ready to tag; not yet published.**
+**Status: published, independently verified, installed on the owner's phone
+over adb and confirmed live on 2026-09-17.**
 
 ### What changed and why
 
@@ -58,7 +59,24 @@ BUILD SUCCESSFUL in 3s
 
 ### Release provenance
 
-To be recorded by the releaser after the tag builds.
+Pull request merged: #195 `2da880f`. Delegation cc -> agy
+gemini-3.8-flash-high; dispatcher gate (gradle-verify, node backend suites,
+focused tests) green; focused tests and a mutation drill (re-enabling
+serializeNulls on the null path reds the new test) re-run by hand.
+
+Tag `v1.12.5` points at `2da880f`. PR checks were green on all five jobs.
+Release run `35287632811` was green; published 2026-09-17 23:44 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.5.apk`, 38,020,149 bytes,
+SHA-256 `66f9eead76c6c97d6e15b20ba618e76754652342d445ba94530a204b0d8e8faa`, on
+`noamvb/cannsheet-mobile-releases`, downloaded independently of CI and verified
+against its published `.sha256`; `aapt` reports versionCode 63, versionName
+1.12.5; signing certificate SHA-256 `a9787249…`, unchanged since v1.9.1.
+
+Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
+19:44 EDT. Live check: one freshly queued action with no pending pen change
+synced on the first Sync Now (POST answered 200 at 19:44:58), queue 1 -> 0,
+"Everything is synced" - the case that failed on every earlier v1.12.x.
 
 ### Outstanding
 

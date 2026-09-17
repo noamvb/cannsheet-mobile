@@ -2,9 +2,12 @@
 
 Last updated: 2026-09-17 (v1.12.5)
 
-## Release 1.12.5 (code 63) - not yet published
+## Release 1.12.5 (code 63) - published 2026-09-17
 
-Provenance recorded after the tag builds.
+Tag `v1.12.5` points at `2da880f`; release run `35287632811`; APK SHA-256
+`66f9eead76c6c97d6e15b20ba618e76754652342d445ba94530a204b0d8e8faa`, signing
+certificate unchanged. Installed on the owner's phone the same day and confirmed
+live: a sync with no pending pen change succeeds.
 
 - In `app/src/main/java/com/example/data/Network.kt`, `SyncClientStateJsonAdapterFactory` now omits `clientState` entirely when null rather than emitting `"clientState":null`, delegating with `serializeNulls()` enabled only for non-null `SyncClientState` instances. This prevents backend whole-request sync rejections (`INVALID_ITEM: clientState must be an object`) when syncing with no pending pen update.
 
