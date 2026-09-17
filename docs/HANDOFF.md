@@ -4,10 +4,55 @@ Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.12.1 (code 59) - Insights presets roll with the calendar
+
+**Status: code merged; release in progress. Provenance is completed in the follow-up docs commit once the tag has published, as for v1.12.0 (#185).**
+
+### What changed and why
+
+v1.12.0 was verified on the owner's phone on the morning of 2026-09-17 (loaded
+pen published at 03:23, Today widget counting a panel-logged event), and that
+check surfaced a month-old defect: Insights read `2026-05-21 – 2026-08-18 ·
+Updated Sep 17, 10:09 a.m.` with the 90-day chip highlighted and "Days since
+last log: 30", and the Runway/Spend widgets printed "as of 2026-08-18". The
+30/90-day chips were absolute `Custom` windows anchored on `data.range.to`
+(the cached window's own end), so a stale window re-selected itself, and the
+periodic prefetch re-fetched whatever range was cached. Fresh cache, frozen
+window. Fix in #186 (`bdf6104`), ADR-055: relative `InsightsRange.LastDays`
+presets resolved at request time, the requested kind persisted in the cache
+row and read back through the new `readCachedInsightsRequest()`, and a
+one-time heal of a cached 30/90-day `Custom` window.
+
+### Evidence
+
+- Local gate on the merged code: `--rerun-tasks testDebugUnitTest
+  compileDebugAndroidTestKotlin lintDebug assembleDebug` green, **661 unit
+  tests, 0 failures** (660 + the review follow-up test).
+- The frozen-window prefetcher test was written first and did not compile
+  against the previous code; mutation drills reddened it (prefetcher ignoring
+  the cached request), the upgrade-heal test (90-day condition broken) and
+  the best-effort test (guard removed).
+- Emulator API 24 flaked once on #186 with the known `InstallException:
+  Broken pipe`; the rerun was green.
+
+### Release provenance
+
+Pull requests merged: #186 `bdf6104`, then this release pull request. Main run id, tag commit, release run and APK digest are recorded after publication.
+
+### Outstanding
+
+- On the owner's phone, after installing 1.12.1: open Insights once; the
+  healed cache should show a window ending today with the 90-day chip still
+  selected, and the Runway/Spend widgets should say "as of <today>" after the
+  next refresh. Not yet observed.
+- The v1.12.0 outstanding items below still apply (panel-logged events reach
+  Today only on the periodic prefetch; the ai-orch profile lacks
+  `compileDebugAndroidTestKotlin`).
+
 ## Cannsheet Mobile v1.12.0 (code 58) - loaded pen published, server events mirrored into Today
 
-**Status: published and independently verified against the release artifact; not
-yet driven on the owner's phone.**
+**Status: published, independently verified against the release artifact, and
+driven on the owner's phone on 2026-09-17 (see below).**
 
 This release is the phone's half of "Cannsheet on the household panel". The
 panel itself (Home Assistant on the Pixelbook; Inbox repo
@@ -84,10 +129,12 @@ Emulator API 24 failed once on #183 with the known infrastructure flake
 
 ### Outstanding
 
-- Nothing has been driven on the phone yet. After installing through
-  Obtainium: open the app once (the pre-upgrade loaded pen is stamped and
-  published on the first sync); then `curl "<exec>?resource=clientState&environment=PRODUCTION&analyticsVersion=1"`
-  should name it, and the Board's "Logs to …" line follows within 15 minutes.
+- Verified on the owner's SM-F966W over wireless adb on 2026-09-17: 1.12.0
+  (code 58) installed by Obtainium at 03:14; the pre-upgrade loaded pen
+  `*P115` was published at 03:23 (`?resource=clientState` names it, the
+  Board's "Logs to" line follows it); the Today widget showed 80 s = 8 uses,
+  i.e. the phone's two logs plus the panel test press, so the server-history
+  ingest works. The test press was then voided from the phone.
 - Panel-logged events reach Today only after the periodic worker's next
   prefetch (hours). A push path is out of scope.
 - The registered ai-orch verification profile for this repo runs

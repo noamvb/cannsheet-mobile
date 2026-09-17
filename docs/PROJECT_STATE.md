@@ -1,6 +1,30 @@
 # Project state
 
-Last updated: 2026-09-17
+Last updated: 2026-09-17 (v1.12.1)
+
+## Release 1.12.1 (code 59) - Insights presets roll with the calendar
+
+Found on the owner's phone the morning after v1.12.0: Insights showed
+`2026-05-21 – 2026-08-18` with the 90-day chip selected and "Updated Sep 17,
+10:09 a.m.", and the Runway/Spend widgets said "as of 2026-08-18". The 30- and
+90-day presets were absolute `Custom` windows anchored on the cached window's
+own end, and the periodic prefetch re-fetched whatever was cached, so the
+window froze while the cache stayed fresh. See ADR-055; #186, squashed as
+`bdf6104`.
+
+- Presets are `InsightsRange.LastDays(n)`, resolved to `from`/`to` at request
+  time in America/New_York (the sheet's timezone and the server's own Default
+  convention).
+- `AnalyticsDataSource` **gained one method**, `readCachedInsightsRequest()`,
+  which reads the requested range kind back from the cache row's
+  `requestJson`; the prefetcher and the screen restore the preset, not a
+  frozen window. It is read best-effort, so an Insights cache failure cannot
+  stop History warming.
+- Upgrade heal: a cached `Custom` window of exactly 30 or 90 days is read as
+  the preset on first access, so a phone upgraded with a frozen window
+  recovers without a tap.
+- `customRangeForDays` is gone; `lastDaysWindow` is the one implementation.
+- No Room schema change. Release provenance in `docs/HANDOFF.md`.
 
 ## Release 1.12.0 (code 58) - published 2026-09-17
 
