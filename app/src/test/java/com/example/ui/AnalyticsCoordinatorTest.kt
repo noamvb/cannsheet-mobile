@@ -10,6 +10,7 @@ import com.example.data.HistoryPageDto
 import com.example.data.HistoryResponseDto
 import com.example.data.InsightsRange
 import com.example.data.InsightsResponseDto
+import com.example.data.cachedInsightsRange
 import com.example.data.InventoryDto
 import com.example.data.OverviewDto
 import com.example.data.QualityWarningsDto
@@ -1174,6 +1175,33 @@ class AnalyticsCoordinatorTest {
         }
     }
 
+    @Test
+    fun cachedLastDaysRequestSetsDisplayedRangeAndRefreshesWithLastDays() = runBlocking {
+        val cached = insightsResponse(
+            scope = "CUSTOM",
+            generatedAtEpochMillis = 1_700_000_000_000L,
+        )
+        val repository = ControlledAnalyticsDataSource(
+            cachedInsights = cached,
+            cachedInsightsRequest = InsightsRange.LastDays(90),
+        )
+        val coordinatorScope = CoroutineScope(coroutineContext + SupervisorJob())
+        val coordinator = AnalyticsCoordinator(repository, coordinatorScope)
+        try {
+            coordinator.onRunwayVisible()
+
+            awaitState {
+                coordinator.insights.value.data == cached &&
+                    coordinator.insights.value.displayedRange == InsightsRange.LastDays(90)
+            }
+            val liveRequest = repository.nextInsightsRequest()
+            assertEquals(InsightsRange.LastDays(90), liveRequest.range)
+            assertEquals(InsightsRange.LastDays(90), coordinator.insights.value.displayedRange)
+        } finally {
+            coordinatorScope.cancel()
+        }
+    }
+
     private suspend fun awaitState(predicate: () -> Boolean) {
         withTimeout(2_000) {
             while (!predicate()) yield()
@@ -1317,6 +1345,7 @@ class AnalyticsCoordinatorTest {
         // test can control exactly when the cache-load coroutine reaches (and
         // completes) its cache read relative to other coordinator calls.
         private val insightsCacheGate: CompletableDeferred<Unit>? = null,
+        var cachedInsightsRequest: InsightsRange? = null,
     ) : AnalyticsDataSource {
         private val historyRequests = Channel<HistoryRequest>(Channel.UNLIMITED)
         private val insightsRequests = Channel<InsightsRequest>(Channel.UNLIMITED)
@@ -1353,6 +1382,9 @@ class AnalyticsCoordinatorTest {
             cachedInsightsReadCount += 1
             return cachedInsights
         }
+
+        override suspend fun readCachedInsightsRequest(): InsightsRange? =
+            cachedInsightsRequest ?: cachedInsights?.cachedInsightsRange()
 
         override suspend fun readCachedHistory(): HistoryResponseDto? {
             cachedHistoryReadCount += 1

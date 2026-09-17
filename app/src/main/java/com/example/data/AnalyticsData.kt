@@ -9,6 +9,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 const val ANALYTICS_VERSION = 2
 const val HISTORY_PAGE_SIZE = 50
@@ -21,6 +26,11 @@ sealed interface InsightsRange {
     data object Default : InsightsRange
     data object All : InsightsRange
     data class Custom(val from: String, val to: String) : InsightsRange
+    data class LastDays(val days: Int) : InsightsRange {
+        init {
+            require(days in 1..3660)
+        }
+    }
 }
 
 @JsonClass(generateAdapter = true)
@@ -332,6 +342,8 @@ interface AnalyticsDataSource {
 
     suspend fun readCachedInsights(): InsightsResponseDto?
 
+    suspend fun readCachedInsightsRequest(): InsightsRange? = readCachedInsights()?.cachedInsightsRange()
+
     suspend fun readCachedHistory(): HistoryResponseDto?
 }
 
@@ -343,6 +355,7 @@ class AnalyticsRepository(
     private val environment: String,
     private val onInsightsCacheSaved: suspend () -> Unit = {},
     private val onHistorySaved: suspend (List<HistoryEventDto>) -> Unit = {},
+    private val today: () -> String = { analyticsToday() },
 ) : AnalyticsDataSource {
     private val envelopeAdapter = moshi.adapter(AnalyticsEnvelope::class.java)
     private val insightsAdapter = moshi.adapter(InsightsResponseDto::class.java)
@@ -409,6 +422,30 @@ class AnalyticsRepository(
     override suspend fun readCachedInsights(): InsightsResponseDto? =
         readCache("insights") { insightsAdapter.fromJson(it)?.also(::validateInsights) }
 
+    override suspend fun readCachedInsightsRequest(): InsightsRange? =
+        withContext(Dispatchers.IO) {
+            val cache = dao.getAnalyticsCache(environment, "insights") ?: return@withContext null
+            if (cache.analyticsVersion != ANALYTICS_VERSION) {
+                dao.deleteAnalyticsCache(environment, "insights")
+                return@withContext null
+            }
+            val parsed = parseRangeKey(cache.requestJson) ?: return@withContext null
+            // 2026-09-17 failure: 30- and 90-day presets were stored as absolute Custom windows
+            // anchored to data.range.to. Because periodic prefetch re-fetched whatever was
+            // cached, the window was frozen in the past. Heal 30/90-day Custom windows into
+            // rolling LastDays presets on upgrade.
+            when (parsed) {
+                is InsightsRange.Custom -> {
+                    when (inclusiveDaySpan(parsed.from, parsed.to)) {
+                        30 -> InsightsRange.LastDays(30)
+                        90 -> InsightsRange.LastDays(90)
+                        else -> parsed
+                    }
+                }
+                else -> parsed
+            }
+        }
+
     override suspend fun readCachedHistory(): HistoryResponseDto? =
         readCache("history") { historyAdapter.fromJson(it)?.also(::validateHistory) }
 
@@ -447,6 +484,11 @@ class AnalyticsRepository(
             is InsightsRange.Custom -> {
                 require(DATE.matches(range.from) && DATE.matches(range.to) && range.from <= range.to)
                 builder.addQueryParameter("from", range.from).addQueryParameter("to", range.to)
+            }
+            is InsightsRange.LastDays -> {
+                val to = today()
+                val (from, _) = lastDaysWindow(range.days, to)
+                builder.addQueryParameter("from", from).addQueryParameter("to", to)
             }
         }
         return builder.build().toString()
@@ -552,12 +594,6 @@ class AnalyticsRepository(
         throw contractError("Unable to load $resource")
     }
 
-    private fun rangeKey(range: InsightsRange): String = when (range) {
-        InsightsRange.Default -> """{"kind":"default"}"""
-        InsightsRange.All -> """{"kind":"all"}"""
-        is InsightsRange.Custom -> """{"kind":"custom","from":"${range.from}","to":"${range.to}"}"""
-    }
-
     private fun contractError(message: String) =
         AnalyticsApiException("INVALID_RESPONSE", message, false)
 
@@ -584,5 +620,83 @@ internal suspend fun runHistorySavedHook(
         throw error
     } catch (_: Throwable) {
         // A failure in the hook must not fail saveHistory
+    }
+}
+
+internal fun rangeKey(range: InsightsRange): String = when (range) {
+    InsightsRange.Default -> """{"kind":"default"}"""
+    InsightsRange.All -> """{"kind":"all"}"""
+    is InsightsRange.Custom -> """{"kind":"custom","from":"${range.from}","to":"${range.to}"}"""
+    is InsightsRange.LastDays -> """{"kind":"lastDays","days":${range.days}}"""
+}
+
+fun analyticsToday(nowEpochMillis: Long = System.currentTimeMillis()): String {
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("America/New_York")
+    }
+    return formatter.format(Date(nowEpochMillis))
+}
+
+internal fun lastDaysWindow(days: Int, anchor: String): Pair<String, String> {
+    require(days in 1..3660)
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
+    }
+    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+        time = requireNotNull(formatter.parse(anchor))
+        add(Calendar.DAY_OF_MONTH, -(days - 1))
+    }
+    return formatter.format(calendar.time) to anchor
+}
+
+internal fun inclusiveDaySpan(from: String, to: String): Int = runCatching {
+    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
+    }
+    val start = requireNotNull(formatter.parse(from)).time
+    val end = requireNotNull(formatter.parse(to)).time
+    ((end - start) / 86_400_000L).toInt() + 1
+}.getOrDefault(0)
+
+@JsonClass(generateAdapter = true)
+internal data class RangeKeyDto(
+    val kind: String? = null,
+    val from: String? = null,
+    val to: String? = null,
+    val days: Int? = null,
+)
+
+private val rangeKeyMoshi by lazy { Moshi.Builder().build() }
+private val rangeKeyAdapter by lazy { rangeKeyMoshi.adapter(RangeKeyDto::class.java) }
+
+private val DATE_FORMAT_REGEX = Regex("""\d{4}-\d{2}-\d{2}""")
+
+internal fun parseRangeKey(requestJson: String): InsightsRange? {
+    val dto = runCatching { rangeKeyAdapter.fromJson(requestJson) }.getOrNull() ?: return null
+    return when (dto.kind) {
+        "default" -> if (dto.from == null && dto.to == null && dto.days == null) InsightsRange.Default else null
+        "all" -> if (dto.from == null && dto.to == null && dto.days == null) InsightsRange.All else null
+        "custom" -> {
+            val from = dto.from
+            val to = dto.to
+            if (from != null && to != null && dto.days == null &&
+                DATE_FORMAT_REGEX.matches(from) && DATE_FORMAT_REGEX.matches(to) && from <= to
+            ) {
+                InsightsRange.Custom(from, to)
+            } else {
+                null
+            }
+        }
+        "lastDays" -> {
+            val days = dto.days
+            if (days != null && dto.from == null && dto.to == null && days in 1..3660) {
+                InsightsRange.LastDays(days)
+            } else {
+                null
+            }
+        }
+        else -> null
     }
 }

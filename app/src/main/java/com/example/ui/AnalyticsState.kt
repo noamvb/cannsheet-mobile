@@ -14,9 +14,7 @@ import com.example.data.runCatchingCancellable
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -517,7 +515,7 @@ class AnalyticsCoordinator(
         _insights.update { it.copy(isRefreshing = true, isStale = true) }
         scope.launch {
             repository.readCachedInsights()?.let { cached ->
-                val range = cached.cachedInsightsRange()
+                val range = repository.readCachedInsightsRequest() ?: cached.cachedInsightsRange()
                 _insights.value = InsightsUiState(
                     data = cached,
                     displayedRange = range,
@@ -609,17 +607,4 @@ fun analyticsUiError(error: Throwable): AnalyticsUiError {
         is IOException -> AnalyticsUiError("OFFLINE", "No connection. Showing saved data when available.", true)
         else -> AnalyticsUiError("INTERNAL_ERROR", error.message ?: "Could not load analytics.", true)
     }
-}
-
-fun customRangeForDays(days: Int, anchor: String): InsightsRange.Custom {
-    require(days in 1..3660)
-    val formatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-        isLenient = false
-    }
-    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
-        time = requireNotNull(formatter.parse(anchor))
-        add(Calendar.DAY_OF_MONTH, -(days - 1))
-    }
-    return InsightsRange.Custom(formatter.format(calendar.time), anchor)
 }

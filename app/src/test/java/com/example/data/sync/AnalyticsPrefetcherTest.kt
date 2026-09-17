@@ -98,6 +98,52 @@ class AnalyticsPrefetcherTest {
     }
 
     @Test
+    fun stalePresetRangePrefetchesLastDaysWhenCachedRequestPresent() = runBlocking {
+        val operations = FakeOperations(
+            cachedInsights = insightsResponse(
+                scope = "CUSTOM",
+                from = "2026-05-21",
+                to = "2026-08-18",
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshInsights = insightsResponse(generatedAtEpochMillis = FIXED_NOW),
+            cachedHistory = historyResponse(events = emptyList(), generatedAtEpochMillis = FIXED_NOW),
+            cachedInsightsRequest = InsightsRange.LastDays(90),
+        )
+        val prefetcher = AnalyticsPrefetcher(operations, now = { FIXED_NOW })
+
+        prefetcher.prefetch()
+
+        assertEquals(
+            listOf(InsightsRange.LastDays(90)),
+            operations.fetchedInsightsRanges,
+        )
+    }
+
+    @Test
+    fun absentCachedRequestFallsBackToCachedInsightsRange() = runBlocking {
+        val operations = FakeOperations(
+            cachedInsights = insightsResponse(
+                scope = "CUSTOM",
+                from = "2026-05-21",
+                to = "2026-08-18",
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshInsights = insightsResponse(generatedAtEpochMillis = FIXED_NOW),
+            cachedHistory = historyResponse(events = emptyList(), generatedAtEpochMillis = FIXED_NOW),
+            cachedInsightsRequest = null,
+        )
+        val prefetcher = AnalyticsPrefetcher(operations, now = { FIXED_NOW })
+
+        prefetcher.prefetch()
+
+        assertEquals(
+            listOf(InsightsRange.Custom("2026-05-21", "2026-08-18")),
+            operations.fetchedInsightsRanges,
+        )
+    }
+
+    @Test
     fun staleCacheReusesTheCachedHistoryFilters() = runBlocking {
         val filters = HistoryFilters(type = "FLOWER")
         val staleHistory = historyResponse(
@@ -425,12 +471,15 @@ class AnalyticsPrefetcherTest {
         var freshHistory: HistoryResponseDto? = null,
         var insightsError: Throwable? = null,
         var historyError: Throwable? = null,
+        var cachedInsightsRequest: InsightsRange? = null,
     ) : AnalyticsPrefetchOperations {
         val fetchedInsightsRanges = mutableListOf<InsightsRange>()
         val fetchedHistoryFilters = mutableListOf<HistoryFilters>()
         val savedHistory = mutableListOf<Pair<HistoryFilters, HistoryResponseDto>>()
 
         override suspend fun readCachedInsights(): InsightsResponseDto? = cachedInsights
+
+        override suspend fun readCachedInsightsRequest(): InsightsRange? = cachedInsightsRequest
 
         override suspend fun readCachedHistory(): HistoryResponseDto? = cachedHistory
 

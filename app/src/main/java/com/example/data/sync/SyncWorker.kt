@@ -190,6 +190,9 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
             override suspend fun readCachedInsights(): InsightsResponseDto? =
                 graph.analyticsRepository.readCachedInsights()
 
+            override suspend fun readCachedInsightsRequest(): InsightsRange? =
+                graph.analyticsRepository.readCachedInsightsRequest()
+
             override suspend fun readCachedHistory(): HistoryResponseDto? =
                 graph.analyticsRepository.readCachedHistory()
 

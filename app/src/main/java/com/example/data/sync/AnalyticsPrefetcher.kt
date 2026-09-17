@@ -16,6 +16,8 @@ import com.example.data.runCatchingCancellable
 interface AnalyticsPrefetchOperations {
     suspend fun readCachedInsights(): InsightsResponseDto?
 
+    suspend fun readCachedInsightsRequest(): InsightsRange? = readCachedInsights()?.cachedInsightsRange()
+
     suspend fun readCachedHistory(): HistoryResponseDto?
 
     suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto
@@ -53,7 +55,7 @@ class AnalyticsPrefetcher(
         if (cached != null && !isStaleEnough(cached.generatedAtEpochMillis)) {
             return AnalyticsPrefetchStatus.SKIPPED_FRESH
         }
-        val range = cached?.cachedInsightsRange() ?: InsightsRange.Default
+        val range = operations.readCachedInsightsRequest() ?: cached?.cachedInsightsRange() ?: InsightsRange.Default
         return runCatchingCancellable { operations.fetchInsights(range) }
             .fold({ AnalyticsPrefetchStatus.REFRESHED }, { AnalyticsPrefetchStatus.FAILED })
     }

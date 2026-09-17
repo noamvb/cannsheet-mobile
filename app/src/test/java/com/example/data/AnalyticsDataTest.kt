@@ -541,6 +541,117 @@ class AnalyticsDataTest {
         val customDto = moshi.adapter(InsightsResponseDto::class.java).fromJson(sampleInsightsJson())!!
         assertEquals(InsightsRange.Custom("2026-07-01", "2026-07-02"), customDto.cachedInsightsRange())
     }
+
+    @Test
+    fun buildInsightsUrlForLastDaysUsesConfiguredToday() = runBlocking {
+        val api = CapturingGasApiService(sampleInsightsJson())
+        val dao = FakeCannsheetDao()
+        val repo = AnalyticsRepository(
+            api = api,
+            dao = dao,
+            moshi = moshi,
+            endpoint = endpoint,
+            environment = "PRODUCTION",
+            today = { "2026-09-17" },
+        )
+
+        repo.fetchInsights(InsightsRange.LastDays(90))
+
+        val url = requireNotNull(api.requestedUrl)
+        assertTrue(url.contains("from=2026-06-20&to=2026-09-17"))
+    }
+
+    @Test
+    fun rangeKeyRoundTripAndParsingLiterals() {
+        assertEquals("""{"kind":"default"}""", rangeKey(InsightsRange.Default))
+        assertEquals(InsightsRange.Default, parseRangeKey("""{"kind":"default"}"""))
+
+        assertEquals("""{"kind":"all"}""", rangeKey(InsightsRange.All))
+        assertEquals(InsightsRange.All, parseRangeKey("""{"kind":"all"}"""))
+
+        assertEquals(
+            """{"kind":"custom","from":"2026-05-21","to":"2026-08-18"}""",
+            rangeKey(InsightsRange.Custom("2026-05-21", "2026-08-18")),
+        )
+        assertEquals(
+            InsightsRange.Custom("2026-05-21", "2026-08-18"),
+            parseRangeKey("""{"kind":"custom","from":"2026-05-21","to":"2026-08-18"}"""),
+        )
+
+        assertEquals("""{"kind":"lastDays","days":90}""", rangeKey(InsightsRange.LastDays(90)))
+        assertEquals(InsightsRange.LastDays(90), parseRangeKey("""{"kind":"lastDays","days":90}"""))
+
+        assertNull(parseRangeKey("""{"kind":"nonsense"}"""))
+    }
+
+    @Test
+    fun upgradeHealRestoresFrozenPresetsToLastDays() = runBlocking {
+        val dao = FakeCannsheetDao()
+        val repo = AnalyticsRepository(FakeGasApiService(), dao, moshi, endpoint, "PRODUCTION")
+
+        dao.upsertAnalyticsCache(
+            AnalyticsCacheEntity(
+                environment = "PRODUCTION",
+                resource = "insights",
+                analyticsVersion = 2,
+                requestJson = """{"kind":"custom","from":"2026-05-21","to":"2026-08-18"}""",
+                payloadJson = sampleInsightsJson(),
+                sourceDataVersion = validHash,
+                generatedAtEpochMillis = 1000L,
+                cachedAtEpochMillis = 1000L,
+            ),
+        )
+        assertEquals(InsightsRange.LastDays(90), repo.readCachedInsightsRequest())
+
+        dao.upsertAnalyticsCache(
+            AnalyticsCacheEntity(
+                environment = "PRODUCTION",
+                resource = "insights",
+                analyticsVersion = 2,
+                requestJson = """{"kind":"custom","from":"2026-07-01","to":"2026-07-02"}""",
+                payloadJson = sampleInsightsJson(),
+                sourceDataVersion = validHash,
+                generatedAtEpochMillis = 1000L,
+                cachedAtEpochMillis = 1000L,
+            ),
+        )
+        assertEquals(InsightsRange.Custom("2026-07-01", "2026-07-02"), repo.readCachedInsightsRequest())
+
+        dao.upsertAnalyticsCache(
+            AnalyticsCacheEntity(
+                environment = "PRODUCTION",
+                resource = "insights",
+                analyticsVersion = 2,
+                requestJson = """{"kind":"lastDays","days":30}""",
+                payloadJson = sampleInsightsJson(),
+                sourceDataVersion = validHash,
+                generatedAtEpochMillis = 1000L,
+                cachedAtEpochMillis = 1000L,
+            ),
+        )
+        assertEquals(InsightsRange.LastDays(30), repo.readCachedInsightsRequest())
+    }
+
+    @Test
+    fun fetchInsightsStoresExactRequestJsonForLastDays() = runBlocking {
+        val api = CapturingGasApiService(sampleInsightsJson())
+        val dao = FakeCannsheetDao()
+        val repo = AnalyticsRepository(api, dao, moshi, endpoint, "PRODUCTION")
+
+        repo.fetchInsights(InsightsRange.LastDays(30))
+
+        val row = dao.getAnalyticsCache("PRODUCTION", "insights")
+        assertNotNull(row)
+        assertEquals("""{"kind":"lastDays","days":30}""", row!!.requestJson)
+    }
+}
+
+private class CapturingGasApiService(private val responseJson: String) : FakeGasApiService() {
+    var requestedUrl: String? = null
+    override suspend fun getAnalytics(url: String): ResponseBody {
+        requestedUrl = url
+        return responseJson.toResponseBody("application/json".toMediaTypeOrNull())
+    }
 }
 
 private open class FakeGasApiService : GasApiService {
