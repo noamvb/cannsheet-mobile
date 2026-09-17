@@ -6,7 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.1 (code 59) - Insights presets roll with the calendar
 
-**Status: code merged; release in progress. Provenance is completed in the follow-up docs commit once the tag has published, as for v1.12.0 (#185).**
+**Status: published, independently verified, installed on the owner's phone over
+adb, and the fix observed working there on 2026-09-17.**
 
 ### What changed and why
 
@@ -37,14 +38,36 @@ one-time heal of a cached 30/90-day `Custom` window.
 
 ### Release provenance
 
-Pull requests merged: #186 `bdf6104`, then this release pull request. Main run id, tag commit, release run and APK digest are recorded after publication.
+Pull requests merged: #186 `bdf6104`, #187 `db5b568` (release).
+
+Tag `v1.12.1` points at `db5b568`. Main run `35247541474` at that commit was
+green on all six jobs including Emulator API 36 after one rerun (the first
+attempt failed API 36 with `Failed to inject touch input` in
+`ProductTypeQuantityEditorTest`, an emulator input flake on a docs-and-version
+commit; the identical code had passed API 36 at `bdf6104`, run `35245626942`).
+Release run `35248941668` was green on all three jobs; published 2026-09-17
+17:02 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.1.apk`, 38,020,149 bytes,
+SHA-256 `1ce56173e3e343a6b8eb47a7c1d4db0ff419c5c7244487585be8b3e7925bf900`, on
+`noamvb/cannsheet-mobile-releases`, downloaded independently of CI and verified
+against its published `.sha256`; `aapt` reports versionCode 59, versionName
+1.12.1; signing certificate SHA-256 `a9787249…08665e`, unchanged since v1.9.1.
+
+Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
+13:03 EDT. Opening Insights showed the healed 90-day chip selected, then a
+refresh produced `2026-06-20 – 2026-09-17 · Updated Sep 17, 1:04 p.m.`, and the
+Runway and Spend widgets read "as of 2026-09-17".
 
 ### Outstanding
 
-- On the owner's phone, after installing 1.12.1: open Insights once; the
-  healed cache should show a window ending today with the 90-day chip still
-  selected, and the Runway/Spend widgets should say "as of <today>" after the
-  next refresh. Not yet observed.
+- Observed while verifying on the phone: Google's `script.googleusercontent.com`
+  hop was intermittently taking 16-110 s and answering HTTP 404 for analytics
+  GETs during the early afternoon of 2026-09-17, from the phone and from a
+  Mac alike, for tiny and large responses alike; the app surfaced it as
+  `HTTP 404 (INTERNAL_ERROR)` and recovered on a later refresh (40 s, inside
+  the 60 s read timeout). Not caused by this release; worth a retry-with-backoff
+  on non-2xx if it recurs.
 - The v1.12.0 outstanding items below still apply (panel-logged events reach
   Today only on the periodic prefetch; the ai-orch profile lacks
   `compileDebugAndroidTestKotlin`).
