@@ -4,6 +4,66 @@ Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
+
+**Status: ready to tag; not yet published.**
+
+### What changed and why
+
+Since #181 (v1.12.0) every sync request whose `SyncPayload.clientState` is `null` - i.e. whenever no loaded-pen change is pending, which is almost always - was encoded as:
+```json
+{"apiVersion":2,"requestId":"r","environment":"PRODUCTION","purchases":[],"consumptions":[],"finishActions":[],"consumptionCorrections":[],"clientState":null}
+```
+The backend (`backend_additions.gs` `preflightSyncRequest_`) treats a present `clientState` key as a client-state update and answers `{"success":false,"errorCode":"INVALID_ITEM","message":"clientState must be an object"}`, so the whole request failed and the offline queue never drained until a pen swap made one request carry an object. The phone showed exactly that message on v1.12.4.
+
+The cause was that `SyncClientStateJsonAdapterFactory` in `app/src/main/java/com/example/data/Network.kt` wrapped the `SyncClientState` adapter with `JsonAdapter.serializeNulls()`. While intended to preserve `loadedPenProductId: null` inside the object, calling `serializeNulls()` enabled `serializeNulls` on the writer before delegating, which also turned a null `SyncClientState` value into an explicit `"clientState":null`.
+
+`SyncClientStateJsonAdapterFactory` in `app/src/main/java/com/example/data/Network.kt` was replaced with an adapter that calls `writer.nullValue()` with the writer's `serializeNulls` left as it is when the value is null (so Moshi drops the deferred name), and delegates with `serializeNulls` enabled (`delegate.serializeNulls().toJson(writer, value)`) only when the value is non-null.
+
+### Evidence
+
+Focused test command:
+```
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+./gradlew --no-configuration-cache :app:testDebugUnitTest --tests 'com.example.data.NetworkClientStateTest'
+```
+
+Red run (before `Network.kt` edit, with new tests):
+```
+NetworkClientStateTest > payloadWithoutPendingPenOmitsClientStateEntirely FAILED
+    org.junit.ComparisonFailure at NetworkClientStateTest.kt:49
+
+5 tests completed, 1 failed
+```
+Failing line in `payloadWithoutPendingPenOmitsClientStateEntirely`:
+`org.junit.ComparisonFailure: expected:<...ptionCorrections":[][]}> but was:<...ptionCorrections":[][,"clientState":null]}>`
+
+Green run (after `Network.kt` edit):
+```
+BUILD SUCCESSFUL in 3m 24s
+29 actionable tasks: 7 executed, 22 up-to-date
+```
+`<testcase` count in `app/build/test-results/testDebugUnitTest/TEST-com.example.data.NetworkClientStateTest.xml`: 5 (5 tests, 0 failures, 0 skipped).
+
+SyncEngine test command:
+```
+./gradlew --no-configuration-cache :app:testDebugUnitTest --tests 'com.example.data.SyncEngineTest'
+```
+Result:
+```
+BUILD SUCCESSFUL in 3s
+29 actionable tasks: 1 executed, 28 up-to-date
+```
+
+### Release provenance
+
+To be recorded by the releaser after the tag builds.
+
+### Outstanding
+
+The v1.12.4 outstanding items still apply.
+
 ## Cannsheet Mobile v1.12.4 (code 62) - sync failures show the backend's message
 
 **Status: published, independently verified, and installed on the owner's phone
@@ -71,8 +131,8 @@ Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
   `1f9c1d43-531b-4ab0-85c2-f0b408505e92` reached the sheet) and the status
   reads "Sync successful". The cause was never observed. It was a
   whole-request `success:false`, which only `preflightSyncRequest_` produces
-  (clientState, batch size, requestId, duplicate UUID, apiVersion); the next
-  occurrence will name the check in the status line.
+  (clientState, batch size, requestId, duplicate UUID, apiVersion);
+  It did, the same evening: `clientState must be an object` - fixed in v1.12.5.
 - Two panel-created test events remain to be voided from the phone:
   17:18:52 x1 (`f8beb18d…`) and 18:16:14 x1 (`b9dedd79…`) on 2026-09-17.
 

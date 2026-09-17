@@ -2,6 +2,8 @@ package com.example.data
 
 import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonClass
+import com.squareup.moshi.JsonReader
+import com.squareup.moshi.JsonWriter
 import com.squareup.moshi.Moshi
 import java.lang.reflect.Type
 import retrofit2.http.Body
@@ -71,12 +73,24 @@ data class SyncClientState(
  * Moshi's generated adapters omit `null` fields by default (`JsonWriter.serializeNulls == false`).
  * [SyncClientState.loadedPenProductId] must round-trip a real `null`, so this factory intercepts
  * lookups for that one type and wraps its adapter with [JsonAdapter.serializeNulls]. Every other
- * type in the app keeps Moshi's default null-omitting behavior.
+ * type in the app keeps Moshi's default null-omitting behavior. A null [SyncClientState] is omitted
+ * entirely because the backend treats a present key as an update.
  */
 object SyncClientStateJsonAdapterFactory : JsonAdapter.Factory {
     override fun create(type: Type, annotations: Set<Annotation>, moshi: Moshi): JsonAdapter<*>? {
         if (type != SyncClientState::class.java) return null
-        return moshi.nextAdapter<SyncClientState>(this, type, annotations).serializeNulls()
+        val delegate = moshi.nextAdapter<SyncClientState>(this, type, annotations)
+        return object : JsonAdapter<SyncClientState>() {
+            override fun fromJson(reader: JsonReader): SyncClientState? = delegate.fromJson(reader)
+
+            override fun toJson(writer: JsonWriter, value: SyncClientState?) {
+                if (value == null) {
+                    writer.nullValue()
+                } else {
+                    delegate.serializeNulls().toJson(writer, value)
+                }
+            }
+        }
     }
 }
 

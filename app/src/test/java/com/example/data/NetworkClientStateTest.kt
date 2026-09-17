@@ -33,4 +33,60 @@ class NetworkClientStateTest {
             response?.acknowledgedClientState,
         )
     }
+
+    @Test
+    fun payloadWithoutPendingPenOmitsClientStateEntirely() {
+        val moshi = Moshi.Builder().add(SyncClientStateJsonAdapterFactory).build()
+        val payload = SyncPayload(
+            requestId = "r",
+            environment = "PRODUCTION",
+            purchases = emptyList(),
+            consumptions = emptyList(),
+        )
+
+        val json = moshi.adapter(SyncPayload::class.java).toJson(payload)
+
+        assertEquals(
+            """{"apiVersion":2,"requestId":"r","environment":"PRODUCTION","purchases":[],"consumptions":[],"finishActions":[],"consumptionCorrections":[]}""",
+            json,
+        )
+    }
+
+    @Test
+    fun payloadWithPendingPenEncodesTheObjectWithItsNullField() {
+        val moshi = Moshi.Builder().add(SyncClientStateJsonAdapterFactory).build()
+        val payload = SyncPayload(
+            requestId = "r",
+            environment = "PRODUCTION",
+            purchases = emptyList(),
+            consumptions = emptyList(),
+            clientState = SyncClientState(null, 1),
+        )
+
+        val json = moshi.adapter(SyncPayload::class.java).toJson(payload)
+
+        assertEquals(
+            """{"apiVersion":2,"requestId":"r","environment":"PRODUCTION","purchases":[],"consumptions":[],"finishActions":[],"consumptionCorrections":[],"clientState":{"loadedPenProductId":null,"loadedPenUpdatedAtEpochMillis":1}}""",
+            json,
+        )
+    }
+
+    @Test
+    fun payloadWithLoadedPenEncodesTheProductId() {
+        val moshi = Moshi.Builder().add(SyncClientStateJsonAdapterFactory).build()
+        val payload = SyncPayload(
+            requestId = "r",
+            environment = "PRODUCTION",
+            purchases = emptyList(),
+            consumptions = emptyList(),
+            clientState = SyncClientState("*P115", 1789616287000),
+        )
+
+        val json = moshi.adapter(SyncPayload::class.java).toJson(payload)
+
+        assertEquals(
+            """{"apiVersion":2,"requestId":"r","environment":"PRODUCTION","purchases":[],"consumptions":[],"finishActions":[],"consumptionCorrections":[],"clientState":{"loadedPenProductId":"*P115","loadedPenUpdatedAtEpochMillis":1789616287000}}""",
+            json,
+        )
+    }
 }
