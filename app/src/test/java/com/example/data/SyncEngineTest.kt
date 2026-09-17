@@ -162,19 +162,134 @@ class SyncEngineTest {
         assertFalse(api.requestIds[1] == api.requestIds[2])
     }
 
-    private fun engine(api: GasApiService, gateway: SyncQueueGateway) = SyncEngine(
+    @Test
+    fun emptyQueuesWithPendingLoadedPenCallsServerAndSendsClientState() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload -> successResponse(payload) }
+
+        val outcome = engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertTrue(outcome is SyncOutcome.Applied)
+        assertEquals(1, api.syncCalls)
+        assertEquals(SyncClientState("*P115", 1789616287000), api.lastPayload?.clientState)
+    }
+
+    @Test
+    fun emptyQueuesWithNoPendingPenReturnsNothingToSyncWithoutCallingServer() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(pending = null)
+        val api = FakeGasApi { error("Server should not be called") }
+
+        val outcome = engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertTrue(outcome is SyncOutcome.NothingToSync)
+        assertEquals(0, api.syncCalls)
+    }
+
+    @Test
+    fun ackCommittedWithMatchingTimestampMarksLoadedPenSyncedOnce() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload -> clientStateAckResponse(payload, status = "committed") }
+
+        val outcome = engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertTrue(outcome is SyncOutcome.Applied)
+        assertEquals(1, loadedPenSource.markSyncedCalls)
+        assertEquals(1789616287000L, loadedPenSource.lastMarkedSyncedAt)
+    }
+
+    @Test
+    fun ackStaleMarksLoadedPenSyncedOnce() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload -> clientStateAckResponse(payload, status = "stale") }
+
+        engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertEquals(1, loadedPenSource.markSyncedCalls)
+        assertEquals(1789616287000L, loadedPenSource.lastMarkedSyncedAt)
+    }
+
+    @Test
+    fun ackRejectedMarksLoadedPenSyncedOnceAndSurfacesStatus() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload ->
+            clientStateAckResponse(
+                payload,
+                status = "rejected",
+                errorCode = "UNKNOWN_PRODUCT",
+                message = "no such product",
+            )
+        }
+
+        val outcome = engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertTrue(outcome is SyncOutcome.Applied)
+        assertEquals("rejected", (outcome as SyncOutcome.Applied).clientStateStatus)
+        assertEquals(1, loadedPenSource.markSyncedCalls)
+        assertEquals(1789616287000L, loadedPenSource.lastMarkedSyncedAt)
+    }
+
+    @Test
+    fun ackWithDifferentTimestampDoesNotMarkLoadedPenSynced() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload ->
+            clientStateAckResponse(payload, status = "committed", ackedUpdatedAtEpochMillis = 1789616287999)
+        }
+
+        engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertEquals(0, loadedPenSource.markSyncedCalls)
+    }
+
+    @Test
+    fun responseWithoutAcknowledgedClientStateDoesNotMarkLoadedPenSynced() = runBlocking {
+        val gateway = FakeSyncQueueGateway()
+        val loadedPenSource = FakeLoadedPenSource(PendingLoadedPenState("*P115", 1789616287000))
+        val api = FakeGasApi { payload -> successResponse(payload) }
+
+        engine(api, gateway, loadedPenSource).sync(ENDPOINT)
+
+        assertEquals(0, loadedPenSource.markSyncedCalls)
+    }
+
+    private fun engine(
+        api: GasApiService,
+        gateway: SyncQueueGateway,
+        loadedPenSource: LoadedPenSyncSource? = null,
+    ) = SyncEngine(
         api = api,
         moshi = com.squareup.moshi.Moshi.Builder().build(),
         gateway = gateway,
         expectedEnvironment = ENVIRONMENT,
         mutex = Mutex(),
+        loadedPenSource = loadedPenSource,
     )
+
+    private class FakeLoadedPenSource(
+        var pending: PendingLoadedPenState?,
+    ) : LoadedPenSyncSource {
+        var markSyncedCalls = 0
+        var lastMarkedSyncedAt: Long? = null
+
+        override suspend fun pendingLoadedPenState(): PendingLoadedPenState? = pending
+
+        override suspend fun markLoadedPenStateSynced(updatedAtEpochMillis: Long) {
+            markSyncedCalls += 1
+            lastMarkedSyncedAt = updatedAtEpochMillis
+        }
+    }
 
     private class FakeGasApi(
         private val syncResponse: suspend (SyncPayload) -> String,
     ) : GasApiService {
         var syncCalls = 0
         val requestIds = mutableListOf<String>()
+        var lastPayload: SyncPayload? = null
 
         override suspend fun getProducts(url: String): ResponseBody = error("unused")
 
@@ -183,6 +298,7 @@ class SyncEngineTest {
         override suspend fun syncData(url: String, payload: SyncPayload): ResponseBody {
             syncCalls += 1
             requestIds += payload.requestId
+            lastPayload = payload
             return syncResponse(payload).toResponseBody(JSON)
         }
     }
@@ -269,5 +385,24 @@ class SyncEngineTest {
               "rejectedConsumptionCorrections": []
             }
         """.trimIndent()
+
+        fun clientStateAckResponse(
+            payload: SyncPayload,
+            status: String,
+            ackedUpdatedAtEpochMillis: Long = payload.clientState?.loadedPenUpdatedAtEpochMillis
+                ?: 1789616287000,
+            errorCode: String? = null,
+            message: String? = null,
+        ): String {
+            val errorFields = if (errorCode != null) {
+                ""","errorCode":"$errorCode","message":"${message.orEmpty()}""""
+            } else {
+                ""
+            }
+            return "{\"success\":true,\"apiVersion\":2,\"requestId\":\"${payload.requestId}\"," +
+                "\"environment\":\"$ENVIRONMENT\",\"acknowledgedConsumptions\":[]," +
+                "\"acknowledgedClientState\":{\"loadedPenUpdatedAtEpochMillis\":$ackedUpdatedAtEpochMillis," +
+                "\"status\":\"$status\"$errorFields}}"
+        }
     }
 }

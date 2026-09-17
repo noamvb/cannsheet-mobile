@@ -1,6 +1,9 @@
 package com.example.data
 
+import com.squareup.moshi.JsonAdapter
 import com.squareup.moshi.JsonClass
+import com.squareup.moshi.Moshi
+import java.lang.reflect.Type
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
@@ -49,7 +52,33 @@ data class SyncPayload(
     val consumptions: List<SyncConsumption>,
     val finishActions: List<SyncFinishAction> = emptyList(),
     val consumptionCorrections: List<SyncConsumptionCorrection> = emptyList(),
+    val clientState: SyncClientState? = null,
 )
+
+/**
+ * The phone's currently loaded pen, piggybacked on the ordinary sync request. [loadedPenProductId]
+ * must serialize as an explicit JSON `null` (rather than being omitted) when the pen was cleared,
+ * since the backend distinguishes "cleared" from "no client state sent at all"; see
+ * [SyncClientStateJsonAdapterFactory].
+ */
+@JsonClass(generateAdapter = true)
+data class SyncClientState(
+    val loadedPenProductId: String?,
+    val loadedPenUpdatedAtEpochMillis: Long,
+)
+
+/**
+ * Moshi's generated adapters omit `null` fields by default (`JsonWriter.serializeNulls == false`).
+ * [SyncClientState.loadedPenProductId] must round-trip a real `null`, so this factory intercepts
+ * lookups for that one type and wraps its adapter with [JsonAdapter.serializeNulls]. Every other
+ * type in the app keeps Moshi's default null-omitting behavior.
+ */
+object SyncClientStateJsonAdapterFactory : JsonAdapter.Factory {
+    override fun create(type: Type, annotations: Set<Annotation>, moshi: Moshi): JsonAdapter<*>? {
+        if (type != SyncClientState::class.java) return null
+        return moshi.nextAdapter<SyncClientState>(this, type, annotations).serializeNulls()
+    }
+}
 
 @JsonClass(generateAdapter = true)
 data class SyncPurchase(
@@ -188,6 +217,15 @@ data class SyncResponse(
     val correctionWritesEnabled: Boolean? = null,
     val acknowledgedConsumptionCorrections: List<AcknowledgedConsumptionCorrection>? = null,
     val rejectedConsumptionCorrections: List<RejectedConsumptionCorrection>? = null,
+    val acknowledgedClientState: AcknowledgedClientState? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class AcknowledgedClientState(
+    val loadedPenUpdatedAtEpochMillis: Long,
+    val status: String,
+    val errorCode: String? = null,
+    val message: String? = null,
 )
 
 internal fun environmentMatches(expected: String, actual: String?): Boolean = actual == expected

@@ -229,4 +229,18 @@ class SyncQueueLogicTest {
         assertEquals(first.payloadFingerprint(), retry.payloadFingerprint())
         assertFalse(first.payloadFingerprint() == remaining.payloadFingerprint())
     }
+
+    @Test
+    fun payloadFingerprintChangesWithLoadedPenUpdatedAtButNotOtherwise() {
+        val base = QueuedSyncSnapshot(
+            purchaseActionIds = setOf("purchase-1"),
+            consumptionEventIds = setOf("event-1"),
+            loadedPenUpdatedAtEpochMillis = 1789616287000,
+        )
+        val identical = base.copy()
+        val changed = base.copy(loadedPenUpdatedAtEpochMillis = 1789616287001)
+
+        assertEquals(base.payloadFingerprint(), identical.payloadFingerprint())
+        assertFalse(base.payloadFingerprint() == changed.payloadFingerprint())
+    }
 }

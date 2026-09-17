@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.JsonClass
@@ -14,6 +15,7 @@ import com.squareup.moshi.Moshi
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.consumptionPreferencesDataStore by preferencesDataStore(
@@ -42,19 +44,31 @@ internal const val QUANTITY_PRESET_OVERRIDES_PAYLOAD_VERSION = 1
 internal const val SECONDS_PER_USE_OVERRIDES_JSON_KEY = "seconds_per_use_overrides_json"
 internal const val SECONDS_PER_USE_OVERRIDES_PAYLOAD_VERSION = 1
 
+/** A loaded-pen state change not yet acknowledged by the backend's ordinary sync. */
+data class PendingLoadedPenState(
+    val loadedPenProductId: String?,
+    val updatedAtEpochMillis: Long,
+)
+
 class ConsumptionPreferencesRepository private constructor(
     private val dataStore: DataStore<Preferences>,
     private val moshi: Moshi,
-) : LoadedPenProductStore {
+    private val clock: () -> Long,
+) : LoadedPenProductStore, LoadedPenSyncSource {
     constructor(context: Context) : this(
         dataStore = context.applicationContext.consumptionPreferencesDataStore,
         moshi = Moshi.Builder().build(),
+        clock = System::currentTimeMillis,
     )
 
     /** Injectable for focused JVM tests. */
-    internal constructor(dataStore: DataStore<Preferences>) : this(
+    internal constructor(
+        dataStore: DataStore<Preferences>,
+        clock: () -> Long = System::currentTimeMillis,
+    ) : this(
         dataStore = dataStore,
         moshi = Moshi.Builder().build(),
+        clock = clock,
     )
 
     val preferences: Flow<ConsumptionPreferences> = dataStore.data
@@ -190,12 +204,34 @@ class ConsumptionPreferencesRepository private constructor(
         require(normalizedProductId.isNotBlank()) { "Product ID is required." }
         dataStore.edit { storedPreferences ->
             storedPreferences[LOADED_PEN_PRODUCT_ID] = normalizedProductId
+            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = clock()
         }
     }
 
     override suspend fun clearLoadedPenProductId() {
         dataStore.edit { storedPreferences ->
             storedPreferences.remove(LOADED_PEN_PRODUCT_ID)
+            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = clock()
+        }
+    }
+
+    override suspend fun pendingLoadedPenState(): PendingLoadedPenState? {
+        val storedPreferences = dataStore.data.first()
+        val updatedAt = storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] ?: return null
+        val syncedAt = storedPreferences[LOADED_PEN_SYNCED_AT_EPOCH_MILLIS] ?: 0L
+        if (updatedAt <= syncedAt) return null
+        return PendingLoadedPenState(
+            loadedPenProductId = storedPreferences[LOADED_PEN_PRODUCT_ID]?.takeIf(String::isNotBlank),
+            updatedAtEpochMillis = updatedAt,
+        )
+    }
+
+    override suspend fun markLoadedPenStateSynced(updatedAtEpochMillis: Long) {
+        dataStore.edit { storedPreferences ->
+            val currentSyncedAt = storedPreferences[LOADED_PEN_SYNCED_AT_EPOCH_MILLIS] ?: 0L
+            if (updatedAtEpochMillis >= currentSyncedAt) {
+                storedPreferences[LOADED_PEN_SYNCED_AT_EPOCH_MILLIS] = updatedAtEpochMillis
+            }
         }
     }
 
@@ -263,6 +299,10 @@ class ConsumptionPreferencesRepository private constructor(
         private val SECONDS_PER_USE_OVERRIDES_JSON =
             stringPreferencesKey(SECONDS_PER_USE_OVERRIDES_JSON_KEY)
         private val LOADED_PEN_PRODUCT_ID = stringPreferencesKey("loaded_pen_product_id")
+        private val LOADED_PEN_UPDATED_AT_EPOCH_MILLIS =
+            longPreferencesKey("loaded_pen_updated_at_epoch_millis")
+        private val LOADED_PEN_SYNCED_AT_EPOCH_MILLIS =
+            longPreferencesKey("loaded_pen_synced_at_epoch_millis")
     }
 }
 

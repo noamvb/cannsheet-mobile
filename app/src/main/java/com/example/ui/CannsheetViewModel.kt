@@ -491,6 +491,8 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             runCatching {
                 consumptionPreferences.setLoadedPenProductId(productId)
+            }.onSuccess {
+                SyncScheduler.enqueueImmediate(getApplication())
             }.onFailure { _syncStatus.value = it.message ?: "Could not save the loaded pen cart" }
         }
     }
