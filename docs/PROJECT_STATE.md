@@ -1,8 +1,14 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.2 in progress)
+Last updated: 2026-09-17 (v1.12.2)
 
-## Release 1.12.2 (code 60) - in progress 2026-09-17
+## Release 1.12.2 (code 60) - published 2026-09-17
+
+Tag `v1.12.2` points at `add22bc`, proven by main run `35257783571` with all six
+jobs green; release run `35258484140`; APK SHA-256
+`731a300d53856ad73b49cb44b3ca7abdc1aabceb7534568840a4caed5cf102e5`, signing
+certificate unchanged. Installed on the owner's phone the same day and the
+retry observed firing in logcat (404, 404, then 200).
 
 Retry with backoff for analytics GETs. Right after v1.12.1 was installed the
 Insights screen showed `HTTP 404 (INTERNAL_ERROR)`; OkHttp logged

@@ -4,6 +4,66 @@ Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.12.2 (code 60) - analytics GETs retry with backoff
+
+**Status: published, independently verified, installed on the owner's phone over
+adb, and the retry observed firing there on 2026-09-17.**
+
+### What changed and why
+
+Minutes after v1.12.1 was installed, Insights showed `HTTP 404
+(INTERNAL_ERROR)`. OkHttp logged `<-- 404 https://script.googleusercontent.com/...`
+after 16-32 s; the identical request retried seconds later returned 200. That
+host is Google's redirect target behind the Apps Script 302 and it fails
+intermittently on Google's side (reproduced from the phone shell and from a
+Mac with curl). The app retried nothing on a non-2xx status: `fetchWithBusyRetry`
+covered only the envelope code `BACKEND_BUSY`. Fix in #189 (`add22bc`):
+`AnalyticsRepository.fetchWithRetry` makes up to 3 attempts with 1 s / 3 s
+backoff on `HttpException` 404/429/500/502/503/504 and `BACKEND_BUSY`; every
+other error propagates on the first attempt and the last retryable error is
+rethrown unchanged. The delay is a constructor parameter so tests do not sleep.
+
+### Evidence
+
+- Implemented by `cc -> agy gemini-3.8-flash-high`, run `20260917-132954-agy-19549`.
+  The 404-then-200 test was written first and failed against the previous
+  code; mutation drill: max attempts 3->1 reddened 4 tests, dropping 404 from
+  the set reddened 3, backoff 1 s/1 s reddened 1.
+- Local gate on the merged code with `--rerun-tasks`: `testDebugUnitTest
+  compileDebugAndroidTestKotlin lintDebug assembleDebug` green, **667 unit
+  tests, 0 failures** (28 in `AnalyticsDataTest`, 6 new).
+
+### Release provenance
+
+Pull request merged: #189 `add22bc` (change, tests, version bump and
+PROJECT_STATE in one squash).
+
+Tag `v1.12.2` points at `add22bc`. Main run `35257783571` at that commit was
+green on all six jobs including Emulator API 36 on the first attempt. Release
+run `35258484140` was green on all three jobs; published 2026-09-17 18:30 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.2.apk`, 38020149 bytes,
+SHA-256 `731a300d53856ad73b49cb44b3ca7abdc1aabceb7534568840a4caed5cf102e5`, on
+`noamvb/cannsheet-mobile-releases`, downloaded independently of CI and verified
+against its published `.sha256`; `aapt` reports versionCode 60, versionName
+1.12.2; signing certificate SHA-256 `a9787249…08665e`, unchanged since v1.9.1.
+
+Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
+14:31 EDT. On first launch, logcat (`okhttp.OkHttpClient`) showed one
+analytics GET receive `404` after 62 s, retry 1 s later, receive `404` after
+66 s, retry 3 s later, and receive `200` after 16.5 s - the exact backoff
+schedule, on a request that v1.12.1 would have surfaced as `HTTP 404`.
+
+### Outstanding
+
+- The `googleusercontent` hop was still slow (60-105 s per attempt) during the
+  afternoon of 2026-09-17, so a fully failed fetch can now take about three
+  and a half minutes before the error shows. If it persists, consider a
+  shorter read timeout on analytics GETs paired with the retry.
+- The v1.12.0 outstanding items below still apply (panel-logged events reach
+  Today only on the periodic prefetch; the ai-orch profile lacks
+  `compileDebugAndroidTestKotlin`).
+
 ## Cannsheet Mobile v1.12.1 (code 59) - Insights presets roll with the calendar
 
 **Status: published, independently verified, installed on the owner's phone over
