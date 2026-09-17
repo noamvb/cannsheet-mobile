@@ -4,6 +4,67 @@ Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.12.3 (code 61) - analytics GETs capped at 45 s per attempt
+
+**Status: published, independently verified, and installed on the owner's phone
+over adb on 2026-09-17.**
+
+### What changed and why
+
+v1.12.2 added retry with backoff for analytics GETs, and the same afternoon
+the phone's logcat showed each attempt through Google's
+`script.googleusercontent.com` hop taking 62-105 s before answering, so a
+fully failed fetch was about three and a half minutes before Insights showed
+an error. The shared OkHttp client has `readTimeout(60 s)` but no
+`callTimeout`, and readTimeout is per socket read. Fix in #191 (`097823e`):
+`AnalyticsRepository` now uses `analyticsApiService`, a Retrofit service on
+`client.newBuilder().callTimeout(45 s)` (`ANALYTICS_CALL_TIMEOUT_SECONDS` in
+`CannsheetGraph.kt`); sync POSTs and the catalog refresher keep the uncapped
+client, because a POST cut short may already have committed on the server.
+`fetchWithRetry` also retries `InterruptedIOException` (what `callTimeout`
+throws; parent of `SocketTimeoutException`), and `analyticsUiError` maps it to
+`TIMEOUT` instead of falling through to "No connection". Worst case is now
+about 3 x 45 s + 4 s = 139 s.
+
+### Evidence
+
+- Implemented by `cc -> agy gemini-3.8-flash-high`, run `20260917-145716-agy-29034`.
+  The call-timeout retry test was written first and failed against the
+  previous code; mutation drill: dropping the `InterruptedIOException` clause
+  reddened 2 tests, reverting the UI mapping reddened 1, changing the cap to
+  60 s reddened 1.
+- Local gate on the merged code with `--rerun-tasks`: `testDebugUnitTest
+  compileDebugAndroidTestKotlin lintDebug assembleDebug` green, **674 unit
+  tests, 0 failures** (31 in `AnalyticsDataTest`, plus new
+  `AnalyticsUiErrorTest` (3) and `AnalyticsCallTimeoutTest` (1)).
+
+### Release provenance
+
+Pull request merged: #191 `097823e` (change, tests, version bump, docs in one
+squash).
+
+Tag `v1.12.3` points at `097823e`. Main run `35266186992` at that commit was
+green on all six jobs including Emulator API 36 on the first attempt. Release
+run `35266801522` was green on all three jobs; published 2026-09-17 19:55 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.3.apk`, 38,020,149 bytes,
+SHA-256 `4643d39838381cb157c736e5fb5344e2f10814b33615eeab436c363a293318be`, on
+`noamvb/cannsheet-mobile-releases`, downloaded independently of CI and verified
+against its published `.sha256`; `aapt` reports versionCode 61, versionName
+1.12.3; signing certificate SHA-256 `a9787249…08665e`, unchanged since v1.9.1.
+
+Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
+15:56 EDT. On first launch the hop was healthy (analytics GETs answered in
+1.7-4 s); one later GET got a 404 after 34 s and its retry returned 200. The
+45 s cap itself did not need to fire in that window and cannot be forced from
+outside, so its behaviour rests on the unit tests and the pinned constant.
+
+### Outstanding
+
+- The v1.12.0 outstanding items below still apply (panel-logged events reach
+  Today only on the periodic prefetch; the ai-orch profile lacks
+  `compileDebugAndroidTestKotlin`).
+
 ## Cannsheet Mobile v1.12.2 (code 60) - analytics GETs retry with backoff
 
 **Status: published, independently verified, installed on the owner's phone over
