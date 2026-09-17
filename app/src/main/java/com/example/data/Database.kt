@@ -12,6 +12,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.Upsert
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import java.util.UUID
@@ -219,6 +220,12 @@ interface CannsheetDao {
     /** Room returns -1 for every row the unique eventId index made it ignore. */
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertConsumptionHistoryIfAbsent(entries: List<ConsumptionHistoryEntry>): List<Long>
+
+    @Upsert
+    suspend fun upsertConsumptionHistory(entries: List<ConsumptionHistoryEntry>)
+
+    @Query("DELETE FROM consumption_history WHERE eventId IN (:eventIds)")
+    suspend fun deleteConsumptionHistoryByEventIds(eventIds: List<String>)
 
     @Query(
         "SELECT * FROM consumption_history " +
