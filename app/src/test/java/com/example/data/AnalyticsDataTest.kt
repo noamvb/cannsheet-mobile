@@ -579,6 +579,13 @@ private class FakeCannsheetDao : CannsheetDao {
     override fun getPendingProductUses(): Flow<List<PendingProductUses>> = emptyFlow()
     override suspend fun deleteConsumptionsByEventIds(eventIds: List<String>) = Unit
     override suspend fun insertConsumptionHistory(entry: ConsumptionHistoryEntry) = Unit
+
+    override suspend fun insertConsumptionHistoryIfAbsent(entries: List<ConsumptionHistoryEntry>): List<Long> =
+        entries.map { -1L }
+
+    override suspend fun upsertConsumptionHistory(entries: List<ConsumptionHistoryEntry>) = Unit
+
+    override suspend fun deleteConsumptionHistoryByEventIds(eventIds: List<String>) = Unit
     override fun consumptionHistorySince(fromEpochMillis: Long): Flow<List<ConsumptionHistoryEntry>> = emptyFlow()
     override suspend fun pruneConsumptionHistoryBefore(beforeEpochMillis: Long): Int = 0
     override suspend fun insertFinishAction(action: FinishAction) = Unit

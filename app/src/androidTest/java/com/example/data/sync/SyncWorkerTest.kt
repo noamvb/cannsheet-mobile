@@ -446,6 +446,9 @@ class SyncWorkerTest {
             )
         }
 
+        // Nothing to mirror in these tests; a zero return also keeps refreshWidgets counts unchanged.
+        override suspend fun ingestServerHistory(): Int = 0
+
         override fun refreshWidgets() {
             refreshWidgetCalls += 1
             refreshWidgetError?.let { throw it }
@@ -509,6 +512,9 @@ class SyncWorkerTest {
                 history = AnalyticsPrefetchStatus.REFRESHED,
             )
         }
+
+        // Nothing to mirror in these tests; a zero return also keeps refreshWidgets counts unchanged.
+        override suspend fun ingestServerHistory(): Int = 0
 
         override fun refreshWidgets() {
             refreshWidgetCalls += 1

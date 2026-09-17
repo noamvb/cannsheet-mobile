@@ -34,6 +34,9 @@ interface BackgroundSyncWorkerRuntime {
 
     suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome
 
+    /** Mirrors the server's recent consumption into the local history the Today widget reads. */
+    suspend fun ingestServerHistory(): Int
+
     fun refreshWidgets()
 }
 
@@ -103,6 +106,15 @@ class SyncWorker(
             throw error
         } catch (error: Throwable) {
             // Best effort only. The next periodic run tries again.
+        }
+        try {
+            // Its own unfiltered fetch: the cached History page may carry a product, type or
+            // text filter the person applied, which would hide panel-logged events from Today.
+            if (runtime.ingestServerHistory() > 0) runtime.refreshWidgets()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Throwable) {
+            // Same contract as the prefetch: never turns a delivered queue into a failed run.
         }
     }
 
@@ -215,6 +227,9 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     }
 
     override suspend fun prefetchAnalytics(): AnalyticsPrefetchOutcome = prefetcher.prefetch()
+
+    override suspend fun ingestServerHistory(): Int =
+        graph.serverHistoryIngestor.refresh(graph.analyticsRepository)
 
     override fun refreshWidgets() {
         graph.widgetRefresher.refreshAll()

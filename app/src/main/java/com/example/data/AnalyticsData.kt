@@ -342,6 +342,7 @@ class AnalyticsRepository(
     private val endpoint: String,
     private val environment: String,
     private val onInsightsCacheSaved: suspend () -> Unit = {},
+    private val onHistorySaved: suspend (List<HistoryEventDto>) -> Unit = {},
 ) : AnalyticsDataSource {
     private val envelopeAdapter = moshi.adapter(AnalyticsEnvelope::class.java)
     private val insightsAdapter = moshi.adapter(InsightsResponseDto::class.java)
@@ -402,6 +403,7 @@ class AnalyticsRepository(
                 revision = response.sourceRevision,
                 generatedAt = response.generatedAtEpochMillis,
             )
+            runHistorySavedHook(onHistorySaved, response.events)
         }
 
     override suspend fun readCachedInsights(): InsightsResponseDto? =
@@ -569,5 +571,18 @@ class AnalyticsRepository(
             HISTORY_LIFECYCLE_CORRECTED,
             HISTORY_LIFECYCLE_VOIDED,
         )
+    }
+}
+
+internal suspend fun runHistorySavedHook(
+    hook: suspend (List<HistoryEventDto>) -> Unit,
+    events: List<HistoryEventDto>,
+) {
+    try {
+        hook(events)
+    } catch (error: CancellationException) {
+        throw error
+    } catch (_: Throwable) {
+        // A failure in the hook must not fail saveHistory
     }
 }
