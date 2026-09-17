@@ -14,6 +14,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 
 class AnalyticsDataTest {
 
@@ -228,6 +230,37 @@ class AnalyticsDataTest {
         assertEquals("cursor-abc", dto.page.nextCursor)
     }
 
+    private fun httpError(status: Int): HttpException =
+        HttpException(Response.error<ResponseBody>(status, "".toResponseBody("text/html".toMediaTypeOrNull())))
+
+    @Test
+    fun fetchInsightsRetriesAfterTransient404() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                if (callCount == 1) {
+                    throw httpError(404)
+                }
+                return sampleInsightsJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val result = repo.fetchInsights(InsightsRange.Default)
+        assertNotNull(result)
+        assertEquals(2, callCount)
+        assertEquals(listOf(1_000L), delays)
+    }
+
     @Test
     fun testAnalyticsEnvelopeErrorHandling() = runBlocking {
         val fakeApi = object : FakeGasApiService() {
@@ -236,13 +269,158 @@ class AnalyticsDataTest {
                     .toResponseBody("application/json".toMediaTypeOrNull())
             }
         }
-        val repo = AnalyticsRepository(fakeApi, FakeCannsheetDao(), moshi, endpoint, "PRODUCTION")
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = {},
+        )
 
         val exception = assertThrows(AnalyticsApiException::class.java) {
             runBlocking { repo.fetchInsights(InsightsRange.Default) }
         }
         assertEquals("BACKEND_BUSY", exception.code)
         assertTrue(exception.retryable)
+    }
+
+    @Test
+    fun fetchInsightsGivesUpAfterThreeTransientFailures() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                throw httpError(404)
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val exception = assertThrows(HttpException::class.java) {
+            runBlocking { repo.fetchInsights(InsightsRange.Default) }
+        }
+        assertEquals(404, exception.code())
+        assertEquals(3, callCount)
+        assertEquals(listOf(1_000L, 3_000L), delays)
+    }
+
+    @Test
+    fun fetchInsightsRetries503ThenSucceeds() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                if (callCount == 1) {
+                    throw httpError(503)
+                }
+                return sampleInsightsJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val result = repo.fetchInsights(InsightsRange.Default)
+        assertNotNull(result)
+        assertEquals(2, callCount)
+        assertEquals(listOf(1_000L), delays)
+    }
+
+    @Test
+    fun fetchInsightsDoesNotRetry401() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                throw httpError(401)
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val exception = assertThrows(HttpException::class.java) {
+            runBlocking { repo.fetchInsights(InsightsRange.Default) }
+        }
+        assertEquals(401, exception.code())
+        assertEquals(1, callCount)
+        assertTrue(delays.isEmpty())
+    }
+
+    @Test
+    fun fetchInsightsDoesNotRetryEnvironmentMismatch() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                return sampleInsightsJson(environment = "SANDBOX")
+                    .toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val exception = assertThrows(AnalyticsApiException::class.java) {
+            runBlocking { repo.fetchInsights(InsightsRange.Default) }
+        }
+        assertEquals("ENVIRONMENT_MISMATCH", exception.code)
+        assertEquals(1, callCount)
+        assertTrue(delays.isEmpty())
+    }
+
+    @Test
+    fun fetchHistoryRetriesAfterTransient404() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                if (callCount == 1) {
+                    throw httpError(404)
+                }
+                return sampleHistoryJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val result = repo.fetchHistory(HistoryFilters())
+        assertNotNull(result)
+        assertEquals(2, callCount)
+        assertEquals(listOf(1_000L), delays)
     }
 
     @Test
