@@ -6,7 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.0 (code 58) - loaded pen published, server events mirrored into Today
 
-**Status: code merged; release in progress. Provenance is completed in the follow-up docs commit once the tag has published, as was done for v1.11.0 (#180).**
+**Status: published and independently verified against the release artifact; not
+yet driven on the owner's phone.**
 
 This release is the phone's half of "Cannsheet on the household panel". The
 panel itself (Home Assistant on the Pixelbook; Inbox repo
@@ -59,7 +60,27 @@ phone has loaded, falling back to a pinned UUID until the phone has published.
 
 ### Release provenance
 
-Pull requests merged: #182 `5544521`, #181 `a162cae`, #183 `2c8b258`, then this release pull request. Main run ids, the tag commit, the release run and the APK digest are recorded after publication.
+Pull requests merged, in order: #182 `5544521` (CI), #181 `a162cae` (loaded pen),
+#183 `2c8b258` (server history ingest), #184 `b90d6df` (release 1.12.0).
+
+Tag `v1.12.0` points at `b90d6df`. Main run `35187821255` at that commit was
+green on all six jobs including Emulator API 36 (the earlier main runs
+`35184899623` at `a162cae` and `35187012975` at `2c8b258` were green too).
+Release run `35188401194` was green on all three of `Verify and build signed
+APK`, `Confirm tested main commit` and `Publish verified Cannsheet APK`;
+published 2026-09-17 06:12 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.0.apk`, 38,020,149 bytes,
+SHA-256 `45f8f10b298f23837d4dba5d621adbafc59836a062fb0a4aee5f829ec6fec3ec`, on
+`noamvb/cannsheet-mobile-releases`. It was downloaded here independently of CI,
+verified against its own published `.sha256`; `aapt` reports package
+`com.noamv.cannsheet.mobile`, versionCode 58, versionName 1.12.0, minSdk 24,
+targetSdk 36; signing certificate SHA-256
+`a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, identical
+to v1.11.0, so the phone updates in place.
+
+Emulator API 24 failed once on #183 with the known infrastructure flake
+(`InstallException: Broken pipe (32)`, no test failure); the rerun was green.
 
 ### Outstanding
 
