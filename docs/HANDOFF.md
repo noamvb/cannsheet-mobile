@@ -51,8 +51,8 @@ Pull requests merged: #186 `bdf6104`, then this release pull request. Main run i
 
 ## Cannsheet Mobile v1.12.0 (code 58) - loaded pen published, server events mirrored into Today
 
-**Status: published and independently verified against the release artifact; not
-yet driven on the owner's phone.**
+**Status: published, independently verified against the release artifact, and
+driven on the owner's phone on 2026-09-17 (see below).**
 
 This release is the phone's half of "Cannsheet on the household panel". The
 panel itself (Home Assistant on the Pixelbook; Inbox repo
@@ -129,10 +129,12 @@ Emulator API 24 failed once on #183 with the known infrastructure flake
 
 ### Outstanding
 
-- Nothing has been driven on the phone yet. After installing through
-  Obtainium: open the app once (the pre-upgrade loaded pen is stamped and
-  published on the first sync); then `curl "<exec>?resource=clientState&environment=PRODUCTION&analyticsVersion=1"`
-  should name it, and the Board's "Logs to …" line follows within 15 minutes.
+- Verified on the owner's SM-F966W over wireless adb on 2026-09-17: 1.12.0
+  (code 58) installed by Obtainium at 03:14; the pre-upgrade loaded pen
+  `*P115` was published at 03:23 (`?resource=clientState` names it, the
+  Board's "Logs to" line follows it); the Today widget showed 80 s = 8 uses,
+  i.e. the phone's two logs plus the panel test press, so the server-history
+  ingest works. The test press was then voided from the phone.
 - Panel-logged events reach Today only after the periodic worker's next
   prefetch (hours). A push path is out of scope.
 - The registered ai-orch verification profile for this repo runs
