@@ -2,6 +2,8 @@ package com.example.data
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +46,42 @@ class LoadedPenSyncStateTest {
         repository.markLoadedPenStateSynced(100)
 
         assertEquals(PendingLoadedPenState("*P115", 200), repository.pendingLoadedPenState())
+    }
+
+    @Test
+    fun aPenLoadedBeforeTheUpgradeBecomesPendingOnFirstAccess() = runBlocking {
+        val dataStore = RecordingPreferencesDataStore()
+        // Simulate the pre-upgrade layout: a loaded pen, no version keys at all.
+        dataStore.edit { it[stringPreferencesKey("loaded_pen_product_id")] = "*P115" }
+        val repository = ConsumptionPreferencesRepository(dataStore) { 500L }
+
+        assertEquals(PendingLoadedPenState("*P115", 500), repository.pendingLoadedPenState())
+        // Stamped once, so the version is stable across calls.
+        assertEquals(PendingLoadedPenState("*P115", 500), repository.pendingLoadedPenState())
+    }
+
+    @Test
+    fun twoWritesInOneMillisecondGetDistinctVersions() = runBlocking {
+        val repository = ConsumptionPreferencesRepository(RecordingPreferencesDataStore()) { 100L }
+
+        repository.setLoadedPenProductId("*P115")
+        repository.markLoadedPenStateSynced(100)
+        repository.setLoadedPenProductId("*P116")
+
+        assertEquals(PendingLoadedPenState("*P116", 101), repository.pendingLoadedPenState())
+    }
+
+    @Test
+    fun aClockThatMovedBackwardsStillProducesANewerVersion() = runBlocking {
+        var now = 500L
+        val repository = ConsumptionPreferencesRepository(RecordingPreferencesDataStore()) { now }
+
+        repository.setLoadedPenProductId("*P115")
+        repository.markLoadedPenStateSynced(500)
+        now = 100L
+        repository.clearLoadedPenProductId()
+
+        assertEquals(PendingLoadedPenState(null, 501), repository.pendingLoadedPenState())
     }
 
     @Test

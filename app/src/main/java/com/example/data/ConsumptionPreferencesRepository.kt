@@ -204,19 +204,42 @@ class ConsumptionPreferencesRepository private constructor(
         require(normalizedProductId.isNotBlank()) { "Product ID is required." }
         dataStore.edit { storedPreferences ->
             storedPreferences[LOADED_PEN_PRODUCT_ID] = normalizedProductId
-            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = clock()
+            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = nextLoadedPenVersion(storedPreferences)
         }
     }
 
     override suspend fun clearLoadedPenProductId() {
         dataStore.edit { storedPreferences ->
             storedPreferences.remove(LOADED_PEN_PRODUCT_ID)
-            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = clock()
+            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = nextLoadedPenVersion(storedPreferences)
         }
     }
 
+    /**
+     * The loaded-pen version is the wall clock, forced strictly past every version already
+     * stored, so two writes in one millisecond or a clock that moved backwards can never produce
+     * a state the backend or [markLoadedPenStateSynced] would treat as already synced.
+     */
+    private fun nextLoadedPenVersion(storedPreferences: Preferences): Long = maxOf(
+        clock(),
+        (storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] ?: 0L) + 1,
+        (storedPreferences[LOADED_PEN_SYNCED_AT_EPOCH_MILLIS] ?: 0L) + 1,
+    )
+
     override suspend fun pendingLoadedPenState(): PendingLoadedPenState? {
-        val storedPreferences = dataStore.data.first()
+        var storedPreferences = dataStore.data.first()
+        if (
+            storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] == null &&
+            !storedPreferences[LOADED_PEN_PRODUCT_ID].isNullOrBlank()
+        ) {
+            // An installation upgraded with a pen already loaded has a selection the backend
+            // has never seen. Stamp it now so the next sync publishes it.
+            storedPreferences = dataStore.edit { preferences ->
+                if (preferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] == null) {
+                    preferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] = nextLoadedPenVersion(preferences)
+                }
+            }
+        }
         val updatedAt = storedPreferences[LOADED_PEN_UPDATED_AT_EPOCH_MILLIS] ?: return null
         val syncedAt = storedPreferences[LOADED_PEN_SYNCED_AT_EPOCH_MILLIS] ?: 0L
         if (updatedAt <= syncedAt) return null
