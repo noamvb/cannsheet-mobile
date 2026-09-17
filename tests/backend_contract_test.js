@@ -631,3 +631,31 @@ assert.match(
 );
 
 console.log('backend contract tests passed');
+
+assert.equal(
+  JSON.stringify(api.preflightSyncRequest_({
+    purchases: [],
+    consumptions: [],
+    clientState: {
+      loadedPenProductId: '*P115',
+      loadedPenUpdatedAtEpochMillis: 1789616287000,
+    },
+  }, 1).failure),
+  JSON.stringify({ code: 'INVALID_ITEM', message: 'clientState requires apiVersion 2' }),
+);
+
+assert.equal(
+  JSON.stringify(api.preflightSyncRequest_({
+    requestId: 'b0f88bb2-5d82-46e1-92a7-0188e95ba3a6',
+    purchases: [],
+    consumptions: [],
+    clientState: {
+      loadedPenProductId: '*P115',
+      loadedPenUpdatedAtEpochMillis: 'abc',
+    },
+  }, 2).failure),
+  JSON.stringify({
+    code: 'INVALID_ITEM',
+    message: 'loadedPenUpdatedAtEpochMillis must be a positive integer',
+  }),
+);

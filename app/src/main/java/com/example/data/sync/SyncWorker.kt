@@ -159,7 +159,9 @@ private class GraphBackgroundSyncWorkerRuntime(context: Context) : BackgroundSyn
     private val runner = BackgroundSyncRunner(
         endpoint = BuildConfig.GAS_URL,
         operations = object : BackgroundSyncOperations {
-            override suspend fun hasPendingActions(): Boolean = graph.repository.hasPendingActions()
+            override suspend fun hasPendingActions(): Boolean =
+                graph.repository.hasPendingActions() ||
+                    graph.consumptionPreferences.pendingLoadedPenState() != null
 
             override suspend fun sync(endpoint: String): SyncOutcome = graph.syncEngine.sync(endpoint)
 

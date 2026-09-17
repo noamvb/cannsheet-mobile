@@ -18,6 +18,13 @@ interface SyncQueueGateway {
     suspend fun applyAcknowledgements(plan: SyncAcknowledgementPlan)
 }
 
+/** Bridges the phone's loaded-pen DataStore state into the ordinary sync request. */
+interface LoadedPenSyncSource {
+    suspend fun pendingLoadedPenState(): PendingLoadedPenState?
+
+    suspend fun markLoadedPenStateSynced(updatedAtEpochMillis: Long)
+}
+
 sealed interface SyncOutcome {
     val pendingCorrectionsAtSnapshot: List<PendingConsumptionCorrection>
 
@@ -52,6 +59,7 @@ sealed interface SyncOutcome {
         val plan: SyncAcknowledgementPlan,
         override val pendingCorrectionsAtSnapshot: List<PendingConsumptionCorrection>,
         val snapshot: QueuedSyncSnapshot,
+        val clientStateStatus: String? = null,
     ) : SyncOutcome
 }
 
@@ -61,6 +69,7 @@ class SyncEngine(
     private val gateway: SyncQueueGateway,
     private val expectedEnvironment: String,
     private val mutex: Mutex,
+    private val loadedPenSource: LoadedPenSyncSource? = null,
 ) {
     suspend fun sync(
         endpoint: String,
@@ -85,11 +94,13 @@ class SyncEngine(
             val pendingConsumptions = gateway.getPendingConsumptions()
             val pendingFinishActions = gateway.getPendingFinishActions()
             pendingCorrections = gateway.getPendingConsumptionCorrections()
+            val pendingLoadedPen = loadedPenSource?.pendingLoadedPenState()
             if (
                 pendingPurchases.isEmpty() &&
                 pendingConsumptions.isEmpty() &&
                 pendingFinishActions.isEmpty() &&
-                pendingCorrections.isEmpty()
+                pendingCorrections.isEmpty() &&
+                pendingLoadedPen == null
             ) {
                 return SyncOutcome.NothingToSync()
             }
@@ -104,6 +115,7 @@ class SyncEngine(
                 correctionActionIdByTargetEventId = pendingCorrections.associate {
                     it.targetEventId to it.actionId
                 },
+                loadedPenUpdatedAtEpochMillis = pendingLoadedPen?.updatedAtEpochMillis,
             )
             val requestId = gateway.getOrCreateSyncRequestId(snapshot)
             val payload = SyncPayload(
@@ -147,6 +159,9 @@ class SyncEngine(
                 consumptionCorrections = pendingCorrections.map(
                     PendingConsumptionCorrection::toSyncConsumptionCorrection,
                 ),
+                clientState = pendingLoadedPen?.let {
+                    SyncClientState(it.loadedPenProductId, it.updatedAtEpochMillis)
+                },
             )
 
             val rawResponse = api.syncData(endpoint, payload).string()
@@ -174,10 +189,19 @@ class SyncEngine(
 
             val plan = buildAcknowledgementPlan(snapshot, response)
             gateway.applyAcknowledgements(plan)
+            val acknowledgedClientState = response.acknowledgedClientState
+            if (
+                pendingLoadedPen != null &&
+                acknowledgedClientState != null &&
+                acknowledgedClientState.loadedPenUpdatedAtEpochMillis == pendingLoadedPen.updatedAtEpochMillis
+            ) {
+                loadedPenSource?.markLoadedPenStateSynced(acknowledgedClientState.loadedPenUpdatedAtEpochMillis)
+            }
             SyncOutcome.Applied(
                 plan = plan,
                 pendingCorrectionsAtSnapshot = pendingCorrections,
                 snapshot = snapshot,
+                clientStateStatus = acknowledgedClientState?.status,
             )
         } catch (error: Exception) {
             // Network, parsing, and acknowledgement failures keep every

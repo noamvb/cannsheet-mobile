@@ -83,7 +83,7 @@ class CannsheetGraph private constructor(context: Context) {
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
 
-    val moshi: Moshi = Moshi.Builder().build()
+    val moshi: Moshi = Moshi.Builder().add(SyncClientStateJsonAdapterFactory).build()
 
     val apiService: GasApiService = Retrofit.Builder()
         .baseUrl("https://example.com/")
@@ -108,6 +108,7 @@ class CannsheetGraph private constructor(context: Context) {
         gateway = repository,
         expectedEnvironment = BuildConfig.APP_ENVIRONMENT,
         mutex = syncMutex,
+        loadedPenSource = consumptionPreferences,
     )
     val catalogRefresher = ProductCatalogRefresher(
         api = apiService,

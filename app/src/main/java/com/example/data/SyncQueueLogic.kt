@@ -6,6 +6,7 @@ data class QueuedSyncSnapshot(
     val finishActionIds: Set<String> = emptySet(),
     val purchaseActionIdByTempId: Map<String, String> = emptyMap(),
     val correctionActionIdByTargetEventId: Map<String, String> = emptyMap(),
+    val loadedPenUpdatedAtEpochMillis: Long? = null,
 ) {
     fun payloadFingerprint(): String = listOf(
         "p:${purchaseActionIds.sorted().joinToString(",")}",
@@ -16,6 +17,7 @@ data class QueuedSyncSnapshot(
                 (targetEventId, actionId) -> "$targetEventId=$actionId"
             }
         }",
+        "l:${loadedPenUpdatedAtEpochMillis ?: ""}",
     ).joinToString("|")
 }
 

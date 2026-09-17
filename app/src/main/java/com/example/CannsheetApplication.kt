@@ -41,7 +41,10 @@ class CannsheetApplication : Application() {
                 .collect { enabled ->
                     if (enabled) {
                         SyncScheduler.schedulePeriodic(this@CannsheetApplication)
-                        if (graph.repository.hasPendingActions()) {
+                        if (
+                            graph.repository.hasPendingActions() ||
+                            graph.consumptionPreferences.pendingLoadedPenState() != null
+                        ) {
                             SyncScheduler.enqueueImmediate(this@CannsheetApplication)
                         }
                     } else {

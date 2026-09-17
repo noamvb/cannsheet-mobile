@@ -290,7 +290,11 @@ function handleReadResource_(e) {
   try {
     const query = analyticsQuery_(e);
     resource = text_(query.values.resource);
-    if (resource !== 'insights' && resource !== 'history') {
+    if (
+      resource !== 'insights' &&
+      resource !== 'history' &&
+      resource !== 'clientState'
+    ) {
       throw analyticsError_('UNSUPPORTED_RESOURCE', 'Unsupported analytics resource');
     }
 
@@ -301,6 +305,15 @@ function handleReadResource_(e) {
         'resource', 'analyticsVersion', 'environment', 'from', 'to',
         'productUuid', 'productId', 'type', 'q', 'limit', 'cursor'
       ];
+    if (resource === 'clientState') {
+      recognized.splice(
+        0,
+        recognized.length,
+        'resource',
+        'analyticsVersion',
+        'environment'
+      );
+    }
     if (resource === 'history' && requestedAnalyticsVersion >= 2) {
       recognized.push('includeAudit');
     }
@@ -312,6 +325,20 @@ function handleReadResource_(e) {
         'ENVIRONMENT_MISMATCH',
         'Client and server environments do not match'
       );
+    }
+
+    if (resource === 'clientState') {
+      const response = buildClientStateResponse_(
+        spreadsheet_(),
+        environment,
+        requestedAnalyticsVersion,
+        timing
+      );
+      logBackendTiming_(timing, 'success', {
+        environment: environment,
+        resource: resource
+      });
+      return jsonOutput_(response);
     }
 
     const parsed = resource === 'insights'
@@ -433,6 +460,31 @@ function handleReadResource_(e) {
     });
     return jsonOutput_(response);
   }
+}
+
+function buildClientStateResponse_(ss, environment, analyticsVersion, timing) {
+  const productId = text_(configValue_(ss, 'LOADED_PEN_PRODUCT_ID', ''));
+  const productUuid = text_(configValue_(ss, 'LOADED_PEN_PRODUCT_UUID', ''));
+  const productName = text_(configValue_(ss, 'LOADED_PEN_PRODUCT_NAME', ''));
+  const updatedAt = optionalFiniteNumber_(
+    configValue_(ss, 'LOADED_PEN_UPDATED_AT', '')
+  );
+  const loadedPen = productId && updatedAt != null
+    ? {
+      productId: productId,
+      productUuid: productUuid,
+      productName: productName,
+      updatedAtEpochMillis: updatedAt
+    }
+    : null;
+  return finalizeAnalyticsResponse_({
+    success: true,
+    apiVersion: CANN.API_VERSION,
+    analyticsVersion: analyticsVersion,
+    resource: 'clientState',
+    environment: environment,
+    loadedPen: loadedPen
+  }, timing);
 }
 
 function analyticsQuery_(e) {
@@ -3095,6 +3147,7 @@ function doPost(e) {
       consumptions: preflight.consumptions,
       finishActions: preflight.finishActions,
       consumptionCorrections: preflight.consumptionCorrections,
+      clientState: preflight.clientState,
       environment: environment,
       ss: ss,
       sheets: runtime.sheets,
@@ -3194,6 +3247,7 @@ function handleSync(payload) {
     consumptions: preflight.consumptions,
     finishActions: preflight.finishActions,
     consumptionCorrections: preflight.consumptionCorrections,
+    clientState: preflight.clientState,
     environment: environment,
     ss: ss,
     sheets: runtime.sheets,
@@ -3325,6 +3379,15 @@ function handleV2SyncLocked_(requestContext, started, timing) {
   const finishActions = requestContext.finishActions;
   const consumptionCorrections = requestContext.consumptionCorrections;
   const ss = requestContext.ss;
+  const hasClientState = Object.prototype.hasOwnProperty.call(
+    payload,
+    'clientState'
+  );
+  const isClientStateOnly = hasClientState &&
+    purchases.length === 0 &&
+    consumptions.length === 0 &&
+    finishActions.length === 0 &&
+    consumptionCorrections.length === 0;
 
   refreshRecoverableSyncApplyStateLocked_(requestContext);
   const recoverableReady = recoverableSyncApplyReady_(requestContext.config);
@@ -3336,7 +3399,7 @@ function handleV2SyncLocked_(requestContext, started, timing) {
 
   phaseStarted = Date.now();
   const context = purchases.length || consumptions.length ||
-      finishActions.length || consumptionCorrections.length
+      finishActions.length || consumptionCorrections.length || hasClientState
     ? productContext_(ss, {
       includeActionIds: purchases.length > 0,
       runtimeContext: requestContext
@@ -3385,6 +3448,13 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     duplicatePurchasesByTempId,
     staged.byTempId
   );
+  staged.accepted.forEach(item => {
+    resolver[item.legacyProductId] = item;
+  });
+  const clientStateByProductUuid = Object.assign({}, context.byProductUuid);
+  staged.accepted.forEach(item => {
+    if (item.productUuid) clientStateByProductUuid[item.productUuid] = item;
+  });
   const acceptedConsumptions = [];
   const rejectedConsumptions = [];
   const stagedConsumptions = [];
@@ -3728,11 +3798,21 @@ function handleV2SyncLocked_(requestContext, started, timing) {
     // ledger upsert, so a journal and two Advanced Sheets batches would add
     // latency without improving recovery. A retry overwrites the same ledger
     // row, while pending work from a predecessor was already repaired above.
-    const ledgerStarted = Date.now();
-    upsertLedger_(ss, requestId, purchases.length, consumptions.length, allAccepted ? 'ACCEPTED' : 'PARTIAL', ledgerStarted - started, '', requestContext);
-    recordBackendPhase_(timing, 'ledgerUpdate', ledgerStarted);
+    if (!isClientStateOnly) {
+      const ledgerStarted = Date.now();
+      upsertLedger_(ss, requestId, purchases.length, consumptions.length, allAccepted ? 'ACCEPTED' : 'PARTIAL', ledgerStarted - started, '', requestContext);
+      recordBackendPhase_(timing, 'ledgerUpdate', ledgerStarted);
+    }
   }
-  bumpMutationWatermark_();
+  if (hasClientState) {
+    response.acknowledgedClientState = applyClientStateLocked_(
+      ss,
+      requestContext.clientState,
+      resolver,
+      clientStateByProductUuid
+    );
+  }
+  if (!isClientStateOnly) bumpMutationWatermark_();
   return response;
 }
 
@@ -8554,6 +8634,7 @@ function productContext_(ss, options) {
       rowNumber: index + 2,
       legacyProductId: legacyProductId,
       productUuid: text_(value_(row, headers, 'Product UUID')),
+      name: text_(value_(row, headers, 'Product name')),
       actionId: includeActionIds ? text_(value_(row, headers, 'Client Action UUID')) : '',
       type: text_(value_(row, headers, 'Type')),
       borrowed: truthy_(value_(row, headers, 'Borrowed')),
@@ -8620,6 +8701,7 @@ function stagePurchases_(items, context) {
       tempId: wrapper.tempId,
       legacyProductId: legacyProductId,
       productUuid: Utilities.getUuid(),
+      name: text_(item.name),
       type: type,
       borrowed: borrowed
     };
@@ -8843,6 +8925,50 @@ function resolveProduct_(item, byLegacyId, byProductUuid) {
   return null;
 }
 
+function applyClientStateLocked_(ss, clientState, byLegacyId, byProductUuid) {
+  const incomingUpdatedAt = clientState.loadedPenUpdatedAtEpochMillis;
+  const acknowledged = {
+    loadedPenUpdatedAtEpochMillis: incomingUpdatedAt,
+    status: 'committed'
+  };
+  const productId = clientState.loadedPenProductId;
+  const resolved = productId === null
+    ? null
+    : resolveProduct_({ productId: productId }, byLegacyId, byProductUuid);
+  if (productId !== null && !resolved) {
+    acknowledged.status = 'rejected';
+    acknowledged.errorCode = 'UNKNOWN_PRODUCT';
+    acknowledged.message = 'Unknown loaded pen product';
+    return acknowledged;
+  }
+  const storedUpdatedAt = configValue_(ss, 'LOADED_PEN_UPDATED_AT', '');
+  if (
+    typeof storedUpdatedAt === 'number' &&
+    Number.isFinite(storedUpdatedAt) &&
+    storedUpdatedAt >= incomingUpdatedAt
+  ) {
+    acknowledged.status = 'stale';
+    return acknowledged;
+  }
+
+  if (productId !== null) {
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_ID', resolved.legacyProductId, 'Loaded pen product ID');
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_UUID', resolved.productUuid, 'Loaded pen product UUID');
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_NAME', resolved.name, 'Loaded pen product name');
+  } else {
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_ID', '', 'Loaded pen product ID');
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_UUID', '', 'Loaded pen product UUID');
+    setConfigValue_(ss, 'LOADED_PEN_PRODUCT_NAME', '', 'Loaded pen product name');
+  }
+  setConfigValue_(
+    ss,
+    'LOADED_PEN_UPDATED_AT',
+    incomingUpdatedAt,
+    'Loaded pen state update time in epoch milliseconds'
+  );
+  return acknowledged;
+}
+
 function purchaseAck_(requestItem, product, status) {
   return {
     actionId: text_(requestItem.actionId),
@@ -8949,6 +9075,33 @@ function validateV2FinishAction_(item, index) {
   return null;
 }
 
+function validateClientState_(value) {
+  if (!isPlainObject_(value)) {
+    return itemError_('INVALID_ITEM', 'clientState must be an object');
+  }
+  if (
+    typeof value.loadedPenUpdatedAtEpochMillis !== 'number' ||
+    !Number.isFinite(value.loadedPenUpdatedAtEpochMillis) ||
+    !Number.isInteger(value.loadedPenUpdatedAtEpochMillis) ||
+    value.loadedPenUpdatedAtEpochMillis <= 0
+  ) {
+    return itemError_(
+      'INVALID_ITEM',
+      'loadedPenUpdatedAtEpochMillis must be a positive integer'
+    );
+  }
+  if (
+    value.loadedPenProductId !== null &&
+    typeof value.loadedPenProductId !== 'string'
+  ) {
+    return itemError_(
+      'INVALID_ITEM',
+      'loadedPenProductId must be a string or null'
+    );
+  }
+  return null;
+}
+
 function preflightSyncRequest_(payload, apiVersion) {
   const purchases = arrayOrEmpty_(payload && payload.purchases);
   const consumptions = arrayOrEmpty_(payload && payload.consumptions);
@@ -8956,12 +9109,41 @@ function preflightSyncRequest_(payload, apiVersion) {
   const consumptionCorrections = arrayOrEmpty_(
     payload && payload.consumptionCorrections
   );
+  const hasClientState = Object.prototype.hasOwnProperty.call(
+    payload || {},
+    'clientState'
+  );
+  const clientState = hasClientState ? payload.clientState : undefined;
+  if (apiVersion === 1 && hasClientState) {
+    return {
+      purchases: purchases,
+      consumptions: consumptions,
+      finishActions: finishActions,
+      consumptionCorrections: consumptionCorrections,
+      clientState: clientState,
+      failure: itemError_('INVALID_ITEM', 'clientState requires apiVersion 2')
+    };
+  }
+  if (hasClientState) {
+    const clientStateError = validateClientState_(clientState);
+    if (clientStateError) {
+      return {
+        purchases: purchases,
+        consumptions: consumptions,
+        finishActions: finishActions,
+        consumptionCorrections: consumptionCorrections,
+        clientState: clientState,
+        failure: clientStateError
+      };
+    }
+  }
   if (apiVersion === 1 && Object.prototype.hasOwnProperty.call(payload || {}, 'finishActions')) {
     return {
       purchases: purchases,
       consumptions: consumptions,
       finishActions: finishActions,
       consumptionCorrections: consumptionCorrections,
+      clientState: clientState,
       failure: itemError_('INVALID_ITEM', 'finishActions require apiVersion 2')
     };
   }
@@ -8977,6 +9159,7 @@ function preflightSyncRequest_(payload, apiVersion) {
       consumptions: consumptions,
       finishActions: finishActions,
       consumptionCorrections: consumptionCorrections,
+      clientState: clientState,
       failure: itemError_(
         'INVALID_ITEM',
         'consumptionCorrections require apiVersion 2'
@@ -8995,6 +9178,7 @@ function preflightSyncRequest_(payload, apiVersion) {
       consumptions: consumptions,
       finishActions: finishActions,
       consumptionCorrections: consumptionCorrections,
+      clientState: clientState,
       failure: itemError_('INVALID_ITEM', sizeError)
     };
   }
@@ -9005,6 +9189,7 @@ function preflightSyncRequest_(payload, apiVersion) {
         consumptions: consumptions,
         finishActions: finishActions,
         consumptionCorrections: consumptionCorrections,
+        clientState: clientState,
         failure: itemError_('INVALID_ITEM', 'requestId must be a UUID')
       };
     }
@@ -9020,6 +9205,7 @@ function preflightSyncRequest_(payload, apiVersion) {
         consumptions: consumptions,
         finishActions: finishActions,
         consumptionCorrections: consumptionCorrections,
+        clientState: clientState,
         failure: itemError_('INVALID_ITEM', 'Duplicate UUID inside request')
       };
     }
@@ -9029,12 +9215,17 @@ function preflightSyncRequest_(payload, apiVersion) {
     consumptions: consumptions,
     finishActions: finishActions,
     consumptionCorrections: consumptionCorrections,
+    clientState: clientState,
     failure: null
   };
 }
 
 function isRequestPayloadObject_(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPlainObject_(value) {
+  return !!value && Object.prototype.toString.call(value) === '[object Object]';
 }
 
 function validateBatchSize_(
