@@ -2,7 +2,13 @@
 
 Last updated: 2026-09-17 (v1.12.1)
 
-## Release 1.12.1 (code 59) - Insights presets roll with the calendar
+## Release 1.12.1 (code 59) - published 2026-09-17
+
+Tag `v1.12.1` points at `db5b568`, proven by main run `35247541474` with all six
+jobs green; release run `35248941668`; APK SHA-256
+`1ce56173e3e343a6b8eb47a7c1d4db0ff419c5c7244487585be8b3e7925bf900`, signing
+certificate unchanged. Installed and observed working on the owner's phone the
+same day.
 
 Found on the owner's phone the morning after v1.12.0: Insights showed
 `2026-05-21 – 2026-08-18` with the 90-day chip selected and "Updated Sep 17,
