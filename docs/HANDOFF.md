@@ -6,7 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.4 (code 62) - sync failures show the backend's message
 
-**Status: ready to tag; not yet published.**
+**Status: published, independently verified, and installed on the owner's phone
+over adb on 2026-09-17.**
 
 ### What changed and why
 
@@ -45,11 +46,35 @@ BUILD SUCCESSFUL in 46s
 
 ### Release provenance
 
-To be recorded by the releaser after the tag builds.
+Pull request merged: #193 `d9ab386` (change, test, version bump, docs in one
+squash). Delegation cc -> agy gemini-3.8-flash-high; dispatcher gate
+(gradle-verify, node backend suites) green; focused test and a mutation drill
+(dropping the message from the join reds the new test) re-run by hand.
+
+Tag `v1.12.4` points at `d9ab386`. PR run `35283980085` was green on all five
+jobs. Release run `35284428033` was green on all three jobs; published
+2026-09-17 23:03 UTC.
+
+The published artifact is `Cannsheet-Mobile-1.12.4.apk`, 38,020,149 bytes,
+SHA-256 `67f5dca3d3ddc748fe7e8f46477c3337e40480b6e528d09515da5ebc601f90cc`, on
+`noamvb/cannsheet-mobile-releases`, downloaded independently of CI and verified
+against its published `.sha256`; `aapt` reports versionCode 62, versionName
+1.12.4; signing certificate SHA-256 `a9787249…`, unchanged since v1.9.1.
+
+Installed on the owner's SM-F966W with `adb install -r` over wireless adb at
+19:03 EDT.
 
 ### Outstanding
 
-The owner's phone has 4 actions queued since 2026-09-17 ~12:20 EDT failing with INVALID_ITEM; the message this release surfaces is the next diagnostic step. The void of event `1f9c1d43-531b-4ab0-85c2-f0b408505e92` is among them.
+- The INVALID_ITEM jam cleared on its own at about 18:50 EDT, before this
+  build was installed: the queue drained (four uses and the void of
+  `1f9c1d43-531b-4ab0-85c2-f0b408505e92` reached the sheet) and the status
+  reads "Sync successful". The cause was never observed. It was a
+  whole-request `success:false`, which only `preflightSyncRequest_` produces
+  (clientState, batch size, requestId, duplicate UUID, apiVersion); the next
+  occurrence will name the check in the status line.
+- Two panel-created test events remain to be voided from the phone:
+  17:18:52 x1 (`f8beb18d…`) and 18:16:14 x1 (`b9dedd79…`) on 2026-09-17.
 
 ## Cannsheet Mobile v1.12.3 (code 61) - analytics GETs capped at 45 s per attempt
 
