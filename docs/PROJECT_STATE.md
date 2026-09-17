@@ -31,6 +31,9 @@ window froze while the cache stayed fresh. See ADR-055; #186, squashed as
   recovers without a tap.
 - `customRangeForDays` is gone; `lastDaysWindow` is the one implementation.
 - No Room schema change. Release provenance in `docs/HANDOFF.md`.
+- Analytics GETs retry transient HTTP failures (404/429/5xx, BACKEND_BUSY) up to
+  3 attempts with 1 s / 3 s backoff; motivated by intermittent 404s from the
+  `script.googleusercontent.com` hop on 2026-09-17.
 
 ## Release 1.12.0 (code 58) - published 2026-09-17
 

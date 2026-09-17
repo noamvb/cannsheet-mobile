@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import retrofit2.HttpException
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -356,6 +357,7 @@ class AnalyticsRepository(
     private val onInsightsCacheSaved: suspend () -> Unit = {},
     private val onHistorySaved: suspend (List<HistoryEventDto>) -> Unit = {},
     private val today: () -> String = { analyticsToday() },
+    private val retryDelay: suspend (Long) -> Unit = { delay(it) },
 ) : AnalyticsDataSource {
     private val envelopeAdapter = moshi.adapter(AnalyticsEnvelope::class.java)
     private val insightsAdapter = moshi.adapter(InsightsResponseDto::class.java)
@@ -364,7 +366,7 @@ class AnalyticsRepository(
 
     override suspend fun fetchInsights(range: InsightsRange): InsightsResponseDto =
         withContext(Dispatchers.IO) {
-            fetchWithBusyRetry("insights") {
+            fetchWithRetry {
                 val raw = request(buildInsightsUrl(range))
                 val response = insightsAdapter.fromJson(raw)
                     ?: throw contractError("Empty Insights response")
@@ -394,7 +396,7 @@ class AnalyticsRepository(
         cursor: String?,
     ): HistoryResponseDto =
         withContext(Dispatchers.IO) {
-            fetchWithBusyRetry("history") {
+            fetchWithRetry {
                 val raw = request(buildHistoryUrl(filters, cursor))
                 val response = historyAdapter.fromJson(raw)
                     ?: throw contractError("Empty History response")
@@ -582,16 +584,24 @@ class AnalyticsRepository(
             }
         }
 
-    private suspend fun <T> fetchWithBusyRetry(resource: String, block: suspend () -> T): T {
-        repeat(2) { attempt ->
+    // Retried transient HTTP failures up to 3 attempts with backoff; motivated by intermittent
+    // 404s from the script.googleusercontent.com hop on 2026-09-17.
+    private suspend fun <T> fetchWithRetry(block: suspend () -> T): T {
+        var attempt = 0
+        while (true) {
             try {
                 return block()
-            } catch (error: AnalyticsApiException) {
-                if (error.code != "BACKEND_BUSY" || attempt == 1) throw error
-                delay(1_000)
+            } catch (error: Throwable) {
+                if (error is CancellationException) throw error
+                val isRetryable = (error is HttpException && error.code() in setOf(404, 429, 500, 502, 503, 504)) ||
+                    (error is AnalyticsApiException && error.code == "BACKEND_BUSY")
+                if (!isRetryable || attempt >= ANALYTICS_MAX_ATTEMPTS - 1) {
+                    throw error
+                }
+                retryDelay(ANALYTICS_RETRY_BACKOFF_MS[attempt])
+                attempt++
             }
         }
-        throw contractError("Unable to load $resource")
     }
 
     private fun contractError(message: String) =
@@ -600,6 +610,8 @@ class AnalyticsRepository(
     private fun isRetryable(code: String) = code in setOf("BACKEND_BUSY", "INTERNAL_ERROR")
 
     private companion object {
+        const val ANALYTICS_MAX_ATTEMPTS = 3
+        val ANALYTICS_RETRY_BACKOFF_MS = longArrayOf(1_000L, 3_000L)
         val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
         val HASH = Regex("""[0-9a-f]{64}""")
         val HISTORY_LIFECYCLE_STATES = setOf(
