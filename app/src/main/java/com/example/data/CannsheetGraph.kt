@@ -92,6 +92,8 @@ class CannsheetGraph private constructor(context: Context) {
         .build()
         .create(GasApiService::class.java)
 
+    val serverHistoryIngestor = ServerHistoryIngestor(database.cannsheetDao())
+
     val analyticsRepository = AnalyticsRepository(
         api = apiService,
         dao = database.cannsheetDao(),
@@ -99,6 +101,7 @@ class CannsheetGraph private constructor(context: Context) {
         endpoint = BuildConfig.GAS_URL,
         environment = BuildConfig.APP_ENVIRONMENT,
         onInsightsCacheSaved = { widgetRefresher.refreshAll() },
+        onHistorySaved = { events -> if (serverHistoryIngestor.ingest(events) > 0) widgetRefresher.refreshAll() },
     )
 
     val syncMutex = Mutex()

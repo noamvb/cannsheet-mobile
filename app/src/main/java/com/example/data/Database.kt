@@ -216,6 +216,10 @@ interface CannsheetDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertConsumptionHistory(entry: ConsumptionHistoryEntry)
 
+    /** Room returns -1 for every row the unique eventId index made it ignore. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertConsumptionHistoryIfAbsent(entries: List<ConsumptionHistoryEntry>): List<Long>
+
     @Query(
         "SELECT * FROM consumption_history " +
             "WHERE loggedAtEpochMillis >= :fromEpochMillis " +
