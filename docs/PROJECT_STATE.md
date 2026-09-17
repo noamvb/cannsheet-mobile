@@ -1,6 +1,12 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.4)
+Last updated: 2026-09-17 (v1.12.5)
+
+## Release 1.12.5 (code 63) - not yet published
+
+Provenance recorded after the tag builds.
+
+- In `app/src/main/java/com/example/data/Network.kt`, `SyncClientStateJsonAdapterFactory` now omits `clientState` entirely when null rather than emitting `"clientState":null`, delegating with `serializeNulls()` enabled only for non-null `SyncClientState` instances. This prevents backend whole-request sync rejections (`INVALID_ITEM: clientState must be an object`) when syncing with no pending pen update.
 
 ## Release 1.12.4 (code 62) - published 2026-09-17
 
