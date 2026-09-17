@@ -1100,8 +1100,16 @@ internal fun syncStatusMessage(outcome: SyncOutcome): String = when (outcome) {
         "Configuration error: sync response environment does not match this app"
     is SyncOutcome.RequestIdMismatch ->
         "Sync response could not be matched safely. Your entries are still pending."
-    is SyncOutcome.Failed ->
-        "Sync failed: ${outcome.errorCode ?: outcome.message ?: "Unknown error"}"
+    is SyncOutcome.Failed -> {
+        val code = outcome.errorCode?.takeUnless { it.isBlank() }
+        val message = outcome.message?.trim()?.takeUnless { it.isEmpty() }
+        when {
+            code != null && message != null -> "Sync failed: $code - $message"
+            code != null -> "Sync failed: $code"
+            message != null -> "Sync failed: $message"
+            else -> "Sync failed: Unknown error"
+        }
+    }
     is SyncOutcome.TransportError -> syncFailureStatus(outcome.error)
     is SyncOutcome.Applied -> when {
         outcome.plan.correctionCapabilityMissing ->

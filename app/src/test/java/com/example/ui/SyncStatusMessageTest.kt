@@ -17,7 +17,7 @@ class SyncStatusMessageTest {
             syncStatusMessage(SyncOutcome.HtmlResponse(emptyList())),
         )
         assertEquals(
-            "Sync failed: BACKEND_BUSY",
+            "Sync failed: BACKEND_BUSY - Busy",
             syncStatusMessage(SyncOutcome.Failed("BACKEND_BUSY", "Busy", emptyList())),
         )
         assertEquals(
@@ -44,6 +44,17 @@ class SyncStatusMessageTest {
             "Server confirmation is taking longer than expected. Your entry is still pending and will retry safely.",
             syncStatusMessage(SyncOutcome.TransportError(SocketTimeoutException("timeout"), emptyList())),
         )
+    }
+
+    @Test
+    fun failedOutcomeShowsBackendMessageNextToTheCode() {
+        assertEquals(
+            "Sync failed: INVALID_ITEM - loadedPenUpdatedAtEpochMillis must be a positive integer",
+            syncStatusMessage(SyncOutcome.Failed("INVALID_ITEM", "loadedPenUpdatedAtEpochMillis must be a positive integer", emptyList())),
+        )
+        assertEquals("Sync failed: INVALID_ITEM", syncStatusMessage(SyncOutcome.Failed("INVALID_ITEM", "", emptyList())))
+        assertEquals("Sync failed: INVALID_ITEM", syncStatusMessage(SyncOutcome.Failed("INVALID_ITEM", "   ", emptyList())))
+        assertEquals("Sync failed: Duplicate UUID inside request", syncStatusMessage(SyncOutcome.Failed("  ", "Duplicate UUID inside request", emptyList())))
     }
 
     @Test
