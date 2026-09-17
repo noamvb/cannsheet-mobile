@@ -242,7 +242,6 @@ internal fun InsightsContent(
         item {
             RangeChips(
                 selected = state.pendingRange ?: state.displayedRange,
-                anchor = data.range.to,
                 onSelect = onRefresh,
                 onCustom = { showCustom = true },
             )
@@ -989,19 +988,18 @@ private fun HourHeatmap(values: Map<Int, Int>) {
 @Composable
 private fun RangeChips(
     selected: InsightsRange,
-    anchor: String,
     onSelect: (InsightsRange) -> Unit,
     onCustom: () -> Unit,
 ) {
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(
-            selected = selected is InsightsRange.Custom && selected == customRangeForDays(30, anchor),
-            onClick = { onSelect(customRangeForDays(30, anchor)) },
+            selected = selected == InsightsRange.LastDays(30),
+            onClick = { onSelect(InsightsRange.LastDays(30)) },
             label = { Text("30 days") },
         )
         FilterChip(
-            selected = selected is InsightsRange.Custom && selected == customRangeForDays(90, anchor),
-            onClick = { onSelect(customRangeForDays(90, anchor)) },
+            selected = selected == InsightsRange.LastDays(90),
+            onClick = { onSelect(InsightsRange.LastDays(90)) },
             label = { Text("90 days") },
         )
         FilterChip(
@@ -1015,9 +1013,7 @@ private fun RangeChips(
             label = { Text("All") },
         )
         FilterChip(
-            selected = selected is InsightsRange.Custom &&
-                selected != customRangeForDays(30, anchor) &&
-                selected != customRangeForDays(90, anchor),
+            selected = selected is InsightsRange.Custom,
             onClick = onCustom,
             label = { Text("Custom") },
         )

@@ -1,7 +1,7 @@
 package com.example.ui
 
 import com.example.data.DailyActivityDto
-import com.example.data.InsightsRange
+import com.example.data.lastDaysWindow
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -36,11 +36,9 @@ class AnalyticsUiHelpersTest {
     }
 
     @Test
-    fun presetRangeIsInclusive() {
-        assertEquals(
-            InsightsRange.Custom("2026-06-19", "2026-07-18"),
-            customRangeForDays(30, "2026-07-18"),
-        )
+    fun lastDaysWindowCalculatesInclusiveUtcCalendarSpan() {
+        assertEquals("2026-06-19" to "2026-07-18", lastDaysWindow(30, "2026-07-18"))
+        assertEquals("2026-07-18" to "2026-07-18", lastDaysWindow(1, "2026-07-18"))
     }
 
     @Test

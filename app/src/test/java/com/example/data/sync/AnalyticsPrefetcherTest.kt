@@ -98,6 +98,82 @@ class AnalyticsPrefetcherTest {
     }
 
     @Test
+    fun stalePresetRangePrefetchesLastDaysWhenCachedRequestPresent() = runBlocking {
+        val operations = FakeOperations(
+            cachedInsights = insightsResponse(
+                scope = "CUSTOM",
+                from = "2026-05-21",
+                to = "2026-08-18",
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshInsights = insightsResponse(generatedAtEpochMillis = FIXED_NOW),
+            cachedHistory = historyResponse(events = emptyList(), generatedAtEpochMillis = FIXED_NOW),
+            cachedInsightsRequest = InsightsRange.LastDays(90),
+        )
+        val prefetcher = AnalyticsPrefetcher(operations, now = { FIXED_NOW })
+
+        prefetcher.prefetch()
+
+        assertEquals(
+            listOf(InsightsRange.LastDays(90)),
+            operations.fetchedInsightsRanges,
+        )
+    }
+
+    @Test
+    fun aFailingCachedRequestReadStillWarmsHistoryAndFallsBackToTheCachedRange() = runBlocking {
+        val operations = FakeOperations(
+            cachedInsights = insightsResponse(
+                scope = "CUSTOM",
+                from = "2026-05-21",
+                to = "2026-08-18",
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshInsights = insightsResponse(generatedAtEpochMillis = FIXED_NOW),
+            cachedHistory = historyResponse(
+                events = emptyList(),
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshHistory = historyResponse(events = emptyList(), generatedAtEpochMillis = FIXED_NOW),
+            cachedInsightsRequest = InsightsRange.LastDays(90),
+            cachedInsightsRequestError = IllegalStateException("Room read failed"),
+        )
+        val prefetcher = AnalyticsPrefetcher(operations, now = { FIXED_NOW })
+
+        val outcome = prefetcher.prefetch()
+
+        // Insights degraded to the cached payload's own range rather than the (unreadable) request...
+        assertEquals(listOf(InsightsRange.Custom("2026-05-21", "2026-08-18")), operations.fetchedInsightsRanges)
+        assertEquals(AnalyticsPrefetchStatus.REFRESHED, outcome.insights)
+        // ...and History still warmed: the two resources stay independent.
+        assertEquals(AnalyticsPrefetchStatus.REFRESHED, outcome.history)
+        assertEquals(1, operations.fetchedHistoryFilters.size)
+    }
+
+    @Test
+    fun absentCachedRequestFallsBackToCachedInsightsRange() = runBlocking {
+        val operations = FakeOperations(
+            cachedInsights = insightsResponse(
+                scope = "CUSTOM",
+                from = "2026-05-21",
+                to = "2026-08-18",
+                generatedAtEpochMillis = FIXED_NOW - TWO_HOURS_MILLIS - 1,
+            ),
+            freshInsights = insightsResponse(generatedAtEpochMillis = FIXED_NOW),
+            cachedHistory = historyResponse(events = emptyList(), generatedAtEpochMillis = FIXED_NOW),
+            cachedInsightsRequest = null,
+        )
+        val prefetcher = AnalyticsPrefetcher(operations, now = { FIXED_NOW })
+
+        prefetcher.prefetch()
+
+        assertEquals(
+            listOf(InsightsRange.Custom("2026-05-21", "2026-08-18")),
+            operations.fetchedInsightsRanges,
+        )
+    }
+
+    @Test
     fun staleCacheReusesTheCachedHistoryFilters() = runBlocking {
         val filters = HistoryFilters(type = "FLOWER")
         val staleHistory = historyResponse(
@@ -425,12 +501,19 @@ class AnalyticsPrefetcherTest {
         var freshHistory: HistoryResponseDto? = null,
         var insightsError: Throwable? = null,
         var historyError: Throwable? = null,
+        var cachedInsightsRequest: InsightsRange? = null,
+        var cachedInsightsRequestError: Throwable? = null,
     ) : AnalyticsPrefetchOperations {
         val fetchedInsightsRanges = mutableListOf<InsightsRange>()
         val fetchedHistoryFilters = mutableListOf<HistoryFilters>()
         val savedHistory = mutableListOf<Pair<HistoryFilters, HistoryResponseDto>>()
 
         override suspend fun readCachedInsights(): InsightsResponseDto? = cachedInsights
+
+        override suspend fun readCachedInsightsRequest(): InsightsRange? {
+            cachedInsightsRequestError?.let { throw it }
+            return cachedInsightsRequest
+        }
 
         override suspend fun readCachedHistory(): HistoryResponseDto? = cachedHistory
 

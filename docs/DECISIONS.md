@@ -2454,3 +2454,35 @@ permanently dead chain.
   contract is pinned by literal-string tests on both sides
   (`NetworkClientStateTest`, `tests/backend_client_state_test.js`), not by a
   round trip.
+
+## ADR-055: Insights presets are relative ranges resolved at request time
+
+- Status: Accepted
+- Date: 2026-09-17
+- Context: On 2026-09-17 the owner's phone froze the Insights window to
+  2026-05-21 – 2026-08-18 despite fresh cache refreshes. The 30/90-day chips
+  computed absolute Custom ranges anchored to the cached window's own end
+  (`data.range.to`), and periodic prefetch re-fetched whatever was cached.
+  Nothing ever moved `to` forward, leaving runway and spend widgets stuck
+  reporting "as of 2026-08-18".
+- Decision:
+  1. Add `InsightsRange.LastDays(days: Int)` with `days in 1..3660` to represent
+     relative calendar windows resolved at request time.
+  2. In `AnalyticsRepository`, resolve `LastDays` using sheet timezone
+     (`America/New_York`) for `today()` and UTC date arithmetic for the inclusive
+     start date. Serialize `LastDays` distinctly in `rangeKey` and decode in
+     `parseRangeKey`.
+  3. Expose `readCachedInsightsRequest()` on `AnalyticsDataSource` and
+     `AnalyticsPrefetchOperations`, falling back to DTO-derived `cachedInsightsRange()`.
+     `AnalyticsRepository` applies an upgrade heal converting legacy 30- and 90-day
+     Custom request keys into `LastDays(30)` and `LastDays(90)`.
+  4. Have `AnalyticsPrefetcher` and `loadInsightsCacheThenRefresh` prefer
+     `readCachedInsightsRequest()` so rolling presets follow the calendar.
+  5. Update `RangeChips` to select `LastDays(30)` and `LastDays(90)` directly,
+     dropping `anchor` plumbing, and remove obsolete `customRangeForDays`.
+- Consequences: Insights 30- and 90-day presets roll with the calendar across
+  foreground visits and background syncs. Home-screen widgets derive projections
+  from rolling snapshots whose "as of" date tracks the current sheet date.
+  Upgraded devices seamlessly heal frozen 30/90-day cached custom ranges into
+  `LastDays` without user intervention or database migrations.
+
