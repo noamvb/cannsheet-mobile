@@ -1,6 +1,43 @@
 # Project state
 
-Last updated: 2026-09-02
+Last updated: 2026-09-17
+
+## Release 1.12.0 (code 58) - Cannsheet on the household panel
+
+The phone now publishes its loaded pen to the backend and mirrors server-side
+consumption events into its local history, so the Home Assistant panel (Inbox
+repo, `tools/homeassistant/packages/cannsheet.yaml`) can log pen consumption
+against the right pen and the Today widget counts what the panel logged. See
+ADR-054. Release provenance is in `docs/HANDOFF.md`.
+
+Production Apps Script is now **version 17** on the unchanged deployment
+`AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ`,
+published 2026-09-17 00:41 EDT from the source that merged as `a162cae` (#181),
+source SHA-256
+`26e766c32978740963498961a1760426c7d15e91dcaec723f750567c037d1744`. **Version 16
+is the rollback target.** The same source was published to the sandbox
+deployment as its version 15 first and exercised with `curl` (POST
+`clientState`, then GET `resource=clientState` returned the committed pen).
+
+Verified live on production after the deploy: plain GET unchanged
+(`PRODUCTION`, 389 products), `resource=history` unchanged, and
+`resource=clientState` answers `{"success":true,...,"loadedPen":null}` until a
+phone running this release syncs once.
+
+- Loaded pen travels inside the apiVersion-2 sync request as `clientState`
+  `{loadedPenProductId, loadedPenUpdatedAtEpochMillis}`; the backend keeps it in
+  Config (`LOADED_PEN_PRODUCT_ID/_UUID/_NAME/_UPDATED_AT`), answers
+  `committed`/`stale`/`rejected`, and serves it read-only at
+  `?resource=clientState`. Versions are strictly monotonic and a pen loaded
+  before this release is published on the first sync after upgrade - #181.
+- `ServerHistoryIngestor` mirrors server history into `consumption_history`:
+  ORIGINAL insert-if-absent, CORRECTED upsert, VOIDED delete, ten-day window,
+  device-local date/time; fed by every persisted History page and by its own
+  unfiltered fetch in the periodic worker - #183.
+- CI: `android-actions/setup-android@v3` no longer asks for the retired `tools`
+  package, which had broken every SDK setup step since the runner image
+  changed - #182.
+- No Room migration. Two DataStore keys are new.
 
 ## Release 1.11.0 (code 57) - published 2026-09-02
 

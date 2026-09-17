@@ -1,8 +1,83 @@
 # Current handoff
 
-Last updated: 2026-09-02
+Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## Cannsheet Mobile v1.12.0 (code 58) - loaded pen published, server events mirrored into Today
+
+**Status: code merged; release in progress. Provenance is completed in the follow-up docs commit once the tag has published, as was done for v1.11.0 (#180).**
+
+This release is the phone's half of "Cannsheet on the household panel". The
+panel itself (Home Assistant on the Pixelbook; Inbox repo
+`tools/homeassistant/packages/cannsheet.yaml`, spec
+`Inbox/docs/SPEC-cannsheet-panel-A.md`) polls the backend for the last five
+events, offers four pen-quicklog buttons (10/15/20/30 s at 10 s per use) that
+POST straight to `doPost`, and polls `?resource=clientState` for the pen the
+phone has loaded, falling back to a pinned UUID until the phone has published.
+
+### What changed and why
+
+- The loaded pen lived only in the phone's DataStore. It now rides inside the
+  ordinary apiVersion-2 sync request as `clientState`; the backend stores it in
+  the Config sheet and serves it read-only. Design and the stale/rejected
+  acknowledgement rules: ADR-054. #181, squashed as `a162cae`.
+- Events the panel logs have eventIds the phone never minted, so they reached
+  the sheet and Analytics but not `consumption_history`, the only table the
+  Today widget reads. `ServerHistoryIngestor` now mirrors the last ten days of
+  server history into it (insert-if-absent / upsert corrected / delete voided,
+  device-local calendar), from every persisted History page and from its own
+  unfiltered fetch in the periodic worker. #183, squashed as `2c8b258`.
+- Backend: production Apps Script **version 17** (deployment unchanged,
+  `AKfycbys-9r8...`), published 2026-09-17 00:41 EDT from the #181 source,
+  SHA-256 `26e766c32978740963498961a1760426c7d15e91dcaec723f750567c037d1744`.
+  Version 16 is the rollback target. Sandbox got the same source as its
+  version 15 first and round-tripped a `clientState` POST/GET.
+- CI: the runner image stopped serving the SDK `tools` package;
+  `setup-android` is now asked for `platform-tools` only. #182, `5544521`.
+
+### Evidence
+
+- Local gate on the merged code: `--rerun-tasks testDebugUnitTest lintDebug
+  assembleDebug` green, **653 unit tests, 0 failures**; all node backend
+  suites green; `compileDebugAndroidTestKotlin` green (CI caught that the
+  registered local gate omits it - see Outstanding).
+- Mutation drills: removing the pending-pen term from `SyncEngine`'s
+  NothingToSync guard reds 4 tests; dropping the backwards guard in
+  `markLoadedPenStateSynced` reds 1 (that test was added after the first drill
+  showed the original could not tell the two apart); backend `>=`->`>` on the
+  stale comparison reds client-state case 2; removing the VOIDED filter and
+  the lookback filter in the ingestor red one case each.
+- Backend round trip on the sandbox: POST `clientState` for `*K1` ->
+  `acknowledgedClientState.status = committed`; GET `resource=clientState` ->
+  `{"productId":"*K1","productUuid":"10000000-0000-4000-8000-000000000006",
+  "productName":"SANDBOX Cartridge","updatedAtEpochMillis":1789619856000}`.
+- Panel round trips before this release: sandbox event `c7e76caa…` (1.5
+  uses) and one production test press `1f9c1d43-531b-4ab0-85c2-f0b408505e92`
+  (1 use of BH Grape Smuggler at 00:01 EDT, 17 Sep) - **void that one from the
+  phone**.
+
+### Release provenance
+
+Pull requests merged: #182 `5544521`, #181 `a162cae`, #183 `2c8b258`, then this release pull request. Main run ids, the tag commit, the release run and the APK digest are recorded after publication.
+
+### Outstanding
+
+- Nothing has been driven on the phone yet. After installing through
+  Obtainium: open the app once (the pre-upgrade loaded pen is stamped and
+  published on the first sync); then `curl "<exec>?resource=clientState&environment=PRODUCTION&analyticsVersion=1"`
+  should name it, and the Board's "Logs to …" line follows within 15 minutes.
+- Panel-logged events reach Today only after the periodic worker's next
+  prefetch (hours). A push path is out of scope.
+- The registered ai-orch verification profile for this repo runs
+  `testDebugUnitTest lintDebug assembleDebug` but not
+  `compileDebugAndroidTestKotlin`; add it, or every delegate gate will keep
+  missing androidTest fakes that need new interface members.
+- `sandbox.properties` (gitignored) now exists on this Mac again with the
+  sandbox `/exec` URL; the sandbox Apps Script project id is
+  `14GdK-_WOr3lFwU9Xmx3OuvhzWKljPYKFH5L7MRCaC0dXsOOHG9LJQ-_o`, production is
+  `1C_I7_vWIuZoxQN3ZR3iAcNWq0-X3aJj4cS1EHbk2nW6yJT2dVfgy3vA2` (many "Copy of"
+  projects exist; use the ids).
 
 ## Cannsheet Mobile v1.11.0 (code 57) - analytics cache deployed, invalidated before writes
 

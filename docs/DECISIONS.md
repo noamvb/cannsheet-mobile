@@ -2392,3 +2392,60 @@ permanently dead chain.
   `tests/backend_analytics_test.js`,
   `tests/backend_spreadsheet_test.js`,
   `app/src/test/java/com/example/ui/SnapshotFreshnessTest.kt`
+
+## ADR-054: The loaded pen is published through the sync request as a timestamped client state, and the phone ingests server events it did not author
+
+- Status: Accepted; app half in v1.12.0 (code 58), backend half deployed as
+  production Apps Script version 17 on 2026-09-17.
+- Date: 2026-09-17
+- Context: A Home Assistant panel on the household e-ink screen (Inbox repo,
+  `tools/homeassistant/packages/cannsheet.yaml`) now logs pen consumption
+  straight to the Apps Script backend with four preset buttons, and shows the
+  last five events. Two things stood between that and the phone's own picture
+  of the world. First, the panel had to know which pen to log against, and the
+  loaded pen lived only in the phone's DataStore (`loaded_pen_product_id`),
+  invisible to everything else. Second, an event the panel logs has an
+  `eventId` the phone never minted, so it reached the sheet, the Analytics
+  screens (which read server history) and the per-product last use (which the
+  catalog GET already carries) - but never `consumption_history`, the only
+  table the Today widget reads.
+- Decision:
+  1. The loaded pen travels inside the ordinary apiVersion-2 sync request as an
+     optional `clientState` object `{loadedPenProductId, loadedPenUpdatedAtEpochMillis}`,
+     never through a second write path: AGENTS.md's rule that every queue sync
+     goes through `SyncEngine` under `syncMutex` applies to it. A pending pen
+     (`updated_at > synced_at` in DataStore) is work to sync even when every
+     queue is empty, and it is part of the request snapshot's fingerprint, so a
+     changed pen mints a new `requestId` and an unchanged one reuses it.
+  2. The version is a timestamp, stamped as `max(clock, stored updated-at + 1,
+     synced-at + 1)` so it is strictly monotonic through same-millisecond
+     writes and clock corrections. The backend keeps it in the Config sheet as
+     `LOADED_PEN_UPDATED_AT` beside `LOADED_PEN_PRODUCT_ID`, `_UUID` and
+     `_NAME`, answers `stale` when it already holds an equal or newer value,
+     `rejected` (`UNKNOWN_PRODUCT`) when the id does not resolve, and
+     `committed` otherwise. The phone marks the state synced on all three, so a
+     rejection does not become a retry on every sync, and never moves the
+     synced timestamp backwards. A cleared pen is a state: `loadedPenProductId:
+     null` is serialized explicitly (a per-type Moshi adapter; the default
+     omits nulls). A pen loaded before this release is stamped on the first
+     `pendingLoadedPenState()` call so an upgrade publishes it.
+  3. A state-only request writes no `SyncLedger`/`SyncApplyJournal` row and
+     does not bump `MUTATION_WATERMARK`: the analytics data did not change, so
+     the analytics cache must not be invalidated for it. The new read resource
+     `resource=clientState` is not cached and reads only the four Config keys.
+  4. The phone ingests server-side history into `consumption_history` from
+     every page the analytics cache persists (`AnalyticsRepository.saveHistory`,
+     the one choke point for the periodic prefetch and the Analytics screen),
+     inserting only unknown `eventId`s (`OnConflictStrategy.IGNORE` on the
+     unique index), skipping voided events and anything older than the Today
+     widget's ten-day lookback, and refreshing the widgets when it inserted
+     something. Existing rows are never touched; the offline queues are not
+     involved.
+- Consequences: The panel follows the phone's pen within one sync plus one
+  15-minute poll, and falls back to a pinned UUID until the phone has published
+  once. Panel-logged events appear in Today after the next periodic prefetch
+  (hours, not minutes); a faster path would need a push, which is out of scope.
+  Two DataStore keys and four Config keys are new; no Room migration. The wire
+  contract is pinned by literal-string tests on both sides
+  (`NetworkClientStateTest`, `tests/backend_client_state_test.js`), not by a
+  round trip.
