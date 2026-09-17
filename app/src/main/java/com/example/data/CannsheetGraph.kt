@@ -18,6 +18,8 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.moshi.MoshiConverterFactory
 
+internal const val ANALYTICS_CALL_TIMEOUT_SECONDS = 45L
+
 data class BackgroundSyncEvent(
     val outcome: SyncOutcome.Applied,
 )
@@ -92,10 +94,21 @@ class CannsheetGraph private constructor(context: Context) {
         .build()
         .create(GasApiService::class.java)
 
+    // Analytics GETs get a whole-call cap. readTimeout is per socket read, and on
+    // 2026-09-17 Google's script.googleusercontent.com hop held calls for 60-105 s;
+    // a warm response takes 0.2-3 s and a cold one 10-17 s, so past 45 s the attempt is
+    // dead and fetchWithRetry should move on. The sync POST client is deliberately uncapped.
+    val analyticsApiService: GasApiService = Retrofit.Builder()
+        .baseUrl("https://example.com/")
+        .client(client.newBuilder().callTimeout(ANALYTICS_CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS).build())
+        .addConverterFactory(MoshiConverterFactory.create(moshi))
+        .build()
+        .create(GasApiService::class.java)
+
     val serverHistoryIngestor = ServerHistoryIngestor(database.cannsheetDao())
 
     val analyticsRepository = AnalyticsRepository(
-        api = apiService,
+        api = analyticsApiService,
         dao = database.cannsheetDao(),
         moshi = moshi,
         endpoint = BuildConfig.GAS_URL,
