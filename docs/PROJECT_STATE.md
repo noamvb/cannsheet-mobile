@@ -2,9 +2,12 @@
 
 Last updated: 2026-09-17 (v1.12.4)
 
-## Release 1.12.4 (code 62) - not yet published
+## Release 1.12.4 (code 62) - published 2026-09-17
 
-Provenance recorded after the tag builds.
+Tag `v1.12.4` points at `d9ab386`, proven by PR run `35283980085` with all five
+jobs green; release run `35284428033`; APK SHA-256
+`67f5dca3d3ddc748fe7e8f46477c3337e40480b6e528d09515da5ebc601f90cc`, signing
+certificate unchanged. Installed on the owner's phone the same day.
 
 - In `app/src/main/java/com/example/ui/CannsheetViewModel.kt`, `syncStatusMessage` now displays both the backend error code and trimmed message on `SyncOutcome.Failed` whole-request sync failures (`Sync failed: <errorCode> - <message>`) instead of discarding the message when an error code is present.
 
