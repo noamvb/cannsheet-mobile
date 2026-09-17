@@ -4,6 +4,53 @@ Last updated: 2026-09-17
 
 Repository: public `noamvb/cannsheet-mobile`
 
+## Cannsheet Mobile v1.12.4 (code 62) - sync failures show the backend's message
+
+**Status: ready to tag; not yet published.**
+
+### What changed and why
+
+The owner's phone has had `Sync failed: INVALID_ITEM` since 2026-09-17 ~12:20 EDT with 4 actions queued. When whole-request sync failures occurred, `SyncOutcome.Failed` retained both `errorCode` and `message` from the backend's response, but `syncStatusMessage` in `app/src/main/java/com/example/ui/CannsheetViewModel.kt` previously rendered only `errorCode ?: message`, discarding the server's descriptive message (which names the failing check, e.g. `loadedPenUpdatedAtEpochMillis must be a positive integer` or `Duplicate UUID inside request`).
+
+`syncStatusMessage` now formats `SyncOutcome.Failed` to show both the code and trimmed message (`Sync failed: <errorCode> - <message>`) when both are present and non-blank, falling back to code only, message only, or `Sync failed: Unknown error` when neither is present.
+
+### Evidence
+
+Focused test command:
+```
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+./gradlew --no-configuration-cache :app:testDebugUnitTest --tests 'com.example.ui.SyncStatusMessageTest'
+```
+
+Red run (before `CannsheetViewModel.kt` edit, with updated `BACKEND_BUSY - Busy` assertion and new `failedOutcomeShowsBackendMessageNextToTheCode` test):
+```
+SyncStatusMessageTest > nonAppliedOutcomesPreserveExistingMessages FAILED
+    org.junit.ComparisonFailure at SyncStatusMessageTest.kt:19
+
+SyncStatusMessageTest > failedOutcomeShowsBackendMessageNextToTheCode FAILED
+    org.junit.ComparisonFailure at SyncStatusMessageTest.kt:51
+
+3 tests completed, 2 failed
+```
+Failing line in `failedOutcomeShowsBackendMessageNextToTheCode`:
+`org.junit.ComparisonFailure: expected:<...failed: INVALID_ITEM[ - loadedPenUpdatedAtEpochMillis must be a positive integer]> but was:<...failed: INVALID_ITEM[]>`
+
+Green run (after `CannsheetViewModel.kt` edit):
+```
+BUILD SUCCESSFUL in 46s
+29 actionable tasks: 6 executed, 23 up-to-date
+```
+`<testcase` count in `app/build/test-results/testDebugUnitTest/TEST-com.example.ui.SyncStatusMessageTest.xml`: 3 (previous count was 2; 3 tests, 0 failures, 0 skipped).
+
+### Release provenance
+
+To be recorded by the releaser after the tag builds.
+
+### Outstanding
+
+The owner's phone has 4 actions queued since 2026-09-17 ~12:20 EDT failing with INVALID_ITEM; the message this release surfaces is the next diagnostic step. The void of event `1f9c1d43-531b-4ab0-85c2-f0b408505e92` is among them.
+
 ## Cannsheet Mobile v1.12.3 (code 61) - analytics GETs capped at 45 s per attempt
 
 **Status: published, independently verified, and installed on the owner's phone

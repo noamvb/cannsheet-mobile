@@ -1,6 +1,12 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.3)
+Last updated: 2026-09-17 (v1.12.4)
+
+## Release 1.12.4 (code 62) - not yet published
+
+Provenance recorded after the tag builds.
+
+- In `app/src/main/java/com/example/ui/CannsheetViewModel.kt`, `syncStatusMessage` now displays both the backend error code and trimmed message on `SyncOutcome.Failed` whole-request sync failures (`Sync failed: <errorCode> - <message>`) instead of discarding the message when an error code is present.
 
 ## Release 1.12.3 (code 61) - published 2026-09-17
 
