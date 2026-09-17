@@ -56,10 +56,13 @@ schedule, on a request that v1.12.1 would have surfaced as `HTTP 404`.
 
 ### Outstanding
 
-- The `googleusercontent` hop was still slow (60-105 s per attempt) during the
-  afternoon of 2026-09-17, so a fully failed fetch can now take about three
-  and a half minutes before the error shows. If it persists, consider a
-  shorter read timeout on analytics GETs paired with the retry.
+- Done on `main` after this release, unreleased: the `googleusercontent` hop
+  was still slow (60-105 s per attempt) that afternoon, so a fully failed
+  fetch could take about three and a half minutes. #191 caps each analytics
+  GET at 45 s (`callTimeout` on a derived client; sync POSTs stay uncapped),
+  retries `InterruptedIOException` in `fetchWithRetry`, and maps it to
+  `TIMEOUT` in the UI. Worst case is now about 3 x 45 s + 4 s = 139 s. It
+  ships as v1.12.3 (code 61).
 - The v1.12.0 outstanding items below still apply (panel-logged events reach
   Today only on the periodic prefetch; the ai-orch profile lacks
   `compileDebugAndroidTestKotlin`).

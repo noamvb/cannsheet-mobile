@@ -12,7 +12,7 @@ import com.example.data.MAX_CONSUMPTION_CORRECTION_REASON_LENGTH
 import com.example.data.cachedInsightsRange
 import com.example.data.runCatchingCancellable
 import java.io.IOException
-import java.net.SocketTimeoutException
+import java.io.InterruptedIOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.UUID
@@ -603,7 +603,7 @@ fun analyticsUiError(error: Throwable): AnalyticsUiError {
         return AnalyticsUiError(error.code, message, error.retryable)
     }
     return when (error) {
-        is SocketTimeoutException -> AnalyticsUiError("TIMEOUT", "Analytics took too long. Try again.", true)
+        is InterruptedIOException -> AnalyticsUiError("TIMEOUT", "Analytics took too long. Try again.", true)
         is IOException -> AnalyticsUiError("OFFLINE", "No connection. Showing saved data when available.", true)
         else -> AnalyticsUiError("INTERNAL_ERROR", error.message ?: "Could not load analytics.", true)
     }

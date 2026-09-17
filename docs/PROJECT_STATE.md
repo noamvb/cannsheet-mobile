@@ -1,6 +1,11 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.2)
+Last updated: 2026-09-17 (v1.12.3 in progress)
+
+## Release 1.12.3 (code 61) - in progress 2026-09-17
+
+- Capped analytics GETs at 45 s whole-call timeout (`ANALYTICS_CALL_TIMEOUT_SECONDS`) via a dedicated `analyticsApiService` client derived from the base OkHttpClient. Sync POSTs remain uncapped because cutting off a sync POST in flight could leave the server committed while the client drops the acknowledgement.
+- `AnalyticsRepository.fetchWithRetry` now retries `InterruptedIOException` (covering OkHttp call timeouts and `SocketTimeoutException`) alongside transient HTTP errors and `BACKEND_BUSY`, bounding worst-case fetch attempts to about 3 x 45 s + 4 s. `analyticsUiError` maps `InterruptedIOException` to `TIMEOUT`.
 
 ## Release 1.12.2 (code 60) - published 2026-09-17
 

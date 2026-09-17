@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import retrofit2.HttpException
+import java.io.InterruptedIOException
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -584,8 +585,8 @@ class AnalyticsRepository(
             }
         }
 
-    // Retried transient HTTP failures up to 3 attempts with backoff; motivated by intermittent
-    // 404s from the script.googleusercontent.com hop on 2026-09-17.
+    // Retried transient HTTP failures and timeouts up to 3 attempts with backoff; motivated by
+    // intermittent 404s and timeouts from the script.googleusercontent.com hop on 2026-09-17.
     private suspend fun <T> fetchWithRetry(block: suspend () -> T): T {
         var attempt = 0
         while (true) {
@@ -594,7 +595,8 @@ class AnalyticsRepository(
             } catch (error: Throwable) {
                 if (error is CancellationException) throw error
                 val isRetryable = (error is HttpException && error.code() in setOf(404, 429, 500, 502, 503, 504)) ||
-                    (error is AnalyticsApiException && error.code == "BACKEND_BUSY")
+                    (error is AnalyticsApiException && error.code == "BACKEND_BUSY") ||
+                    error is InterruptedIOException
                 if (!isRetryable || attempt >= ANALYTICS_MAX_ATTEMPTS - 1) {
                     throw error
                 }

@@ -7,6 +7,9 @@ import kotlinx.coroutines.runBlocking
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
+import java.io.InterruptedIOException
+import java.io.IOException
+import java.net.SocketTimeoutException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -259,6 +262,88 @@ class AnalyticsDataTest {
         assertNotNull(result)
         assertEquals(2, callCount)
         assertEquals(listOf(1_000L), delays)
+    }
+
+    @Test
+    fun fetchInsightsRetriesAfterCallTimeout() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                if (callCount == 1) {
+                    throw InterruptedIOException("timeout")
+                }
+                return sampleInsightsJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val result = repo.fetchInsights(InsightsRange.Default)
+        assertNotNull(result)
+        assertEquals(2, callCount)
+        assertEquals(listOf(1_000L), delays)
+    }
+
+    @Test
+    fun fetchInsightsRetriesAfterSocketTimeout() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                if (callCount == 1) {
+                    throw SocketTimeoutException("read timed out")
+                }
+                return sampleInsightsJson().toResponseBody("application/json".toMediaTypeOrNull())
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        val result = repo.fetchInsights(InsightsRange.Default)
+        assertNotNull(result)
+        assertEquals(2, callCount)
+        assertEquals(listOf(1_000L), delays)
+    }
+
+    @Test
+    fun fetchInsightsDoesNotRetryPlainIOException() = runBlocking {
+        var callCount = 0
+        val delays = mutableListOf<Long>()
+        val fakeApi = object : FakeGasApiService() {
+            override suspend fun getAnalytics(url: String): ResponseBody {
+                callCount++
+                throw IOException("unexpected end of stream")
+            }
+        }
+        val repo = AnalyticsRepository(
+            fakeApi,
+            FakeCannsheetDao(),
+            moshi,
+            endpoint,
+            "PRODUCTION",
+            retryDelay = { delays += it },
+        )
+
+        assertThrows(IOException::class.java) {
+            runBlocking { repo.fetchInsights(InsightsRange.Default) }
+        }
+        assertEquals(1, callCount)
+        assertTrue(delays.isEmpty())
     }
 
     @Test
