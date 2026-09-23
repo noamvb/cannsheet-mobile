@@ -282,8 +282,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing
 
-    private val _submissionTimer = MutableStateFlow(5)
-    val submissionTimer: StateFlow<Int> = _submissionTimer
+    val submissionTimer: StateFlow<Int> = consumptionPreferences.submissionTimerSeconds
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            ConsumptionPreferencesRepository.DEFAULT_SUBMISSION_TIMER_SECONDS,
+        )
 
     private val _purchaseFormState = MutableStateFlow(PurchaseFormState.initial())
     val purchaseFormState: StateFlow<PurchaseFormState> = _purchaseFormState
@@ -320,7 +324,11 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setSubmissionTimer(seconds: Int) {
-        _submissionTimer.value = seconds.coerceIn(0, 5)
+        val clamped = seconds.coerceIn(
+            ConsumptionPreferencesRepository.MIN_SUBMISSION_TIMER_SECONDS,
+            ConsumptionPreferencesRepository.MAX_SUBMISSION_TIMER_SECONDS,
+        )
+        viewModelScope.launch { consumptionPreferences.setSubmissionTimerSeconds(clamped) }
     }
 
     fun updatePurchaseForm(state: PurchaseFormState) {
@@ -602,7 +610,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun startCountdown() {
         countdownJob = viewModelScope.launch {
-            for (second in _submissionTimer.value downTo 1) {
+            for (second in submissionTimer.value downTo 1) {
                 _pendingCountdown.value = second
                 delay(1_000)
             }
