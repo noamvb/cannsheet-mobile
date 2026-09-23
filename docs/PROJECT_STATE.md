@@ -1,6 +1,19 @@
 # Project state
 
-Last updated: 2026-09-17 (v1.12.5)
+Last updated: 2026-09-22 (unreleased change on PR #197 after v1.12.5)
+
+## Unreleased - consumption cancel window persists across restarts (PR #197)
+
+- The Settings "Cancel window" (the countdown before a submitted consumption or
+  purchase commits) is now persisted as `submission_timer_seconds` in the existing
+  `consumption_preferences` DataStore via `ConsumptionPreferencesRepository`
+  (`submissionTimerSeconds` flow, `setSubmissionTimerSeconds`). Range 0..5,
+  default 5; a missing or out-of-range stored value reads as 5.
+- `CannsheetViewModel.submissionTimer` is a `stateIn` of that flow. It was a
+  process-local `MutableStateFlow(5)`, so every restart reset the value to 5.
+- No Room, queue, sync, or wire change. One new DataStore key; no migration.
+- Covered by `SubmissionTimerPreferenceTest`; verified on the owner's phone on the
+  sandbox build (2 s survives force-stop and relaunch; `main` reset it to 5).
 
 ## Release 1.12.5 (code 63) - published 2026-09-17
 

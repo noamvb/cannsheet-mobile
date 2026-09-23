@@ -29,6 +29,7 @@ data class ConsumptionPreferences(
     val secondsPerUseOverrides: Map<ProductTypeKey, Double> =
         ConsumptionPreferencesRepository.DEFAULT_SECONDS_PER_USE_OVERRIDES,
     val loadedPenProductId: String? = null,
+    val submissionTimerSeconds: Int = ConsumptionPreferencesRepository.DEFAULT_SUBMISSION_TIMER_SECONDS,
 )
 
 @ConsistentCopyVisibility
@@ -89,6 +90,9 @@ class ConsumptionPreferencesRepository private constructor(
                 ),
                 loadedPenProductId = storedPreferences[LOADED_PEN_PRODUCT_ID]
                     ?.takeIf(String::isNotBlank),
+                submissionTimerSeconds = storedPreferences[SUBMISSION_TIMER_SECONDS]
+                    ?.takeIf(::isValidSubmissionTimerSeconds)
+                    ?: DEFAULT_SUBMISSION_TIMER_SECONDS,
             )
         }
         .distinctUntilChanged()
@@ -113,6 +117,10 @@ class ConsumptionPreferencesRepository private constructor(
         .map { it.loadedPenProductId }
         .distinctUntilChanged()
 
+    val submissionTimerSeconds: Flow<Int> = preferences
+        .map { it.submissionTimerSeconds }
+        .distinctUntilChanged()
+
     suspend fun setQuantityPresets(presets: List<Double>) {
         require(isValidQuantityPresets(presets)) {
             "Quantity presets must contain 1 to 10 positive, finite, distinct values."
@@ -132,6 +140,15 @@ class ConsumptionPreferencesRepository private constructor(
     suspend fun setIncludeUnopened(include: Boolean) {
         dataStore.edit { storedPreferences ->
             storedPreferences[INCLUDE_UNOPENED] = include
+        }
+    }
+
+    suspend fun setSubmissionTimerSeconds(seconds: Int) {
+        require(isValidSubmissionTimerSeconds(seconds)) {
+            "The submission timer must be $MIN_SUBMISSION_TIMER_SECONDS to $MAX_SUBMISSION_TIMER_SECONDS seconds."
+        }
+        dataStore.edit { storedPreferences ->
+            storedPreferences[SUBMISSION_TIMER_SECONDS] = seconds
         }
     }
 
@@ -262,6 +279,9 @@ class ConsumptionPreferencesRepository private constructor(
         const val MIN_QUANTITY_PRESETS = 1
         const val MAX_QUANTITY_PRESETS = 10
         const val MAX_SECONDS_PER_USE = 3600.0
+        const val MIN_SUBMISSION_TIMER_SECONDS = 0
+        const val MAX_SUBMISSION_TIMER_SECONDS = 5
+        const val DEFAULT_SUBMISSION_TIMER_SECONDS = 5
         private const val LEGACY_QUANTITY_PRESET_COUNT = 3
 
         val DEFAULT_QUANTITY_PRESETS: List<Double> = listOf(0.5, 1.0, 2.0)
@@ -275,6 +295,9 @@ class ConsumptionPreferencesRepository private constructor(
 
         fun isValidSecondsPerUse(value: Double): Boolean =
             value.isFinite() && value > 0.0 && value <= MAX_SECONDS_PER_USE
+
+        fun isValidSubmissionTimerSeconds(seconds: Int): Boolean =
+            seconds in MIN_SUBMISSION_TIMER_SECONDS..MAX_SUBMISSION_TIMER_SECONDS
 
         fun effectiveQuantityPresets(
             globalPresets: List<Double>,
@@ -317,6 +340,7 @@ class ConsumptionPreferencesRepository private constructor(
 
         private val QUANTITY_PRESET_COUNT = intPreferencesKey("quantity_preset_count")
         private val INCLUDE_UNOPENED = booleanPreferencesKey("include_unopened")
+        private val SUBMISSION_TIMER_SECONDS = intPreferencesKey("submission_timer_seconds")
         private val QUANTITY_PRESET_OVERRIDES_JSON =
             stringPreferencesKey(QUANTITY_PRESET_OVERRIDES_JSON_KEY)
         private val SECONDS_PER_USE_OVERRIDES_JSON =

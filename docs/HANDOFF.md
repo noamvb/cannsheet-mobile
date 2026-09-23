@@ -1,8 +1,26 @@
 # Current handoff
 
-Last updated: 2026-09-17
+Last updated: 2026-09-22
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## Unreleased - consumption cancel window persists across restarts (PR #197)
+
+**Status: open PR on `fix/persist-cancel-window`; not released, no version bump.**
+
+- Cause: the Settings "Cancel window" was a process-local
+  `MutableStateFlow(5)` in `CannsheetViewModel`; see ADR-056.
+- Fix: persisted as `submission_timer_seconds` in the `consumption_preferences`
+  DataStore through `ConsumptionPreferencesRepository`.
+- Evidence: `./gradlew --no-daemon testDebugUnitTest assembleDebug lintDebug`
+  passed with 683 unit tests and 0 failures; `assembleSandbox` passed. Removing
+  the DataStore write fails 2 of the 5 new `SubmissionTimerPreferenceTest` tests.
+  On the owner's phone (sandbox build) 2 s survived force-stop and relaunch;
+  the `main` build reset it to 5.
+- Operational note: the phone's previous sandbox install was signed with a
+  different debug key, so it was uninstalled (with the owner's approval) and
+  reinstalled from this Mac; its local sandbox data was cleared.
+- Outstanding: merge, then ship in the next release.
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
