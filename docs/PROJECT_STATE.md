@@ -1,8 +1,13 @@
 # Project state
 
-Last updated: 2026-09-22 (v1.12.6, pending publication)
+Last updated: 2026-09-23 (v1.12.6)
 
-## Release 1.12.6 (code 64) - cancel window persists across restarts (PR #197, `1d7c41d`)
+## Release 1.12.6 (code 64) - published 2026-09-23
+
+Tag `v1.12.6` points at `fbedd7f`; release run `35806925771`; APK SHA-256
+`bcdd54aaf485d544058d94b9d8e8380336dbbaf1e14a1628b6bfdd56dac3a747`, signing
+certificate unchanged. The fix itself merged as #197 `1d7c41d`.
+
 
 - The Settings "Cancel window" (the countdown before a submitted consumption or
   purchase commits) is now persisted as `submission_timer_seconds` in the existing
