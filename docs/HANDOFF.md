@@ -1,13 +1,13 @@
 # Current handoff
 
-Last updated: 2026-09-22
+Last updated: 2026-09-23
 
 Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.6 (code 64) - the cancel window persists across restarts
 
-**Status: PR #197 squash-merged as `1d7c41d`; version bumped to 1.12.6 (64);
-publication pending. Release provenance is recorded after publication.**
+**Status: published 2026-09-23 01:40 UTC and independently verified. The owner
+updates through Obtainium; not yet confirmed installed on the phone.**
 
 - Cause: the Settings "Cancel window" was a process-local
   `MutableStateFlow(5)` in `CannsheetViewModel`; see ADR-056.
@@ -21,7 +21,36 @@ publication pending. Release provenance is recorded after publication.**
 - Operational note: the phone's previous sandbox install was signed with a
   different debug key, so it was uninstalled (with the owner's approval) and
   reinstalled from this Mac; its local sandbox data was cleared.
-- Outstanding: publish v1.12.6 and record its provenance here.
+
+### Release provenance
+
+Pull requests merged: #197 `1d7c41d` (the fix, ADR-056 and docs) and #198
+`fbedd7f` (version 1.12.6, code 64). PR checks were green on all five jobs for
+both.
+
+Main run `35806065702` on `fbedd7f` (push event): attempt 1 failed on Emulator
+API 36 in `ProductTypeQuantityEditorTest.switchingTypeReseedsTheInputFields`
+with `Failed to inject touch input` (an emulator input failure on a screen
+neither PR touches; API 24 and all other API 36 tests passed). A rerun of the
+failed jobs (attempt 2) passed, with all six required jobs `success`.
+
+The annotated tag `v1.12.6` points at `fbedd7f`, the exact validated commit and
+the tip of `origin/main` when tagged. Release run `35806925771` was green on all
+three jobs.
+
+The published assets are `Cannsheet-Mobile-1.12.6.apk` (38,020,149 bytes, SHA-256
+`bcdd54aaf485d544058d94b9d8e8380336dbbaf1e14a1628b6bfdd56dac3a747`) and
+`Cannsheet-Mobile-1.12.6.apk.sha256`, on `noamvb/cannsheet-mobile-releases`.
+Downloaded independently of CI and verified against the `.sha256`; `aapt`
+reports package `com.noamv.cannsheet.mobile`, versionCode 64, versionName
+1.12.6, minSdk 24, targetSdk 36; APK Signature Scheme v2 verified; signing
+certificate SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`,
+identical to v1.12.5, so it updates in place.
+
+### Outstanding
+
+- The owner installs 1.12.6 through Obtainium and confirms a chosen cancel window
+  survives a restart on the production app.
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
