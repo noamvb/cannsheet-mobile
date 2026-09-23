@@ -2486,3 +2486,19 @@ permanently dead chain.
   Upgraded devices seamlessly heal frozen 30/90-day cached custom ranges into
   `LastDays` without user intervention or database migrations.
 
+## ADR-056: The submission cancel window is a persisted consumption preference
+
+- Status: Accepted
+- Date: 2026-09-22
+- Context: The Settings "Cancel window" slider lived only in
+  `CannsheetViewModel` as `MutableStateFlow(5)`, so an app restart reset a chosen
+  value back to 5 seconds.
+- Decision: Store it as the int key `submission_timer_seconds` in the existing
+  `consumption_preferences` DataStore, owned by `ConsumptionPreferencesRepository`.
+  Valid range is 0..5 with a default of 5; writes outside the range are rejected,
+  and a missing or out-of-range stored value reads as the default. The ViewModel
+  exposes it with `stateIn` and never holds its own copy.
+- Consequences: The chosen window survives restarts. Upgraded installs have no
+  key and keep the previous default of 5, so no migration is needed. Until
+  DataStore emits just after launch (milliseconds), the countdown reads 5.
+
