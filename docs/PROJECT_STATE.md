@@ -1,8 +1,8 @@
 # Project state
 
-Last updated: 2026-09-22 (unreleased change on PR #197 after v1.12.5)
+Last updated: 2026-09-22 (v1.12.6, pending publication)
 
-## Unreleased - consumption cancel window persists across restarts (PR #197)
+## Release 1.12.6 (code 64) - cancel window persists across restarts (PR #197, `1d7c41d`)
 
 - The Settings "Cancel window" (the countdown before a submitted consumption or
   purchase commits) is now persisted as `submission_timer_seconds` in the existing

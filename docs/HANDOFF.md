@@ -4,9 +4,10 @@ Last updated: 2026-09-22
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## Unreleased - consumption cancel window persists across restarts (PR #197)
+## Cannsheet Mobile v1.12.6 (code 64) - the cancel window persists across restarts
 
-**Status: open PR on `fix/persist-cancel-window`; not released, no version bump.**
+**Status: PR #197 squash-merged as `1d7c41d`; version bumped to 1.12.6 (64);
+publication pending. Release provenance is recorded after publication.**
 
 - Cause: the Settings "Cancel window" was a process-local
   `MutableStateFlow(5)` in `CannsheetViewModel`; see ADR-056.
@@ -20,7 +21,7 @@ Repository: public `noamvb/cannsheet-mobile`
 - Operational note: the phone's previous sandbox install was signed with a
   different debug key, so it was uninstalled (with the owner's approval) and
   reinstalled from this Mac; its local sandbox data was cleared.
-- Outstanding: merge, then ship in the next release.
+- Outstanding: publish v1.12.6 and record its provenance here.
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
