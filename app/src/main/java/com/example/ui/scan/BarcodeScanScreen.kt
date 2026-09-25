@@ -6,10 +6,12 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.TorchState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +20,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashlightOff
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +58,7 @@ object BarcodeScanTestTags {
     const val CANCEL = "scan_cancel"
     const val PREVIEW = "scan_preview"
     const val HINT = "scan_hint"
+    const val TORCH = "scan_torch"
 }
 
 /**
@@ -146,6 +154,19 @@ private fun CameraPreview(
     // Guards against a second delivery while the caller is still navigating away.
     val alreadyDelivered = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
+    // Set once the back camera is bound; the torch toggle only appears if it has a flash.
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var torchOn by remember { mutableStateOf(false) }
+
+    // Mirror CameraX's own torch state: the camera turns the torch off when the lifecycle
+    // stops (screen lock, app switch), and a local flag would stay stuck on.
+    DisposableEffect(camera, lifecycleOwner) {
+        val torchState = camera?.cameraInfo?.torchState
+        val observer = androidx.lifecycle.Observer<Int> { torchOn = it == TorchState.ON }
+        torchState?.observe(lifecycleOwner, observer)
+        onDispose { torchState?.removeObserver(observer) }
+    }
+
     val scanner = remember {
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
@@ -192,7 +213,7 @@ private fun CameraPreview(
                         }
                     runCatching {
                         provider.unbindAll()
-                        provider.bindToLifecycle(
+                        camera = provider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
@@ -220,6 +241,23 @@ private fun CameraPreview(
                 onClick = onCancel,
                 modifier = Modifier.testTag(BarcodeScanTestTags.CANCEL),
             ) { Text("Enter it manually") }
+        }
+
+        // Unbinding the camera on dispose turns the torch off with it.
+        if (camera?.cameraInfo?.hasFlashUnit() == true) {
+            FilledTonalIconToggleButton(
+                checked = torchOn,
+                onCheckedChange = { camera?.cameraControl?.enableTorch(it) },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .testTag(BarcodeScanTestTags.TORCH),
+            ) {
+                Icon(
+                    imageVector = if (torchOn) Icons.Filled.FlashlightOn else Icons.Filled.FlashlightOff,
+                    contentDescription = if (torchOn) "Turn flashlight off" else "Turn flashlight on",
+                )
+            }
         }
     }
 }
