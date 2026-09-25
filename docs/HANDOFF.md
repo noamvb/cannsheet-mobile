@@ -1,8 +1,27 @@
 # Current handoff
 
-Last updated: 2026-09-23
+Last updated: 2026-09-25
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## Cannsheet Mobile v1.12.7 (code 65) - flashlight toggle in the barcode scanner
+
+**Status: PRs #200 and #201 squash-merged; version bumped to 1.12.7 (65);
+publication pending. Release provenance is recorded after publication.**
+
+- Feature (#200 `1827165`): a torch toggle in the purchase barcode scanner, shown
+  only when the back camera has a flash, driven by CameraX's `torchState`. A Codex
+  review found the first version stayed "on" after a lifecycle stop; fixed before
+  merge.
+- Build fix (#201 `075d484`): `validateSandboxConfig` no longer captures the build
+  script object, so `assembleSandbox` works with the configuration cache.
+- Evidence on `1827165`: `./gradlew --no-daemon testDebugUnitTest
+  compileDebugAndroidTestKotlin lintDebug assembleDebug` passed with 683 unit tests
+  and 0 failures; all eight Node backend suites exited 0; `python3 -m unittest
+  tests/test_backend_sync_benchmark.py` ran 13 tests, OK. No new automated test for
+  the torch (needs a real camera); verified on the owner's phone with the sandbox
+  build and confirmed by the owner.
+- Outstanding: publish v1.12.7 and record its provenance here.
 
 ## Cannsheet Mobile v1.12.6 (code 64) - the cancel window persists across restarts
 

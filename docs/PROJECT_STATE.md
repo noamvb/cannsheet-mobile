@@ -1,6 +1,20 @@
 # Project state
 
-Last updated: 2026-09-23 (v1.12.6)
+Last updated: 2026-09-25 (v1.12.7, pending publication)
+
+## Release 1.12.7 (code 65) - scanner flashlight toggle (PR #200, `1827165`)
+
+- The purchase barcode scanner shows a flashlight toggle in the top-right of the
+  camera preview when the bound back camera reports a flash unit
+  (`app/src/main/java/com/example/ui/scan/BarcodeScanScreen.kt`). The toggle mirrors
+  CameraX's `cameraInfo.torchState`, so it reads "off" after the lifecycle stops the
+  camera (screen lock, app switch); a tap calls `CameraControl.enableTorch`.
+- UI-only: no Room, queue, sync, wire, or scan-result change.
+- Verified on the owner's SM-F966W with the sandbox build: toggle on/off, preview
+  brightens, Home and reopen shows "off", and leaving the scanner releases the camera.
+- Also in this release, build-only: `validateSandboxConfig` is compatible with the
+  Gradle configuration cache (PR #201, `075d484`); `assembleSandbox` no longer needs
+  `--no-configuration-cache`.
 
 ## Release 1.12.6 (code 64) - published 2026-09-23
 
@@ -473,7 +487,7 @@ submit; every later scan of that product resolves exactly. See ADR-049.
   and never stored; no GTIN is transmitted and there is no external product lookup.
   When the bound back camera reports a flash unit, a top-right toggle switches the torch
   through `CameraControl.enableTorch`; unbinding the camera on leaving the scanner turns it
-  off. Verified on an SM-F966W with the sandbox build (unreleased).
+  off. Verified on an SM-F966W with the sandbox build; ships in v1.12.7 (pending publication).
 - Purchase form state is hoisted from `PurchaseContent` into `CannsheetViewModel`
   (`PurchaseFormState`). This was a prerequisite - the scanner is a separate navigation
   destination whose entry disposes the composable - and it also fixes the form losing typed
