@@ -49,6 +49,13 @@ package `com.noamv.cannsheet.mobile`, versionCode 65, versionName 1.12.7, minSdk
 certificate SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
 matches v1.12.6, so the phone updates in place.
 
+### Outstanding
+
+- The owner installs 1.12.7 through Obtainium, then on the production app:
+  - taps the scanner's flashlight toggle and confirms the light turns on and off;
+  - confirms a chosen cancel window survives a restart (carried over from
+    v1.12.6, whose install was never confirmed).
+
 ## Cannsheet Mobile v1.12.6 (code 64) - the cancel window persists across restarts
 
 **Status: published 2026-09-23 01:40 UTC and independently verified. The owner
@@ -94,8 +101,8 @@ identical to v1.12.5, so it updates in place.
 
 ### Outstanding
 
-- The owner installs 1.12.6 through Obtainium and confirms a chosen cancel window
-  survives a restart on the production app.
+- Superseded: the install and cancel-window check now track v1.12.7 (see its
+  Outstanding list above).
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
