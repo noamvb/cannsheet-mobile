@@ -487,7 +487,7 @@ submit; every later scan of that product resolves exactly. See ADR-049.
   and never stored; no GTIN is transmitted and there is no external product lookup.
   When the bound back camera reports a flash unit, a top-right toggle switches the torch
   through `CameraControl.enableTorch`; unbinding the camera on leaving the scanner turns it
-  off. Verified on an SM-F966W with the sandbox build; released in v1.12.7.
+  off. Verified on an SM-F966W with the sandbox build; ships in v1.12.7 (pending publication).
 - Purchase form state is hoisted from `PurchaseContent` into `CannsheetViewModel`
   (`PurchaseFormState`). This was a prerequisite - the scanner is a separate navigation
   destination whose entry disposes the composable - and it also fixes the form losing typed
