@@ -104,12 +104,17 @@ androidComponents {
 val validateSandboxConfig by tasks.registering {
   group = "verification"
   description = "Validates the untracked sandbox Apps Script endpoint."
+  // Copy script-level values into locals: a doLast lambda that reads them directly captures
+  // the build script object, which the configuration cache cannot serialize.
+  val propertiesFile = sandboxPropertiesFile
+  val gasUrl = sandboxGasUrl
+  val sentinel = sandboxGasUrlSentinel
   doLast {
     val pattern = Regex("^https://script\\.google\\.com/macros/s/[^/]+/exec$")
-    check(sandboxPropertiesFile.isFile) {
+    check(propertiesFile.isFile) {
       "Missing sandbox.properties. Copy sandbox.properties.example and set CANNSHEET_SANDBOX_GAS_URL."
     }
-    check(pattern.matches(sandboxGasUrl) && sandboxGasUrl != sandboxGasUrlSentinel) {
+    check(pattern.matches(gasUrl) && gasUrl != sentinel) {
       "CANNSHEET_SANDBOX_GAS_URL must be an HTTPS script.google.com/macros/s/.../exec URL."
     }
   }
