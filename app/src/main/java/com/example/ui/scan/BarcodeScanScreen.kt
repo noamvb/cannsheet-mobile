@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
@@ -18,7 +19,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FlashlightOff
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalIconToggleButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +57,7 @@ object BarcodeScanTestTags {
     const val CANCEL = "scan_cancel"
     const val PREVIEW = "scan_preview"
     const val HINT = "scan_hint"
+    const val TORCH = "scan_torch"
 }
 
 /**
@@ -146,6 +153,14 @@ private fun CameraPreview(
     // Guards against a second delivery while the caller is still navigating away.
     val alreadyDelivered = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
 
+    // Set once the back camera is bound; the torch toggle only appears if it has a flash.
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var torchOn by remember { mutableStateOf(false) }
+
+    LaunchedEffect(camera, torchOn) {
+        camera?.cameraControl?.enableTorch(torchOn)
+    }
+
     val scanner = remember {
         BarcodeScanning.getClient(
             BarcodeScannerOptions.Builder()
@@ -192,7 +207,7 @@ private fun CameraPreview(
                         }
                     runCatching {
                         provider.unbindAll()
-                        provider.bindToLifecycle(
+                        camera = provider.bindToLifecycle(
                             lifecycleOwner,
                             CameraSelector.DEFAULT_BACK_CAMERA,
                             preview,
@@ -220,6 +235,23 @@ private fun CameraPreview(
                 onClick = onCancel,
                 modifier = Modifier.testTag(BarcodeScanTestTags.CANCEL),
             ) { Text("Enter it manually") }
+        }
+
+        // Unbinding the camera on dispose turns the torch off with it.
+        if (camera?.cameraInfo?.hasFlashUnit() == true) {
+            FilledTonalIconToggleButton(
+                checked = torchOn,
+                onCheckedChange = { torchOn = it },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+                    .testTag(BarcodeScanTestTags.TORCH),
+            ) {
+                Icon(
+                    imageVector = if (torchOn) Icons.Filled.FlashlightOn else Icons.Filled.FlashlightOff,
+                    contentDescription = if (torchOn) "Turn flashlight off" else "Turn flashlight on",
+                )
+            }
         }
     }
 }

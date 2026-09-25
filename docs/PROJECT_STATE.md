@@ -471,6 +471,9 @@ submit; every later scan of that product resolves exactly. See ADR-049.
   `com.google.mlkit:barcode-scanning` (works without Google Play Services), restricted to
   `FORMAT_DATA_MATRIX`, `FORMAT_UPC_A` and `FORMAT_EAN_13`. Frames are analysed in memory
   and never stored; no GTIN is transmitted and there is no external product lookup.
+  When the bound back camera reports a flash unit, a top-right toggle switches the torch
+  through `CameraControl.enableTorch`; unbinding the camera on leaving the scanner turns it
+  off. Verified on an SM-F966W with the sandbox build (unreleased).
 - Purchase form state is hoisted from `PurchaseContent` into `CannsheetViewModel`
   (`PurchaseFormState`). This was a prerequisite - the scanner is a separate navigation
   destination whose entry disposes the composable - and it also fixes the form losing typed
