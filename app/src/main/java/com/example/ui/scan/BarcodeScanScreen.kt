@@ -11,6 +11,7 @@ import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.TorchState
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.layout.Arrangement
@@ -157,8 +158,13 @@ private fun CameraPreview(
     var camera by remember { mutableStateOf<Camera?>(null) }
     var torchOn by remember { mutableStateOf(false) }
 
-    LaunchedEffect(camera, torchOn) {
-        camera?.cameraControl?.enableTorch(torchOn)
+    // Mirror CameraX's own torch state: the camera turns the torch off when the lifecycle
+    // stops (screen lock, app switch), and a local flag would stay stuck on.
+    DisposableEffect(camera, lifecycleOwner) {
+        val torchState = camera?.cameraInfo?.torchState
+        val observer = androidx.lifecycle.Observer<Int> { torchOn = it == TorchState.ON }
+        torchState?.observe(lifecycleOwner, observer)
+        onDispose { torchState?.removeObserver(observer) }
     }
 
     val scanner = remember {
@@ -241,7 +247,7 @@ private fun CameraPreview(
         if (camera?.cameraInfo?.hasFlashUnit() == true) {
             FilledTonalIconToggleButton(
                 checked = torchOn,
-                onCheckedChange = { torchOn = it },
+                onCheckedChange = { camera?.cameraControl?.enableTorch(it) },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(16.dp)
