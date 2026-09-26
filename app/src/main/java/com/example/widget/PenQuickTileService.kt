@@ -2,7 +2,7 @@ package com.example.widget
 
 import android.content.ComponentName
 import android.service.quicksettings.TileService
-import com.example.domain.PenQuickLogState
+import com.example.wear.WearPenStatePublisher
 import java.lang.ref.WeakReference
 
 /**
@@ -26,71 +26,22 @@ class PenQuickTileService : TileService() {
         super.onClick()
         val appContext = applicationContext
         PenWidgetRuntime.launchSerialized {
-            val state = PenWidgetStateRepository(appContext)
-            val config = PenWidgetConfigRepository(appContext)
-            val pending = state.read(PEN_TILE_WIDGET_ID).pendingCommit
-            if (pending != null) {
-                if (state.undo(PEN_TILE_WIDGET_ID, pending.commitId)) {
-                    PenWidgetRuntime.cancelCommitTimer(PEN_TILE_WIDGET_ID)
-                    PenWidgetScheduler.cancelCommit(appContext, PEN_TILE_WIDGET_ID)
-                }
-            } else {
-                submitDefaultPreset(appContext, state, config)
-            }
-            refreshTileFromState(appContext, state, config)
+            togglePenTile(appContext)
+            WearPenStatePublisher.publish(appContext)
+            refreshTileFromState(appContext)
         }
     }
 
     private fun refreshTile() {
         val appContext = applicationContext
         PenWidgetRuntime.launchSerialized {
-            refreshTileFromState(
-                appContext,
-                PenWidgetStateRepository(appContext),
-                PenWidgetConfigRepository(appContext),
-            )
+            refreshTileFromState(appContext)
         }
     }
 
-    private suspend fun refreshTileFromState(
-        context: android.content.Context,
-        state: PenWidgetStateRepository,
-        config: PenWidgetConfigRepository,
-    ) {
-        val stored = state.read(PEN_TILE_WIDGET_ID)
-        val instanceConfig = config.read(PEN_TILE_WIDGET_ID)
-        val penState = PenWidgetDataSource.loadPenState(context, instanceConfig.pinnedProductId)
-        val model = penTileState(penState, stored.pendingCommit)
+    private suspend fun refreshTileFromState(context: android.content.Context) {
+        val model = currentPenTileModel(context)
         applyTile(model.label.resolve(context), model.state)
-    }
-
-    private suspend fun submitDefaultPreset(
-        context: android.content.Context,
-        state: PenWidgetStateRepository,
-        config: PenWidgetConfigRepository,
-    ) {
-        val instanceConfig = config.read(PEN_TILE_WIDGET_ID)
-        val loaded = PenWidgetDataSource.loadPenState(context, instanceConfig.pinnedProductId)
-            as? PenQuickLogState.Loaded
-            ?: return
-        if (loaded.secondsPerUse == null) return
-
-        val seconds = penWidgetPresetSeconds(loaded).firstOrNull() ?: STEP_SECONDS
-        state.setDraftSeconds(PEN_TILE_WIDGET_ID, seconds)
-        val payload = submitPenLog(
-            context = context,
-            appWidgetId = PEN_TILE_WIDGET_ID,
-            seconds = seconds,
-            penState = loaded,
-            stateRepository = state,
-        ) ?: return
-
-        PenWidgetRuntime.scheduleCommitTimer(context, PEN_TILE_WIDGET_ID, payload.commitId)
-        // The timer is the primary path. The durable worker remains the recovery path after
-        // process death and must not be allowed to suppress the timer if enqueueing fails.
-        runCatching {
-            PenWidgetScheduler.scheduleCommit(context, PEN_TILE_WIDGET_ID, payload.commitId)
-        }
     }
 
     private fun applyTile(label: String, state: Int) {
@@ -114,9 +65,4 @@ class PenQuickTileService : TileService() {
             )
         }
     }
-}
-
-private fun PenWidgetText.resolve(context: android.content.Context): String = when (this) {
-    is PenWidgetText.Literal -> value
-    is PenWidgetText.Resource -> context.getString(resourceId, *arguments.toTypedArray())
 }

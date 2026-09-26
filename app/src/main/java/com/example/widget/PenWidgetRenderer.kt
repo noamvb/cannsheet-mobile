@@ -321,8 +321,3 @@ object PenWidgetRenderer {
         )
     }
 }
-
-private fun PenWidgetText.resolve(context: Context): String = when (this) {
-    is PenWidgetText.Literal -> value
-    is PenWidgetText.Resource -> context.getString(resourceId, *arguments.toTypedArray())
-}

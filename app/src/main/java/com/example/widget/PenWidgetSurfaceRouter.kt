@@ -6,13 +6,14 @@ import android.content.Context
 import com.example.widget.multi.MultiCartUpdater
 import com.example.widget.multi.MultiCartWidgetProvider
 import com.example.nfc.PEN_NFC_SURFACE_ID
+import com.example.wear.WearPenStatePublisher
 
 /**
  * Sends a commit-driven refresh to whichever surface owns [appWidgetId]. The
  * pen widget, the multi-cart widget, and the Quick Settings tile share one
  * per-id DataStore, so the commit coordinator needs one place that knows which
- * of them to redraw. Adding a surface means adding a branch here and nowhere
- * else.
+ * of them to redraw. The tile id also drives the paired watch tile. Adding a
+ * surface means adding a branch here and nowhere else.
  */
 object PenWidgetSurfaceRouter {
     suspend fun refresh(context: Context, appWidgetId: Int) {
@@ -25,12 +26,16 @@ object PenWidgetSurfaceRouter {
         }
         if (appWidgetId == PEN_TILE_WIDGET_ID) {
             PenQuickTileService.requestRefresh(appContext)
+            WearPenStatePublisher.publish(appContext)
             return
         }
         val multiCartIds = AppWidgetManager.getInstance(appContext)
             .getAppWidgetIds(ComponentName(appContext, MultiCartWidgetProvider::class.java))
         when (resolveSurface(appWidgetId, multiCartIds)) {
-            PenWidgetSurface.TILE -> PenQuickTileService.requestRefresh(appContext)
+            PenWidgetSurface.TILE -> {
+                PenQuickTileService.requestRefresh(appContext)
+                WearPenStatePublisher.publish(appContext)
+            }
             PenWidgetSurface.MULTI_CART -> MultiCartUpdater.update(appContext, appWidgetId)
             PenWidgetSurface.PEN -> PenWidgetUpdater.update(appContext, appWidgetId)
             PenWidgetSurface.NFC -> Unit
