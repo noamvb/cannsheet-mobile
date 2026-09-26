@@ -1,6 +1,6 @@
 # Project state
 
-Last updated: 2026-09-25 (v1.12.7, pending publication)
+Last updated: 2026-09-25 (v1.12.7)
 
 ## Unreleased - phone-side Wear OS pen bridge
 
@@ -10,7 +10,11 @@ Last updated: 2026-09-25 (v1.12.7, pending publication)
 - No Room, queue, sync, or wire change.
 - Added `play-services-wearable` 20.0.1.
 
-## Release 1.12.7 (code 65) - scanner flashlight toggle (PR #200, `1827165`)
+## Release 1.12.7 (code 65) - published 2026-09-25
+
+Tag `v1.12.7` points at `4f690b2`; release run `36095586189`; APK SHA-256
+`464eb71709055a21180ce9bf2ee71090289da323d6ef5d2eaf7dfd8c9a94c5b9`, signing
+certificate unchanged. The feature merged as #200 `1827165`.
 
 - The purchase barcode scanner shows a flashlight toggle in the top-right of the
   camera preview when the bound back camera reports a flash unit
@@ -495,7 +499,7 @@ submit; every later scan of that product resolves exactly. See ADR-049.
   and never stored; no GTIN is transmitted and there is no external product lookup.
   When the bound back camera reports a flash unit, a top-right toggle switches the torch
   through `CameraControl.enableTorch`; unbinding the camera on leaving the scanner turns it
-  off. Verified on an SM-F966W with the sandbox build; ships in v1.12.7 (pending publication).
+  off. Verified on an SM-F966W with the sandbox build; released in v1.12.7.
 - Purchase form state is hoisted from `PurchaseContent` into `CannsheetViewModel`
   (`PurchaseFormState`). This was a prerequisite - the scanner is a separate navigation
   destination whose entry disposes the composable - and it also fixes the form losing typed

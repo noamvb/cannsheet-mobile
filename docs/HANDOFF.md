@@ -6,8 +6,8 @@ Repository: public `noamvb/cannsheet-mobile`
 
 ## Cannsheet Mobile v1.12.7 (code 65) - flashlight toggle in the barcode scanner
 
-**Status: PRs #200 and #201 squash-merged; version bumped to 1.12.7 (65);
-publication pending. Release provenance is recorded after publication.**
+**Status: published 2026-09-25 04:50 UTC and independently verified. The owner
+updates through Obtainium; not yet confirmed installed on the phone.**
 
 - Feature (#200 `1827165`): a torch toggle in the purchase barcode scanner, shown
   only when the back camera has a flash, driven by CameraX's `torchState`. A Codex
@@ -21,7 +21,40 @@ publication pending. Release provenance is recorded after publication.**
   tests/test_backend_sync_benchmark.py` ran 13 tests, OK. No new automated test for
   the torch (needs a real camera); verified on the owner's phone with the sandbox
   build and confirmed by the owner.
-- Outstanding: publish v1.12.7 and record its provenance here.
+
+### Release provenance
+
+Pull requests merged: #200 `1827165` (the flashlight toggle), #201 `075d484`
+(sandbox configuration-cache fix) and #202 `4f690b2` (version 1.12.7, code 65,
+and docs). PR checks were green on all five jobs for each. A Codex review comment
+on #202 (the docs called the toggle released before publication) was fixed before
+merge.
+
+Main run `36095113313` on `4f690b2` (push event) passed on its first attempt, with
+all six required jobs `success`. An earlier main run on `075d484` failed only on
+Emulator API 36 in `ProductTypeQuantityEditorTest.switchingTypeReseedsTheInputFields`
+(`Failed to inject touch input`), the same emulator flake seen in v1.12.6; the
+next main run, on `1827165`, passed all six jobs.
+
+The annotated tag `v1.12.7` points at `4f690b2`, the exact validated commit and the
+tip of `origin/main` when tagged. Release run `36095586189` was green on all three
+jobs.
+
+The published assets are `Cannsheet-Mobile-1.12.7.apk` (38,036,533 bytes, SHA-256
+`464eb71709055a21180ce9bf2ee71090289da323d6ef5d2eaf7dfd8c9a94c5b9`) and
+`Cannsheet-Mobile-1.12.7.apk.sha256`, on `noamvb/cannsheet-mobile-releases`.
+Downloaded independently of CI and verified against the `.sha256`; `aapt` reports
+package `com.noamv.cannsheet.mobile`, versionCode 65, versionName 1.12.7, minSdk
+24, targetSdk 36; `apksigner` verifies APK Signature Scheme v2. The signer
+certificate SHA-256 `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`
+matches v1.12.6, so the phone updates in place.
+
+### Outstanding
+
+- The owner installs 1.12.7 through Obtainium, then on the production app:
+  - taps the scanner's flashlight toggle and confirms the light turns on and off;
+  - confirms a chosen cancel window survives a restart (carried over from
+    v1.12.6, whose install was never confirmed).
 
 ## Cannsheet Mobile v1.12.6 (code 64) - the cancel window persists across restarts
 
@@ -68,8 +101,8 @@ identical to v1.12.5, so it updates in place.
 
 ### Outstanding
 
-- The owner installs 1.12.6 through Obtainium and confirms a chosen cancel window
-  survives a restart on the production app.
+- Superseded: the install and cancel-window check now track v1.12.7 (see its
+  Outstanding list above).
 
 ## Cannsheet Mobile v1.12.5 (code 63) - sync no longer sends `"clientState": null`
 
