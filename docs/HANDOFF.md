@@ -1,8 +1,26 @@
 # Current handoff
 
-Last updated: 2026-09-25
+Last updated: 2026-09-27
 
 Repository: public `noamvb/cannsheet-mobile`
+
+## In progress - Wear OS pen tile (ADR-057)
+
+**Status: PR #204 (phone-side bridge) open, unreleased. The watch module and the
+release-pipeline change are not started.**
+
+- Plan: PR A #204 adds `WearPenListenerService`, which runs the Quick Settings tile
+  toggle on `PEN_TILE_WIDGET_ID` for Data Layer messages `/cannsheet/pen/tap` and
+  `/cannsheet/pen/refresh`, and `WearPenStatePublisher`, which publishes DataItem
+  `/cannsheet/pen/state` (`v`, `label`, `action`, `stampMillis`). PR B adds a
+  `:wear` module (Galaxy Watch 4+, minSdk 30, same application ID, sandbox build
+  type) with the tile. PR C publishes a signed watch APK from the release workflow.
+- The listener blocks its callback until the serialized toggle finishes, so a cold
+  process woken by the watch cannot die before the pending payload is durable.
+- Evidence for #204: `./gradlew --no-daemon --rerun-tasks --no-configuration-cache
+  testDebugUnitTest lintDebug assembleDebug` passed; `WearPenProtocolTest` 7 tests,
+  0 failures; PR checks green on all five jobs. Not exercised on a device: no watch
+  app exists yet.
 
 ## Cannsheet Mobile v1.12.7 (code 65) - flashlight toggle in the barcode scanner
 
