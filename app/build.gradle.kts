@@ -152,6 +152,7 @@ dependencies {
   implementation(libs.kotlinx.serialization.json)
   implementation(libs.logging.interceptor)
   implementation(libs.mlkit.barcode.scanning)
+  implementation(libs.play.services.wearable)
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.retrofit)

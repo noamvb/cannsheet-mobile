@@ -2502,3 +2502,19 @@ permanently dead chain.
   key and keep the previous default of 5, so no migration is needed. Until
   DataStore emits just after launch (milliseconds), the countdown reads 5.
 
+## ADR-057: The Wear OS tile is a remote for the Quick Settings tile
+
+- Status: Accepted
+- Date: 2026-09-26
+- Context: The owner wants to log the loaded pen from a Galaxy Watch. The phone already has a deferred,
+  undoable one-tap pen log behind the Quick Settings tile, and all queue writes must stay on the phone
+  under `SyncEngine`.
+- Decision: The watch never calls the backend and holds no queue. It sends Data Layer messages
+  `/cannsheet/pen/tap` and `/cannsheet/pen/refresh`; `WearPenListenerService` on the phone runs the same
+  toggle as the Quick Settings tile on the shared `PEN_TILE_WIDGET_ID`, then publishes DataItem
+  `/cannsheet/pen/state` (`v`, `label`, `action` = log|undo|unavailable, `stampMillis`). Publishing is
+  fire-and-forget and failure-tolerant.
+- Consequences: A watch tap and a QS-tile tap are the same surface and can undo each other. With the phone
+  out of range the watch cannot log; nothing is queued on the watch. The phone gains a
+  `play-services-wearable` dependency. The watch APK must share the application ID and signing
+  certificate for the Data Layer to connect.

@@ -2,6 +2,14 @@
 
 Last updated: 2026-09-25 (v1.12.7)
 
+## Unreleased - phone-side Wear OS pen bridge
+
+- Added phone Data Layer handling for watch tap/refresh messages and state publication for the shared Quick Settings pen tile.
+- Extracted the tile toggle and model computation for reuse; watch taps use the same deferred, undoable action.
+- The separate watch module and tile UI do not exist yet.
+- No Room, queue, sync, or wire change.
+- Added `play-services-wearable` 20.0.1.
+
 ## Release 1.12.7 (code 65) - published 2026-09-25
 
 Tag `v1.12.7` points at `4f690b2`; release run `36095586189`; APK SHA-256
