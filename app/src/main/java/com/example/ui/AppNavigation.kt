@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -206,7 +207,7 @@ private fun AppBottomNavigation(
             NavigationBarItem(
                 modifier = Modifier.testTag(AdaptiveNavigationTestTags.destination(screen.route)),
                 icon = { AppNavigationIcon(screen, pendingCount) },
-                label = { Text(screen.title) },
+                label = { Text(screen.title, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
                 colors = NavigationBarItemDefaults.colors(
@@ -244,7 +245,7 @@ private fun AppNavigationRail(
             NavigationRailItem(
                 modifier = Modifier.testTag(AdaptiveNavigationTestTags.destination(screen.route)),
                 icon = { AppNavigationIcon(screen, pendingCount) },
-                label = { Text(screen.title) },
+                label = { Text(screen.title, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
                 colors = NavigationRailItemDefaults.colors(

@@ -161,7 +161,7 @@ internal fun SettingsContent(
         SettingsValueRow("Connection", syncStatus ?: "Ready")
         SettingsValueRow(
             label = "Pending actions",
-            value = pendingCount.toString().padStart(2, '0'),
+            value = pendingCount.toString(),
             valueTag = "settings-pending-count",
         )
         SettingsSwitchRow(

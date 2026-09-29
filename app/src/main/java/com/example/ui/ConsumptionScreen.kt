@@ -662,7 +662,7 @@ fun ConsumptionContent(
                             modifier = Modifier.weight(1f),
                         )
                         Text(
-                            text = "CONFIRMED",
+                            text = "SYNCED",
                             style = MaterialTheme.typography.labelSmall.copy(fontFamily = PlexMono).tabular(),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Bold,
