@@ -1,3 +1,22 @@
+# Latest handoff
+
+## 2026-09-29: "Ledger Green" redesign implemented on `redesign/ledger` (not pushed)
+
+Direction A · Ledger Green (`docs/design/mockups/direction-a.html`, tokens in
+`docs/design/DESIGN.md`) was chosen on the owner's behalf overnight; B and C remain in
+`docs/design/mockups/`. Branch `redesign/ledger` starts from `origin/main` f8fb572.
+
+- Commits: mockups + PRODUCT.md, IBM Plex fonts, Roborazzi 1.75.0 baseline (14 images),
+  theme (`CannsheetTheme`, no dynamic colour), Log + shell, Purchase, Insights, Settings,
+  Assistant, launcher icon + widgets + notification tint.
+- Verified locally: 735 unit tests, `verifyRoborazziDebug --rerun` 14/14, lintDebug,
+  compileDebugAndroidTestKotlin, assembleSandbox (installed on the owner's phone).
+- Not done: `connectedDebugAndroidTest` on an emulator; duplicate in-screen titles under
+  the new TopAppBar (Log shows "Log" twice); after-audit; version bump; push/PR/release
+  (the live release needs the owner's yes).
+- Clock seams in ConsumptionScreen/SettingsScreen take `nowMillisProvider: () -> Long`
+  (java.time.Instant needs API 26; minSdk is 24).
+
 # Current handoff
 
 Last updated: 2026-09-27
