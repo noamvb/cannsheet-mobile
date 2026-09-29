@@ -1,8 +1,6 @@
 package com.example.ui.assistant
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -20,13 +18,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.ui.theme.PlexMono
 import com.noamv.localllm.contract.v2.AssistantTerminalStatus
 import com.noamv.localllm.contract.v2.SentenceCitation
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +70,10 @@ fun AssistantScreen(
             )
         },
         bottomBar = {
-            Surface(tonalElevation = 2.dp) {
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.imePadding(),
+            ) {
                 Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -84,11 +86,11 @@ fun AssistantScreen(
                             placeholder = { Text("Ask about spend, logs, trends...") },
                             modifier = Modifier.weight(1f),
                             maxLines = 4,
-                            shape = RoundedCornerShape(24.dp),
+                            shape = MaterialTheme.shapes.medium,
                             enabled = !uiState.isGenerating,
                         )
 
-                        IconButton(
+                        FilledIconButton(
                             onClick = {
                                 if (inputText.isNotBlank()) {
                                     viewModel.askQuestion(inputText)
@@ -97,22 +99,13 @@ fun AssistantScreen(
                             },
                             enabled = inputText.isNotBlank() && !uiState.isGenerating,
                             modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (inputText.isNotBlank() && !uiState.isGenerating)
-                                        MaterialTheme.colorScheme.primary
-                                    else
-                                        MaterialTheme.colorScheme.surfaceVariant
-                                ),
+                                .size(48.dp),
+                            shape = CircleShape,
                         ) {
                             Icon(
                                 Icons.AutoMirrored.Filled.Send,
                                 contentDescription = "Send",
-                                tint = if (inputText.isNotBlank() && !uiState.isGenerating)
-                                    MaterialTheme.colorScheme.onPrimary
-                                else
-                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = MaterialTheme.colorScheme.onPrimary,
                             )
                         }
                     }
@@ -129,7 +122,7 @@ fun AssistantScreen(
                                 Icon(
                                     Icons.Filled.AutoAwesome,
                                     contentDescription = null,
-                                    tint = if (uiState.allowCrossApp) MaterialTheme.colorScheme.primary else Color.Gray,
+                                    tint = if (uiState.allowCrossApp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             },
                         )
@@ -191,16 +184,16 @@ fun ChatMessageItem(
     ) {
         Surface(
             shape = RoundedCornerShape(
-                topStart = 16.dp,
-                topEnd = 16.dp,
-                bottomStart = if (isUser) 16.dp else 4.dp,
-                bottomEnd = if (isUser) 4.dp else 16.dp,
+                topStart = MaterialTheme.shapes.medium.topStart,
+                topEnd = MaterialTheme.shapes.medium.topEnd,
+                bottomStart = if (isUser) MaterialTheme.shapes.medium.bottomStart else MaterialTheme.shapes.extraSmall.bottomStart,
+                bottomEnd = if (isUser) MaterialTheme.shapes.extraSmall.bottomEnd else MaterialTheme.shapes.medium.bottomEnd,
             ),
             color = if (isUser)
                 MaterialTheme.colorScheme.primaryContainer
             else
-                MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.widthIn(max = 320.dp),
+                MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth(0.85f),
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 if (message.isStreaming && message.text.isBlank()) {
@@ -216,7 +209,7 @@ fun ChatMessageItem(
                 } else {
                     Text(
                         text = message.text,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodyLarge,
                         color = if (isUser)
                             MaterialTheme.colorScheme.onPrimaryContainer
                         else
@@ -237,8 +230,7 @@ fun ChatMessageItem(
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         "Grounded Evidence Citations:",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelMedium,
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -255,6 +247,12 @@ fun ChatMessageItem(
                 }
             }
         }
+        Text(
+            text = "${if (isUser) "You" else "On-device"} · ${message.timestamp.asAssistantTime()}",
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = PlexMono),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -276,7 +274,6 @@ fun ValidationFailedWarningCard(message: ChatMessage) {
                     "Output Failed Verification",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onErrorContainer,
-                    fontWeight = FontWeight.Bold,
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
@@ -316,10 +313,10 @@ fun CitationDetailDialog(
         title = { Text("Citation Details") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Cited Sentence:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("Cited Sentence:", style = MaterialTheme.typography.labelMedium)
                 Text(citation.sentence, style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(8.dp))
-                Text("Supporting Evidence Fact IDs:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("Supporting Evidence Fact IDs:", style = MaterialTheme.typography.labelMedium)
                 citation.citedFactIds.forEach { factId ->
                     Text("• $factId", style = MaterialTheme.typography.bodySmall)
                 }
@@ -345,50 +342,39 @@ fun AssistantEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Filled.AutoAwesome,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(modifier = Modifier.height(16.dp))
         Text(
-            "Cannsheet Assistant",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "Ask questions about your spend, habits, and product history with 100% verified on-device privacy.",
-            style = MaterialTheme.typography.bodyMedium,
+            "What would you like to review?",
+            style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         Spacer(modifier = Modifier.height(24.dp))
-        Text(
-            "Suggested prompts:",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Spacer(modifier = Modifier.height(8.dp))
         val suggestions = listOf(
+            "Summarize recent activity",
             "How much have I spent over the last 30 days?",
-            "What is my most frequently logged product type?",
             "Which days of the week do I log the most?",
         )
         suggestions.forEach { suggestion ->
-            ElevatedCard(
+            Surface(
+                onClick = { onSuggestedPrompt(suggestion) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 4.dp)
-                    .clickable { onSuggestedPrompt(suggestion) },
+                    .heightIn(min = 56.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
             ) {
                 Text(
                     text = suggestion,
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                 )
             }
         }
     }
 }
+
+private fun Long.asAssistantTime(): String = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(this))
