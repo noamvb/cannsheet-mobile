@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "actions": [
+    {
+      "id": "push-redesign-ledger",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local redesign/ledger to origin/redesign/ledger",
+      "remote": "origin",
+      "branch": "redesign/ledger"
+    }
+  ]
+}
