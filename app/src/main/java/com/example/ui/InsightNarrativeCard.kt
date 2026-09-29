@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -384,7 +384,11 @@ internal fun InsightNarrativeCard(
     val loading = cardBody is NarrativeCardBody.Loading
     val body = (cardBody as? NarrativeCardBody.Text)?.text.orEmpty()
 
-    Card(modifier = modifier.fillMaxWidth().testTag("insights-narrative")) {
+    Surface(
+        modifier = modifier.fillMaxWidth().testTag("insights-narrative"),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),

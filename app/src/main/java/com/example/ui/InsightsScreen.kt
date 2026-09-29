@@ -30,12 +30,14 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +48,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -63,6 +66,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.SemanticsPropertyKey
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,6 +83,7 @@ import com.example.data.Product
 import com.example.data.QualityWarningsDto
 import com.example.domain.ProductRunway
 import com.example.domain.RunwayPace
+import com.example.ui.theme.tabular
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -87,6 +92,7 @@ import java.util.Calendar
 import java.util.TimeZone
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 fun InsightsScreen(
     viewModel: CannsheetViewModel,
     windowWidth: WindowWidth = WindowWidth.COMPACT,
@@ -108,6 +114,7 @@ fun InsightsScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text("Insights") })
         TabRow(selectedTabIndex = tab) {
             Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Overview") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("History") })
@@ -124,6 +131,7 @@ fun InsightsScreen(
                 // The unmasked value: null means the queue depth is unknown, which must
                 // suppress the summary just as a non-zero count does.
                 pendingActionCount = runwayPresentation.pendingActionCount,
+                includeTopBar = false,
             )
         } else {
             HistoryContent(
@@ -145,6 +153,7 @@ fun InsightsScreen(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 internal fun InsightsContent(
     state: InsightsUiState,
     pendingCount: Int,
@@ -158,6 +167,7 @@ internal fun InsightsContent(
     // suppress the generated summary exactly as a non-zero count does. Defaulted from
     // pendingCount so existing callers and tests are unaffected.
     pendingActionCount: Int? = pendingCount,
+    includeTopBar: Boolean = true,
 ) {
     var showCustom by rememberSaveable { mutableStateOf(false) }
     var selectedProductId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -220,13 +230,13 @@ internal fun InsightsContent(
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
         item {
+            if (includeTopBar) TopAppBar(title = { Text("Insights") })
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Column {
-                    Text("Insights", style = MaterialTheme.typography.headlineMedium)
                     Text(
                         "${data.range.from} – ${data.range.to} · ${analyticsTimeZoneLabel(data.timeZone)} time",
                         style = MaterialTheme.typography.bodySmall,
@@ -261,8 +271,9 @@ internal fun InsightsContent(
             }
         }
         item {
-            MetricGrid(data)
+            HeadlineFigure(data, state.displayedRange)
         }
+        item { MetricGrid(data) }
         item {
             SectionCard("Activity") {
                 val buckets = bucketActivity(data.dailyActivity)
@@ -540,18 +551,22 @@ internal fun RunwaySection(
         rows.size > MAX_RUNWAY_ROWS || ready.diagnostics.size > MAX_RUNWAY_DIAGNOSTICS
     Column(Modifier.testTag(InsightsRunwayTestTags.SECTION)) {
         SectionCard("Runway") {
-            displayedRows.forEachIndexed { index, row ->
+        displayedRows.forEachIndexed { index, row ->
                 val (product, runway) = row
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(InsightsRunwayTestTags.row(product.productId)),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                Row(
+                    modifier = Modifier.fillMaxWidth().testTag(InsightsRunwayTestTags.row(product.productId)),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(product.name, fontWeight = FontWeight.SemiBold)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(product.name, fontWeight = FontWeight.SemiBold)
+                        Text(runwaySummaryText(runway), style = MaterialTheme.typography.bodySmall)
+                    }
                     Text(
-                        runwaySummaryText(runway),
-                        style = MaterialTheme.typography.bodySmall,
+                        "${formatRunwayNumber(runway.estimatedRemainingToTypicalUses)} uses",
+                        modifier = Modifier.testTag("${InsightsRunwayTestTags.row(product.productId)}-figure"),
+                        style = MaterialTheme.typography.bodyMedium.tabular(),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
                     )
                 }
                 if (index != displayedRows.lastIndex) {
@@ -863,41 +878,59 @@ internal fun HistoryContent(
 
 @Composable
 private fun MetricGrid(data: InsightsResponseDto) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricCard("Logs", data.overview.logCount.toString(), Modifier.weight(1f))
-            MetricCard("Active days", data.overview.activeDayCount.toString(), Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricCard("Products used", data.overview.distinctProductCount.toString(), Modifier.weight(1f))
-            MetricCard(
-                "Days since last log",
-                data.overview.daysSinceLastLog?.toString() ?: "—",
-                Modifier.weight(1f),
-            )
-        }
+    Column {
+        LedgerValueRow("Active days", data.overview.activeDayCount.toString())
+        LedgerValueRow("Products used", data.overview.distinctProductCount.toString())
+        LedgerValueRow("Days since last log", data.overview.daysSinceLastLog?.toString() ?: "—")
     }
 }
 
 @Composable
-private fun MetricCard(label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier) {
-        Column(Modifier.padding(14.dp)) {
-            Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text(label, style = MaterialTheme.typography.bodySmall)
-        }
+private fun HeadlineFigure(data: InsightsResponseDto, range: InsightsRange) {
+    val headlineStyle = MaterialTheme.typography.displaySmall.tabular()
+    val days = when (range) {
+        is InsightsRange.LastDays -> range.days
+        is InsightsRange.Default -> 180
+        else -> data.range.dayCount
+    }
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("CONSUMPTION · $days DAYS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "${formatWholeNumber(data.overview.logCount)} uses",
+            modifier = Modifier.testTag("insights-headline-number")
+                .semantics {
+                    this[INSIGHTS_FONT_FEATURE_SETTINGS] = headlineStyle.fontFeatureSettings.orEmpty()
+                },
+            style = headlineStyle,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text("— vs previous period", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(title, style = MaterialTheme.typography.titleLarge)
-            content()
-        }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(title.uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        content()
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
+
+@Composable
+private fun LedgerValueRow(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 42.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(value, style = MaterialTheme.typography.bodyMedium.tabular(), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+internal val INSIGHTS_FONT_FEATURE_SETTINGS = SemanticsPropertyKey<String>("FontFeatureSettings")
 
 @Composable
 private fun NativeBarChart(
@@ -911,38 +944,43 @@ private fun NativeBarChart(
         return
     }
     val max = values.maxOf { it.second }.coerceAtLeast(1)
-    var selected by remember(values) { mutableStateOf<Pair<String, Int>?>(null) }
-    selected?.let { Text("${it.first}: ${valueLabel(it.second)}") }
+    val chartDescription = "$description: " + values.joinToString("; ") {
+        "${it.first}, ${valueLabel(it.second)}"
+    }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val chartWidth = maxOf(maxWidth, minimumCellWidth * values.size)
-        Box(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        Box(
+            Modifier.fillMaxWidth()
+                .semantics(mergeDescendants = true) { contentDescription = chartDescription }
+                .testTag("insights-chart-${description.substringBefore(' ').lowercase()}"),
+        ) {
             Row(
                 Modifier.width(chartWidth).heightIn(min = 130.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                values.forEach { (label, value) ->
+                values.forEachIndexed { index, (label, value) ->
                     Column(
-                        Modifier
-                            .width(minimumCellWidth)
-                            .clickable { selected = label to value }
-                            .semantics {
-                                contentDescription = "$description, $label, ${valueLabel(value)}"
-                            },
+                        Modifier.width(minimumCellWidth),
                         horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom,
                     ) {
                         Text(
                             valueLabel(value),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
-                            style = MaterialTheme.typography.labelSmall,
+                            style = MaterialTheme.typography.labelSmall.tabular(),
                         )
                         Box(
                             Modifier
                                 .width(24.dp)
                                 .height((20 + 80 * value / max).dp)
                                 .clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))
-                                .background(MaterialTheme.colorScheme.primary),
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(
+                                        alpha = if (index == values.lastIndex) 1f else 0.8f,
+                                    ),
+                                ),
                         )
                         Text(
                             label,
@@ -991,32 +1029,28 @@ private fun RangeChips(
     onSelect: (InsightsRange) -> Unit,
     onCustom: () -> Unit,
 ) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(
-            selected = selected == InsightsRange.LastDays(30),
-            onClick = { onSelect(InsightsRange.LastDays(30)) },
-            label = { Text("30 days") },
-        )
-        FilterChip(
-            selected = selected == InsightsRange.LastDays(90),
-            onClick = { onSelect(InsightsRange.LastDays(90)) },
-            label = { Text("90 days") },
-        )
-        FilterChip(
-            selected = selected is InsightsRange.Default,
-            onClick = { onSelect(InsightsRange.Default) },
-            label = { Text("180 days") },
-        )
-        FilterChip(
-            selected = selected is InsightsRange.All,
-            onClick = { onSelect(InsightsRange.All) },
-            label = { Text("All") },
-        )
-        FilterChip(
-            selected = selected is InsightsRange.Custom,
-            onClick = onCustom,
-            label = { Text("Custom") },
-        )
+    val choices = listOf(
+        Triple("30d", selected == InsightsRange.LastDays(30), { onSelect(InsightsRange.LastDays(30)) }),
+        Triple("90d", selected == InsightsRange.LastDays(90), { onSelect(InsightsRange.LastDays(90)) }),
+        Triple("180d", selected is InsightsRange.Default, { onSelect(InsightsRange.Default) }),
+        Triple("All", selected is InsightsRange.All, { onSelect(InsightsRange.All) }),
+        Triple(
+            "Custom",
+            selected is InsightsRange.Custom ||
+                (selected is InsightsRange.LastDays && selected.days !in setOf(30, 90)),
+            onCustom,
+        ),
+    )
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        choices.forEachIndexed { index, (label, isSelected, action) ->
+            SegmentedButton(
+                selected = isSelected,
+                onClick = action,
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = choices.size),
+                modifier = Modifier.weight(1f).testTag("insights-range-$label"),
+                label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+            )
+        }
     }
 }
 
@@ -1494,7 +1528,7 @@ private fun HistoryRow(event: HistoryEventDto, onClick: () -> Unit) {
 
 @Composable
 private fun PendingBanner(count: Int, isSyncing: Boolean, onSync: () -> Unit) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)) {
+    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.fillMaxWidth().padding(12.dp)) {
             Text("$count unsynced action${if (count == 1) "" else "s"} not included")
             TextButton(onClick = onSync, enabled = !isSyncing) {
@@ -1535,7 +1569,7 @@ private fun SnapshotNotice(
 
 @Composable
 private fun NoticeCard(title: String, body: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+    Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.medium) {
         Column(Modifier.padding(12.dp)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(body, style = MaterialTheme.typography.bodySmall)
