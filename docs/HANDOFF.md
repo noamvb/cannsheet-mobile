@@ -20,9 +20,11 @@ each applied row to Keep and note the commit in its alternative cell.
   Assistant, launcher icon + widgets + notification tint.
 - Verified locally: 735 unit tests, `verifyRoborazziDebug --rerun` 14/14, lintDebug,
   compileDebugAndroidTestKotlin, assembleSandbox (installed on the owner's phone).
-- Not done: `connectedDebugAndroidTest` on an emulator; duplicate in-screen titles under
-  the new TopAppBar (Log shows "Log" twice); after-audit; version bump; push/PR/release
-  (the live release needs the owner's yes).
+- Also verified: `connectedDebugAndroidTest` 179/179 on a fresh API 36 AVD `redesign36`
+  (the older `cannsheet36` AVD holds a release-signed install, so debug tests cannot
+  install there); emulator review in light, dark and font scale 1.3. The shell-level
+  TopAppBar was removed (each screen owns its header).
+- Not done: version bump; push/PR/release (the live release needs the owner's yes).
 - Clock seams in ConsumptionScreen/SettingsScreen take `nowMillisProvider: () -> Long`
   (java.time.Instant needs API 26; minSdk is 24).
 
