@@ -19,7 +19,7 @@ certificate unchanged.
 - UI-only: no Room, queue, sync, wire, endpoint or application-ID change.
 - Also ships the unreleased phone-side Wear OS pen bridge below (#204).
 
-## Unreleased - phone-side Wear OS pen bridge
+## Phone-side Wear OS pen bridge - shipped in 1.13.0 (#204 `f8fb572`)
 
 - Added phone Data Layer handling for watch tap/refresh messages and state publication for the shared Quick Settings pen tile.
 - Extracted the tile toggle and model computation for reuse; watch taps use the same deferred, undoable action.

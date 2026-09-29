@@ -62,10 +62,10 @@ Last updated: 2026-09-27
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## In progress - Wear OS pen tile (ADR-057)
+## In progress - Wear OS pen tile (ADR-057): watch module next
 
-**Status: PR #204 (phone-side bridge) open, unreleased. The watch module and the
-release-pipeline change are not started.**
+**Status: PR #204 (phone-side bridge) merged as `f8fb572` and shipped in v1.13.0.
+The watch module (PR B) and the release-pipeline change (PR C) are not started.**
 
 - Plan: PR A #204 adds `WearPenListenerService`, which runs the Quick Settings tile
   toggle on `PEN_TILE_WIDGET_ID` for Data Layer messages `/cannsheet/pen/tap` and
