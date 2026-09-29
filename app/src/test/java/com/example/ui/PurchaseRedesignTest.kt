@@ -67,7 +67,7 @@ class PurchaseRedesignTest {
 
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW)
             .assertIsDisplayed()
-            .assertTextContains("Estimated total with tax · $36.48")
+            .assertTextContains("Estimated total with 14% tax · $36.48")
     }
 
     @Test

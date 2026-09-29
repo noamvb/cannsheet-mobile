@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -159,6 +160,57 @@ class LogRedesignTest {
         assertTrue(
             "Expected PlexMono or tnum feature settings, got: fontFamily=${style.fontFamily}, fontFeatureSettings=${style.fontFeatureSettings}",
             style.fontFamily == PlexMono || style.fontFeatureSettings?.contains("tnum") == true,
+        )
+    }
+
+    @Test
+    fun selectedSearchProductReplacesFifthLedgerRowWhenSixRecentsExist() {
+        val products = (1..7).map { index ->
+            Product(id = "p$index", name = "Product $index", type = "Flower", status = 0, grams = 1.0, totalUses = 0.0)
+        }
+        val recents = products.take(6).mapIndexed { index, product -> RecentProduct(product, index + 0.25) }
+        composeRule.setContent {
+            CannsheetTheme {
+                Surface {
+                    ConsumptionContent(
+                        allProducts = products,
+                        recentProducts = recents,
+                        quantityPresets = listOf(1.0),
+                        includeUnopened = false,
+                        formState = ConsumptionFormState(selectedProductId = "p7"),
+                        onSelectProduct = {}, onQuantityChange = {}, onIncludeUnopenedChange = {},
+                        onLog = { _, _, _, _, _ -> }, onLogBorrowed = { _, _, _, _, _ -> },
+                        onFinishWithoutConsumption = {},
+                    )
+                }
+            }
+        }
+        composeRule.onNodeWithTag(ConsumptionLedgerTestTags.productRow("p7")).assertIsDisplayed().assertIsSelected()
+    }
+
+    @Test
+    fun recentLedgerRowShowsLastQuantityAndNonRecentDoesNot() {
+        val recent = sampleProducts[0]
+        composeRule.setContent {
+            CannsheetTheme {
+                Surface {
+                    ConsumptionContent(
+                        allProducts = sampleProducts,
+                        recentProducts = listOf(RecentProduct(recent, 0.75)),
+                        quantityPresets = listOf(1.0), includeUnopened = false,
+                        formState = ConsumptionFormState(selectedProductId = recent.id),
+                        onSelectProduct = {}, onQuantityChange = {}, onIncludeUnopenedChange = {},
+                        onLog = { _, _, _, _, _ -> }, onLogBorrowed = { _, _, _, _, _ -> },
+                        onFinishWithoutConsumption = {},
+                    )
+                }
+            }
+        }
+        composeRule.onNode(hasText("Last: 0.75")).assertExists()
+        assertEquals(
+            "Only the recent product row should show a last quantity",
+            1,
+            composeRule.onAllNodes(hasText("Last:", substring = true)).fetchSemanticsNodes().size,
         )
     }
 

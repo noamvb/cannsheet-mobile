@@ -334,12 +334,12 @@ class PurchaseContentTest {
         // The supporting text merges into the field's semantics node, so it is only
         // addressable on its own in the unmerged tree.
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
-            .assertTextEquals("Estimated total with tax · \$56.50")
+            .assertTextEquals("Estimated total with 13% tax · \$56.50")
 
         composeRule.onNodeWithTag(PurchaseContentTestTags.PRICE_BASIS_POST_TAX).performClick()
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST).assertTextContains("50")
         composeRule.onNodeWithTag(PurchaseContentTestTags.COST_TAX_PREVIEW, useUnmergedTree = true)
-            .assertTextEquals("Estimated total before tax · \$44.25")
+            .assertTextEquals("Estimated total before 13% tax · \$44.25")
     }
 
     private fun setPurchaseContent(
