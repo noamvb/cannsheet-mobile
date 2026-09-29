@@ -1,5 +1,18 @@
 # Latest handoff
 
+## 2026-09-29: v1.13.1 (code 67) - restore behaviour the redesign dropped (pending publication)
+
+An agy parity audit compared v1.12.7 with v1.13.0 and found four behaviours the Ledger Green
+redesign had dropped. All four are restored, each with a test that fails without the fix:
+- The selected product always has a Log row. When the 5-row list would drop it, it replaces
+  the 5th row. The row is also marked selected for TalkBack.
+- Recent products show "Last: <quantity>" again.
+- Bar charts are tappable again ("<label>: <value>") and each bar has its own TalkBack label.
+  The chart container no longer merges descendants.
+- The purchase tax preview shows the rate again ("Estimated total with 13% tax · $x").
+
+Release provenance gets recorded here after publication.
+
 ## 2026-09-29: Cannsheet Mobile v1.13.0 (code 66) - "Ledger Green" redesign, published
 
 **Status: published 2026-09-29 19:33 UTC and independently verified. The owner

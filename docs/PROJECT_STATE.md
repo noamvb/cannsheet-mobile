@@ -1,6 +1,13 @@
 # Project state
 
-Last updated: 2026-09-29 (v1.13.0)
+Last updated: 2026-09-29 (v1.13.1 pending publication)
+
+## Release 1.13.1 (code 67) - redesign parity fixes, pending publication
+
+- The selected product always has a Log row; recent rows show "Last: <qty>".
+- Bar charts: tap a bar to read it; per-bar TalkBack labels.
+- The tax preview shows the rate.
+- UI-only: no Room, queue, sync, wire, endpoint or application-ID change.
 
 ## Release 1.13.0 (code 66) - "Ledger Green" redesign, published 2026-09-29
 
