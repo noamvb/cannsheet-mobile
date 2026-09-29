@@ -21,6 +21,13 @@
       "description": "Fast-forward push of local fix/redesign-parity to origin/fix/redesign-parity",
       "remote": "origin",
       "branch": "fix/redesign-parity"
+    },
+    {
+      "id": "push-docs-v1-13-1-provenance",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local docs/v1.13.1-provenance to origin/docs/v1.13.1-provenance",
+      "remote": "origin",
+      "branch": "docs/v1.13.1-provenance"
     }
   ]
 }

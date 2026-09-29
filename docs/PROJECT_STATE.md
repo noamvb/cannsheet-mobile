@@ -1,8 +1,12 @@
 # Project state
 
-Last updated: 2026-09-29 (v1.13.1 pending publication)
+Last updated: 2026-09-29 (v1.13.1)
 
-## Release 1.13.1 (code 67) - redesign parity fixes, pending publication
+## Release 1.13.1 (code 67) - redesign parity fixes, published 2026-09-29
+
+Tag `v1.13.1` points at `41d476c`; main run `36637227799`, release run `36638686445`;
+APK SHA-256 `2ba0891c2f9292845ebfb93887446344172b20392c4151d91a25d2966a324e51`, signing
+certificate unchanged.
 
 - The selected product always has a Log row; recent rows show "Last: <qty>".
 - Bar charts: tap a bar to read it; per-bar TalkBack labels.
