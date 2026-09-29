@@ -765,6 +765,7 @@ fun ConsumptionContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
+                        .heightIn(min = 48.dp)
                         .clickable { isFinished = !isFinished }
                         .padding(horizontal = 4.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1114,6 +1115,7 @@ private fun DateTimeSection(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
+            .heightIn(min = 48.dp)
             .clickable(onClick = onToggleAdjustment)
             .padding(vertical = 4.dp),
     ) {
