@@ -8,6 +8,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.ProductTypeKey
@@ -44,6 +47,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
+import com.example.ui.theme.tabular
 import kotlinx.coroutines.launch
 
 @Composable
@@ -141,42 +145,64 @@ internal fun SettingsContent(
     onQueueAlertsChanged: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
     onFetchProducts: () -> Unit,
+    scrollState: ScrollState = rememberScrollState(),
 ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        Text("Settings & Sync", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Environment: ${BuildConfig.APP_ENVIRONMENT.lowercase().replaceFirstChar(Char::uppercase)}")
-        Text("Package: ${BuildConfig.APPLICATION_ID}")
-        Text("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-        Text("Endpoint: ${endpointDiagnostic(gasUrl)}")
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Submission Timer", style = MaterialTheme.typography.titleLarge)
+        Text("Settings", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
+        SettingsGroupHeading("SYNC & QUEUE")
+        SettingsValueRow("Connection", syncStatus ?: "Ready")
+        SettingsValueRow(
+            label = "Pending actions",
+            value = pendingCount.toString().padStart(2, '0'),
+            valueTag = "settings-pending-count",
+        )
+        SettingsSwitchRow(
+            label = "Background sync",
+            checked = backgroundSyncPreferences.enabled,
+            onCheckedChange = onSetBackgroundSyncEnabled,
+            testTag = BackgroundSyncSettingsTestTags.SWITCH,
+            contentDescription = "Background sync",
+        )
+        Text(
+            text = backgroundSyncLastRunLabel,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
+                .semantics { contentDescription = backgroundSyncLastRunLabel }
+                .padding(vertical = 10.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = onSyncNow,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = pendingCount > 0,
+        ) {
+            Text("Sync Now")
+        }
 
-        Text("Cancel window: $timerValue seconds")
+        SettingsGroupHeading("LOGGING DEFAULTS")
+        SettingsValueRow("Cancel window", "$timerValue seconds")
         Slider(
             value = timerValue.toFloat(),
             onValueChange = { onSetSubmissionTimer(it.toInt()) },
             valueRange = 0f..5f,
-            steps = 4
+            steps = 4,
         )
-
-        Spacer(modifier = Modifier.height(32.dp))
         QuickLogQuantityEditor(
             quantityPresets = quantityPresets,
             onSave = onSaveQuantityPresets,
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        SettingsGroupHeading("PRODUCT TYPES")
         ProductTypeQuantityEditor(
             productTypes = productTypeOptions,
             globalPresets = quantityPresets,
@@ -188,46 +214,16 @@ internal fun SettingsContent(
             onClearSecondsPerUse = onClearSecondsPerUseForType,
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-        WidgetSettingsCoordinator()
-
-        Spacer(modifier = Modifier.height(32.dp))
+        SettingsGroupHeading("QUICK LOG")
         NfcQuickLogSettingsCoordinator(
             resolverDescription = nfcQuickLogResolverDescription(
                 state = penQuickLogState,
                 explicitLoadedPenProductId = loadedPenProductId,
             ),
         )
+        WidgetSettingsCoordinator()
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Offline Queue", style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Pending Actions: $pendingCount")
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Background sync")
-            Switch(
-                checked = backgroundSyncPreferences.enabled,
-                onCheckedChange = onSetBackgroundSyncEnabled,
-                modifier = Modifier
-                    .testTag(BackgroundSyncSettingsTestTags.SWITCH)
-                    .semantics { contentDescription = "Background sync" },
-            )
-        }
-        Text(
-            text = backgroundSyncLastRunLabel,
-            modifier = Modifier
-                .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
-                .semantics { contentDescription = backgroundSyncLastRunLabel },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        SettingsGroupHeading("NOTIFICATIONS")
         QueueAlertSettingsCoordinator(
             preferenceEnabled = backgroundSyncPreferences.queueAlertsEnabled,
             pendingActionCount = pendingCount,
@@ -246,28 +242,93 @@ internal fun SettingsContent(
             onPreferenceChanged = onQueueAlertsChanged,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { onSyncNow() },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = pendingCount > 0
-        ) {
-            Text("Sync Now")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
+        SettingsGroupHeading("DATA")
+        SettingsValueRow("Endpoint", endpointDiagnostic(gasUrl))
+        OutlinedButton(
             onClick = { onFetchProducts() },
             modifier = Modifier.fillMaxWidth(),
-            enabled = true
         ) {
             Text("Force Fetch Products")
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-        if (syncStatus != null) {
-            Text("Status: $syncStatus", color = MaterialTheme.colorScheme.primary)
-        }
+        SettingsGroupHeading("ABOUT")
+        SettingsValueRow(
+            "Environment",
+            BuildConfig.APP_ENVIRONMENT.lowercase().replaceFirstChar(Char::uppercase),
+        )
+        SettingsValueRow("Package", BuildConfig.APPLICATION_ID)
+        SettingsValueRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+    }
+}
+
+@Composable
+private fun SettingsGroupHeading(title: String) {
+    Spacer(modifier = Modifier.height(22.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Text(
+        text = title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 1.sp,
+    )
+}
+
+@Composable
+private fun SettingsValueRow(
+    label: String,
+    value: String,
+    valueTag: String? = null,
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = value,
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .then(valueTag?.let(Modifier::testTag) ?: Modifier),
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String,
+    contentDescription: String,
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag(testTag).semantics {
+                this.contentDescription = contentDescription
+            },
+        )
     }
 }
 internal fun nfcQuickLogResolverDescription(
@@ -639,7 +700,7 @@ internal fun ProductTypeQuantityEditor(
                 .testTag(ProductTypeQuantityEditorTestTags.SECONDS_PER_USE),
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Button(
+        FilledTonalButton(
             onClick = {
                 secondsPerUseInput.toDoubleOrNull()?.let { seconds ->
                     coroutineScope.launch {
