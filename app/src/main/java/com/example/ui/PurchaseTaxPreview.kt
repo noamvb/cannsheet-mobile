@@ -1,5 +1,7 @@
 package com.example.ui
 
+import java.util.Locale
+
 /** Returns a presentation-only preview that is never persisted or transmitted. */
 internal fun purchaseTaxPreview(
     cost: String,
@@ -20,9 +22,10 @@ internal fun purchaseTaxPreview(
     if (!converted.isFinite() || converted >= 1_000_000.0) return null
 
     val money = formatCadCents(Math.round(converted * 100.0))
+    val percent = "%.2f".format(Locale.CANADA, taxRate * 100.0).trimEnd('0').trimEnd('.')
     return if (postTax) {
-        "Estimated total before tax · $money"
+        "Estimated total before $percent% tax · $money"
     } else {
-        "Estimated total with tax · $money"
+        "Estimated total with $percent% tax · $money"
     }
 }

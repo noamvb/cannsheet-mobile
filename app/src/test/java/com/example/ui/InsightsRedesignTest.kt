@@ -4,8 +4,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
@@ -16,6 +19,7 @@ import com.example.ui.screenshots.ScreenshotTestApplication
 import com.example.ui.screenshots.screenshotInsights
 import com.example.ui.theme.CannsheetTheme
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -92,6 +96,18 @@ class InsightsRedesignTest {
                     listOf("activity: 09-27, 4; 09-28, 3"),
                 ),
             )
+    }
+
+    @Test
+    fun tappingBarShowsItsValueAndBarHasIndividualTalkBackDescription() {
+        showInsights()
+        composeRule.onNode(hasContentDescription("activity, 09-27, 4")).assertExists().performClick()
+        composeRule.onNodeWithText("09-27: 4").assertExists()
+        composeRule.onNode(hasContentDescription("activity, 09-28, 3")).assertExists()
+        assertFalse(
+            composeRule.onNodeWithTag("insights-chart-activity").fetchSemanticsNode()
+                .config.isMergingSemanticsOfDescendants,
+        )
     }
 
     @Test

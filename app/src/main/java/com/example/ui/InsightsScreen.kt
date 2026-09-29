@@ -947,12 +947,15 @@ private fun NativeBarChart(
     val chartDescription = "$description: " + values.joinToString("; ") {
         "${it.first}, ${valueLabel(it.second)}"
     }
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    var selected by remember(values) { mutableStateOf<Pair<String, Int>?>(null) }
+    Column {
+        selected?.let { Text("${it.first}: ${valueLabel(it.second)}") }
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
         val chartWidth = maxOf(maxWidth, minimumCellWidth * values.size)
         Box(
             Modifier.fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .semantics(mergeDescendants = true) { contentDescription = chartDescription }
+                .semantics { contentDescription = chartDescription }
                 .testTag("insights-chart-${description.substringBefore(' ').lowercase()}"),
         ) {
             Row(
@@ -962,7 +965,9 @@ private fun NativeBarChart(
             ) {
                 values.forEachIndexed { index, (label, value) ->
                     Column(
-                        Modifier.width(minimumCellWidth),
+                        Modifier.width(minimumCellWidth)
+                            .clickable { selected = label to value }
+                            .semantics { contentDescription = "$description, $label, ${valueLabel(value)}" },
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Bottom,
                     ) {
@@ -992,6 +997,7 @@ private fun NativeBarChart(
                     }
                 }
             }
+        }
         }
     }
 }

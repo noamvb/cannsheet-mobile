@@ -9,7 +9,7 @@ class PurchaseTaxPreviewTest {
     @Test
     fun preTaxCostShowsTaxIncludedAmount() {
         assertEquals(
-            "Estimated total with tax · \$56.50",
+            "Estimated total with 13% tax · \$56.50",
             purchaseTaxPreview(cost = "50", postTax = false, taxRate = 0.13),
         )
     }
@@ -17,11 +17,11 @@ class PurchaseTaxPreviewTest {
     @Test
     fun postTaxCostShowsPreTaxAmount() {
         assertEquals(
-            "Estimated total before tax · \$50.00",
+            "Estimated total before 13% tax · \$50.00",
             purchaseTaxPreview(cost = "56.50", postTax = true, taxRate = 0.13),
         )
         assertEquals(
-            "Estimated total before tax · \$44.25",
+            "Estimated total before 13% tax · \$44.25",
             purchaseTaxPreview(cost = "50", postTax = true, taxRate = 0.13),
         )
     }
@@ -29,7 +29,7 @@ class PurchaseTaxPreviewTest {
     @Test
     fun fractionalRateOmitsTrailingZero() {
         assertEquals(
-            "Estimated total with tax · \$56.25",
+            "Estimated total with 12.5% tax · \$56.25",
             purchaseTaxPreview(cost = "50", postTax = false, taxRate = 0.125),
         )
     }

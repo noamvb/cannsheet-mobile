@@ -2,6 +2,8 @@ package com.example.ui
 
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.text
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
@@ -357,7 +359,12 @@ fun ConsumptionContent(
         val selected = selectableProducts.firstOrNull { it.id == formState.selectedProductId }
         val fromRecent = recentProducts.map { it.product }.filter { p -> selectableProducts.any { it.id == p.id } }
         val combined = (fromRecent + listOfNotNull(selected) + selectableProducts).distinctBy { it.id }
-        combined.take(5)
+        val firstFive = combined.take(5)
+        if (selected != null && firstFive.none { it.id == selected.id }) {
+            firstFive.dropLast(1) + selected
+        } else {
+            firstFive
+        }
     }
 
     val filteredPickerProducts = remember(
@@ -709,6 +716,7 @@ fun ConsumptionContent(
                         isSelected = isSelected,
                         pendingUses = pendingUses,
                         runway = runway,
+                        lastQuantity = recentProducts.firstOrNull { it.product.id == product.id }?.lastQuantity,
                         onClick = {
                             onSelectProduct(product.id)
                             validationMessage = null
@@ -899,6 +907,7 @@ private fun LedgerProductRow(
     isSelected: Boolean,
     pendingUses: Double,
     runway: ProductRunway?,
+    lastQuantity: Double?,
     onClick: () -> Unit,
 ) {
     val confirmedTotal = product.totalUses?.takeIf { it.isFinite() && it >= 0.0 }
@@ -919,6 +928,7 @@ private fun LedgerProductRow(
                 },
             )
             .clickable(onClick = onClick)
+            .semantics { selected = isSelected }
             .padding(horizontal = 6.dp, vertical = 10.dp)
             .testTag(ConsumptionLedgerTestTags.productRow(product.id)),
         verticalAlignment = Alignment.CenterVertically,
@@ -951,6 +961,18 @@ private fun LedgerProductRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag(ConsumptionLedgerTestTags.remainingQuantity(product.id)),
                 )
+                lastQuantity?.let { quantity ->
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "Last: ${formatQuantity(quantity)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             if (isSelected && runway != null) {
                 Text(
