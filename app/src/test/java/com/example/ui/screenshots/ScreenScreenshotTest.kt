@@ -14,7 +14,7 @@ import com.example.ui.InsightsContent
 import com.example.ui.InsightsUiState
 import com.example.ui.PurchaseContent
 import com.example.ui.SettingsContent
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import com.example.ui.assistant.AssistantEmptyState
 import com.example.data.PurchaseDefaultsState
 import com.example.data.SyncPreferences
@@ -62,7 +62,7 @@ class ScreenScreenshotTest {
 
     private fun render(dark: Boolean, content: @Composable () -> Unit) {
         composeRule.setContent {
-            MyApplicationTheme(darkTheme = dark, dynamicColor = false) {
+            CannsheetTheme(darkTheme = dark) {
                 Surface { content() }
             }
         }
@@ -172,7 +172,7 @@ class ScreenScreenshotTest {
             secondsPerUse = 5.0,
             onQuickLogPen = {},
             onChooseLoadedPen = {},
-            nowProvider = { SCREENSHOT_NOW },
+            nowMillisProvider = { SCREENSHOT_NOW.toEpochMilli() },
         )
     }
 
@@ -221,7 +221,7 @@ class ScreenScreenshotTest {
             loadedPenProductId = null,
             runtimePermissionResult = null,
             backgroundSyncLastRunLabel = "Last background sync: 1 hour ago (Success)",
-            nowProvider = { SCREENSHOT_NOW },
+            nowMillisProvider = { SCREENSHOT_NOW.toEpochMilli() },
             onSetSubmissionTimer = {},
             onSaveQuantityPresets = { Result.success(Unit) },
             onSaveQuantityPresetsForType = { _, _ -> Result.success(Unit) },

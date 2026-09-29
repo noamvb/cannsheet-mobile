@@ -8,7 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import com.example.domain.EXTRA_OPEN_CART_PICKER
 import com.example.domain.EXTRA_START_ROUTE
 import com.example.ui.CannsheetApp
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
 
   private fun render(startRoute: String?) {
     setContent {
-      MyApplicationTheme {
+      CannsheetTheme {
         CannsheetApp(
           startDestination = startRoute ?: "consumption",
           routeRequests = routeRequestFlow,

@@ -33,7 +33,6 @@ import com.example.nfc.NfcQuickLogSettingsCoordinator
 import com.example.widget.WidgetSettingsCoordinator
 import java.math.BigDecimal
 import java.net.URI
-import java.time.Instant
 import com.example.data.SyncPreferences
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -48,7 +47,7 @@ import com.example.R
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(viewModel: CannsheetViewModel, nowProvider: () -> Instant = Instant::now) {
+fun SettingsScreen(viewModel: CannsheetViewModel, nowMillisProvider: () -> Long = System::currentTimeMillis) {
     val gasUrl by viewModel.gasUrl.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
@@ -70,7 +69,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel, nowProvider: () -> Instant = I
     val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
         lastRunEpochMillis = backgroundSyncPreferences.lastMeaningfulSyncAtEpochMillis,
         lastResult = backgroundSyncPreferences.lastResult,
-        nowEpochMillis = nowProvider().toEpochMilli(),
+        nowEpochMillis = nowMillisProvider(),
     )
 
     SettingsContent(
@@ -87,7 +86,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel, nowProvider: () -> Instant = I
         loadedPenProductId = loadedPenProductId,
         runtimePermissionResult = runtimePermissionResult,
         backgroundSyncLastRunLabel = backgroundSyncLastRunLabel,
-        nowProvider = nowProvider,
+        nowMillisProvider = nowMillisProvider,
         onSetSubmissionTimer = viewModel::setSubmissionTimer,
         onSaveQuantityPresets = viewModel::updateQuantityPresets,
         onSaveQuantityPresetsForType = viewModel::updateQuantityPresetsForType,
@@ -127,7 +126,7 @@ internal fun SettingsContent(
     loadedPenProductId: String?,
     runtimePermissionResult: Boolean?,
     backgroundSyncLastRunLabel: String,
-    nowProvider: () -> Instant,
+    nowMillisProvider: () -> Long,
     onSetSubmissionTimer: (Int) -> Unit,
     onSaveQuantityPresets: suspend (List<Double>) -> Result<Unit>,
     onSaveQuantityPresetsForType: suspend (String, List<Double>) -> Result<Unit>,
@@ -234,7 +233,7 @@ internal fun SettingsContent(
             pendingActionCount = pendingCount,
             queueNonEmptySinceEpochMillis =
                 backgroundSyncPreferences.queueNonEmptySinceEpochMillis,
-            nowEpochMillis = nowProvider().toEpochMilli(),
+            nowEpochMillis = nowMillisProvider(),
             notificationsAvailable = notificationsAvailable,
             runtimePermissionRequired =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,

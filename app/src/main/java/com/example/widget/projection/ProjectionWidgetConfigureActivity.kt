@@ -36,7 +36,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.lifecycle.lifecycleScope
 import com.example.R
 import com.example.widget.PenWidgetRuntime
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -90,7 +90,7 @@ class ProjectionWidgetConfigureActivity : ComponentActivity() {
         }
 
         setContent {
-            MyApplicationTheme {
+            CannsheetTheme {
                 ProjectionWidgetConfigureScreen(
                     selectedMode = selectedMode,
                     state = configurationState,

@@ -25,7 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
@@ -71,7 +71,7 @@ class NfcTagWriterActivity : ComponentActivity() {
         label = intent.getStringExtra(EXTRA_LABEL)
         if (target == null && mode != WriterMode.ADOPT) state = NfcTagWriterState.InvalidConfiguration
         setContent {
-            MyApplicationTheme {
+            CannsheetTheme {
                 NfcTagWriterContent(
                     state = state,
                     target = target,

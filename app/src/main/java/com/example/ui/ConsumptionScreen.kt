@@ -84,7 +84,6 @@ import kotlinx.coroutines.flow.emptyFlow
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.Calendar
-import java.time.Instant
 
 private val categoryColors = mapOf(
     "P" to Color(0xFFE57373),
@@ -291,7 +290,7 @@ fun ConsumptionContent(
     onChooseLoadedPen: (String) -> Unit = {},
     runwayByProductId: Map<String, ProductRunway> = emptyMap(),
     openCartPickerRequests: Flow<Unit> = emptyFlow(),
-    nowProvider: () -> Instant = Instant::now,
+    nowMillisProvider: () -> Long = System::currentTimeMillis,
 ) {
     var showProductPicker by rememberSaveable { mutableStateOf(false) }
     var pickerMode by rememberSaveable { mutableStateOf(ProductPickerMode.LOG_TARGET) }
@@ -299,7 +298,7 @@ fun ConsumptionContent(
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
     var isFinished by rememberSaveable { mutableStateOf(false) }
     var adjustDateTime by rememberSaveable { mutableStateOf(false) }
-    val initialCalendar = remember(nowProvider) { Calendar.getInstance().apply { timeInMillis = nowProvider().toEpochMilli() } }
+    val initialCalendar = remember(nowMillisProvider) { Calendar.getInstance().apply { timeInMillis = nowMillisProvider() } }
     var customDateMillis by rememberSaveable { mutableLongStateOf(currentLocalDateAsPickerMillis(initialCalendar.timeInMillis)) }
     var customHour by rememberSaveable { mutableIntStateOf(initialCalendar.get(Calendar.HOUR_OF_DAY)) }
     var customMinute by rememberSaveable { mutableIntStateOf(initialCalendar.get(Calendar.MINUTE)) }
@@ -687,7 +686,7 @@ fun ConsumptionContent(
                     customMinute = customMinute,
                     onToggleAdjustment = {
                         if (!adjustDateTime) {
-                            val now = Calendar.getInstance().apply { timeInMillis = nowProvider().toEpochMilli() }
+                            val now = Calendar.getInstance().apply { timeInMillis = nowMillisProvider() }
                             customDateMillis = currentLocalDateAsPickerMillis(now.timeInMillis)
                             customHour = now.get(Calendar.HOUR_OF_DAY)
                             customMinute = now.get(Calendar.MINUTE)

@@ -8,7 +8,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -26,7 +26,7 @@ class PenWidgetConfigureActivityTest {
             var selectedStepSeconds by remember {
                 mutableStateOf(PenWidgetInstanceConfig.DEFAULT.stepSecondsOverride)
             }
-            MyApplicationTheme {
+            CannsheetTheme {
                 PenWidgetConfigureScreen(
                     products = emptyList(),
                     selectedProductId = null,
