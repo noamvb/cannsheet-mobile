@@ -56,7 +56,6 @@ internal object AdaptiveNavigationTestTags {
     const val RAIL = "adaptive-navigation-rail"
     const val CONTENT = "adaptive-navigation-content"
     const val COUNTDOWN = "adaptive-navigation-countdown"
-    const val TOP_BAR = "adaptive-navigation-top-bar"
 
     fun destination(route: String) = "adaptive-navigation-destination-$route"
 }
@@ -157,26 +156,7 @@ internal fun AdaptiveNavigationLayout(
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val windowWidth = windowWidthFor(maxWidth)
-        val currentTitle = items.firstOrNull { it.route == selectedRoute }?.title
-            ?: if (selectedRoute == BARCODE_SCAN_ROUTE) "Scan barcode" else null
         Scaffold(
-            topBar = {
-                if (currentTitle != null) {
-                    TopAppBar(
-                        title = {
-                            Text(
-                                text = currentTitle,
-                                style = MaterialTheme.typography.titleLarge,
-                            )
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            titleContentColor = MaterialTheme.colorScheme.onSurface,
-                        ),
-                        modifier = Modifier.testTag(AdaptiveNavigationTestTags.TOP_BAR),
-                    )
-                }
-            },
             bottomBar = {
                 if (windowWidth == WindowWidth.COMPACT) {
                     AppBottomNavigation(
