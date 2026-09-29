@@ -17,6 +17,8 @@ Release provenance:
   failed two `PurchaseContentTest` suggestion taps; they passed on re-run and locally (179/179).
 - Annotated tag `v1.13.1` points at exactly `41d476c`, which was the tip of `origin/main` when
   tagged. Release run `36638686445` succeeded; published 2026-09-29 22:25 UTC.
+- Published assets in `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.13.1.apk` and
+  `Cannsheet-Mobile-1.13.1.apk.sha256`.
 - APK SHA-256: `2ba0891c2f9292845ebfb93887446344172b20392c4151d91a25d2966a324e51`.
 - Re-downloaded and checked: `shasum -c` OK; package `com.noamv.cannsheet.mobile`,
   versionCode 67, versionName 1.13.1.
