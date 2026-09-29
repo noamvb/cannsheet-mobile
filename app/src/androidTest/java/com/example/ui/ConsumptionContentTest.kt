@@ -7,11 +7,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import com.example.data.Product
 import org.junit.Assert.assertEquals
@@ -56,6 +58,8 @@ class ConsumptionContentTest {
         }
 
         composeRule.onNode(hasText("Blue Dream") and hasClickAction()).performClick()
+        composeRule.onAllNodes(hasScrollToNodeAction())[0]
+            .performScrollToNode(hasText("Log consumption") and hasClickAction())
         composeRule.onNode(hasText("Log consumption") and hasClickAction()).performClick()
 
         composeRule.runOnIdle {

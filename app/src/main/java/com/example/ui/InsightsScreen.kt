@@ -1041,15 +1041,36 @@ private fun RangeChips(
             onCustom,
         ),
     )
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-        choices.forEachIndexed { index, (label, isSelected, action) ->
-            SegmentedButton(
-                selected = isSelected,
-                onClick = action,
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = choices.size),
-                modifier = Modifier.weight(1f).testTag("insights-range-$label"),
-                label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
-            )
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        if (maxWidth < 320.dp) {
+            // An expanded pane can be forced into a very narrow window (for example by
+            // multi-window resizing). Weighted segments then have less room than their
+            // minimum touch targets, making the segmented row's measure pass unstable.
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                choices.forEach { (label, isSelected, action) ->
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = action,
+                        modifier = Modifier.testTag("insights-range-$label"),
+                        label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
+        } else {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                choices.forEachIndexed { index, (label, isSelected, action) ->
+                    SegmentedButton(
+                        selected = isSelected,
+                        onClick = action,
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = choices.size),
+                        modifier = Modifier.weight(1f).testTag("insights-range-$label"),
+                        label = { Text(label, maxLines = 1, style = MaterialTheme.typography.labelSmall) },
+                    )
+                }
+            }
         }
     }
 }
