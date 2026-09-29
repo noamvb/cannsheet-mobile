@@ -741,7 +741,7 @@ fun ConsumptionContent(
                             showBorrowedProductDialog = true
                         },
                     ) {
-                        Text("Log borrowed product")
+                        Text("Log a borrowed product")
                     }
                 }
             }
