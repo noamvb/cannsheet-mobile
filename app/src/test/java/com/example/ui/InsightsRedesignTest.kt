@@ -74,6 +74,15 @@ class InsightsRedesignTest {
     }
 
     @Test
+    fun headlineCountsLogsNotUses() {
+        // overview.logCount counts log events, not summed quantities, so it must not be labelled "uses".
+        showInsights()
+        val node = composeRule.onNodeWithTag("insights-headline-number").fetchSemanticsNode()
+        val text = node.config[SemanticsProperties.Text].joinToString("") { it.text }
+        assertTrue(text, text.endsWith(" logs"))
+    }
+
+    @Test
     fun chartDescriptionListsEveryFixtureValue() {
         showInsights()
         composeRule.onNodeWithTag("insights-chart-activity")

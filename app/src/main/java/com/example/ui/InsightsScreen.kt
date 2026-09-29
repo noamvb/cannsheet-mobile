@@ -896,7 +896,7 @@ private fun HeadlineFigure(data: InsightsResponseDto, range: InsightsRange) {
     Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text("CONSUMPTION · $days DAYS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
-            "${formatWholeNumber(data.overview.logCount)} uses",
+            "${formatWholeNumber(data.overview.logCount)} logs",
             modifier = Modifier.testTag("insights-headline-number")
                 .semantics {
                     this[INSIGHTS_FONT_FEATURE_SETTINGS] = headlineStyle.fontFeatureSettings.orEmpty()
@@ -951,6 +951,7 @@ private fun NativeBarChart(
         val chartWidth = maxOf(maxWidth, minimumCellWidth * values.size)
         Box(
             Modifier.fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
                 .semantics(mergeDescendants = true) { contentDescription = chartDescription }
                 .testTag("insights-chart-${description.substringBefore(' ').lowercase()}"),
         ) {

@@ -946,7 +946,7 @@ private fun LedgerProductRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "${formatQuantity(product.grams)} g remaining",
+                    text = "${formatQuantity(product.grams)} g",
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = PlexMono).tabular(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag(ConsumptionLedgerTestTags.remainingQuantity(product.id)),
