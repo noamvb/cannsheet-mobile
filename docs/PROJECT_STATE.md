@@ -1,6 +1,18 @@
 # Project state
 
-Last updated: 2026-09-25 (v1.12.7)
+Last updated: 2026-09-29 (v1.13.0 pending publication)
+
+## Release 1.13.0 (code 66) - "Ledger Green" redesign, pending publication
+
+- Every screen (Log, Purchase, Insights, Assistant, Settings), the launcher icon, widgets
+  and notification tint follow direction A "Ledger Green" (`docs/design/DESIGN.md`,
+  mockups in `docs/design/mockups/`): fixed light/dark palettes (no dynamic colour),
+  bundled IBM Plex Sans + Plex Mono, open rows. Each screen owns its header; the
+  shell-level TopAppBar is gone.
+- Tap ceilings held: log 2 taps, purchase 7 taps.
+- Roborazzi 1.75.0 JVM screenshots (14 images) guard every screen.
+- UI-only: no Room, queue, sync, wire, endpoint or application-ID change.
+- Also ships the unreleased phone-side Wear OS pen bridge below (#204).
 
 ## Unreleased - phone-side Wear OS pen bridge
 

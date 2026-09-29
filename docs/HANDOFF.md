@@ -1,6 +1,6 @@
 # Latest handoff
 
-## 2026-09-29: "Ledger Green" redesign implemented on `redesign/ledger` (not pushed)
+## 2026-09-29: "Ledger Green" redesign, release 1.13.0 (66) in progress
 
 Direction A · Ledger Green (`docs/design/mockups/direction-a.html`, tokens in
 `docs/design/DESIGN.md`) was chosen on the owner's behalf overnight; B and C remain in
@@ -24,7 +24,8 @@ each applied row to Keep and note the commit in its alternative cell.
   (the older `cannsheet36` AVD holds a release-signed install, so debug tests cannot
   install there); emulator review in light, dark and font scale 1.3. The shell-level
   TopAppBar was removed (each screen owns its header).
-- Not done: version bump; push/PR/release (the live release needs the owner's yes).
+- The owner approved the live release on 2026-09-29 (checklist row 11 reversed in chat).
+  Version bumped to 1.13.0 (66); release provenance gets recorded here after publication.
 - Clock seams in ConsumptionScreen/SettingsScreen take `nowMillisProvider: () -> Long`
   (java.time.Instant needs API 26; minSdk is 24).
 
