@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Ledger Green dark widget colors (DESIGN.md) -->
+    <color name="surface">#FF18221F</color>
+    <color name="onSurface">#FFE5EFEB</color>
+    <color name="onSurfaceVariant">#FFB5C4BE</color>
+    <color name="primary">#FF83D0C2</color>
+    <color name="onPrimary">#FF12332E</color>
+    <color name="outlineVariant">#FF34443E</color>
+
+    <color name="widget_surface">#FF18221F</color>
+    <color name="widget_on_surface">#FFE5EFEB</color>
+    <color name="widget_on_surface_variant">#FFB5C4BE</color>
+    <color name="widget_primary">#FF83D0C2</color>
+    <color name="widget_on_primary">#FF12332E</color>
+    <color name="widget_outline_variant">#FF34443E</color>
+
+    <!-- Widget component aliases -->
+    <color name="widget_background">@color/widget_surface</color>
+    <color name="widget_on_background">@color/widget_on_surface</color>
+    <color name="widget_on_background_muted">@color/widget_on_surface_variant</color>
+    <color name="widget_counter_panel">@color/widget_surface</color>
+    <color name="widget_on_counter_panel">@color/widget_on_surface</color>
+    <color name="widget_submit">@color/widget_primary</color>
+    <color name="widget_on_submit">@color/widget_on_primary</color>
+    <color name="widget_submit_disabled">@color/widget_outline_variant</color>
+    <color name="widget_step">@color/widget_surface</color>
+    <color name="widget_on_step">@color/widget_on_surface</color>
+    <color name="widget_step_disabled">@color/widget_surface</color>
+</resources>

@@ -27,7 +27,7 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="Sync"
-            android:textColor="@color/widget_on_background"
+            android:textColor="@color/widget_on_surface"
             android:textSize="11sp"
             android:textStyle="bold" />
 
@@ -40,7 +40,7 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="Ready"
-            android:textColor="@color/widget_on_background_muted"
+            android:textColor="@color/widget_on_surface_variant"
             android:textSize="9sp" />
     </LinearLayout>
 
@@ -57,11 +57,12 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:fontFamily="sans-serif-condensed"
             android:gravity="center_vertical"
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="0 pending"
-            android:textColor="@color/widget_on_background"
+            android:textColor="@color/widget_on_surface"
             android:textSize="10sp" />
 
         <TextView
@@ -74,7 +75,7 @@
             android:includeFontPadding="false"
             android:maxLines="1"
             android:text="Never synced"
-            android:textColor="@color/widget_on_background_muted"
+            android:textColor="@color/widget_on_surface_variant"
             android:textSize="9sp" />
     </LinearLayout>
 </LinearLayout>

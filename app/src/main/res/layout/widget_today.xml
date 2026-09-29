@@ -23,7 +23,7 @@
         android:includeFontPadding="false"
         android:maxLines="1"
         android:text="Today"
-        android:textColor="@color/widget_on_background"
+        android:textColor="@color/widget_on_surface"
         android:textSize="11sp"
         android:textStyle="bold" />
 
@@ -33,11 +33,11 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
         android:ellipsize="end"
-        android:fontFamily="sans-serif"
+        android:fontFamily="sans-serif-condensed"
         android:includeFontPadding="false"
         android:maxLines="2"
         android:text="No logs yet today"
-        android:textColor="@color/widget_on_background"
+        android:textColor="@color/widget_on_surface"
         android:textSize="18sp"
         android:textStyle="bold" />
 
@@ -47,10 +47,11 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:ellipsize="end"
+        android:fontFamily="sans-serif-condensed"
         android:includeFontPadding="false"
         android:maxLines="1"
         android:text="Average: —"
-        android:textColor="@color/widget_on_background_muted"
+        android:textColor="@color/widget_on_surface_variant"
         android:textSize="10sp" />
 
     <TextView
@@ -61,7 +62,7 @@
         android:includeFontPadding="false"
         android:maxLines="1"
         android:text="vs 7-day average"
-        android:textColor="@color/widget_on_background_muted"
+        android:textColor="@color/widget_on_surface_variant"
         android:textSize="10sp" />
 
     <TextView
@@ -70,9 +71,10 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="3dp"
         android:ellipsize="end"
+        android:fontFamily="sans-serif-condensed"
         android:includeFontPadding="false"
         android:maxLines="1"
         android:text="Streak: 0 days"
-        android:textColor="@color/widget_on_background_muted"
+        android:textColor="@color/widget_on_surface_variant"
         android:textSize="10sp" />
 </LinearLayout>

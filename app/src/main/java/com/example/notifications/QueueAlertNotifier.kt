@@ -73,6 +73,7 @@ class QueueAlertNotifier internal constructor(
         val (title, body) = queueAlertNotificationCopy(context, alert)
         return NotificationCompat.Builder(context, QUEUE_ALERT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_queue_alert_status)
+            .setColor(0xFF145F58.toInt())
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))

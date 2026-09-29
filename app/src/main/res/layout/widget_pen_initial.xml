@@ -12,7 +12,7 @@
         android:layout_height="wrap_content"
         android:gravity="center"
         android:text="@string/pen_widget_label"
-        android:textColor="@color/widget_on_background"
+        android:textColor="@color/widget_on_surface"
         android:textSize="16sp"
         android:textStyle="bold" />
 
@@ -22,6 +22,6 @@
         android:layout_marginTop="6dp"
         android:gravity="center"
         android:text="@string/pen_widget_loading"
-        android:textColor="@color/widget_on_background_muted"
+        android:textColor="@color/widget_on_surface_variant"
         android:textSize="11sp" />
 </LinearLayout>

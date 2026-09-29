@@ -1,67 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Translucent Sheet Card Backdrop -->
+    <!-- Abstract ledger mark in paper #F4F6F2 inside 66dp safe zone -->
+    <!-- Top rule -->
     <path
-        android:fillColor="#25FFFFFF"
-        android:strokeColor="#50FFFFFF"
-        android:strokeWidth="1.2"
-        android:pathData="M30,24h48a6,6 0 0 1 6,6v48a6,6 0 0 1 -6,6h-48a6,6 0 0 1 -6,-6v-48a6,6 0 0 1 6,-6z" />
+        android:fillColor="#F4F6F2"
+        android:pathData="M32,38h30v4h-30z" />
 
-    <!-- Sheet Header Accent Line -->
+    <!-- Checked entry square tick at the right end of the top rule -->
     <path
-        android:strokeColor="#00E676"
-        android:strokeWidth="2.5"
-        android:pathData="M24,36h60" />
+        android:fillColor="#F4F6F2"
+        android:pathData="M68,37h6v6h-6z" />
 
-    <!-- Spreadsheet Column Lines -->
+    <!-- Middle rule of decreasing length -->
     <path
-        android:strokeColor="#30FFFFFF"
-        android:strokeWidth="1"
-        android:pathData="M44,36v48 M64,36v48" />
+        android:fillColor="#F4F6F2"
+        android:pathData="M32,52h26v4h-26z" />
 
-    <!-- Central Leaf Blade -->
+    <!-- Bottom rule of shortest length -->
     <path
-        android:fillColor="#4CAF50"
-        android:pathData="M54,26 C47,38 47,56 54,70 C61,56 61,38 54,26 Z" />
-
-    <!-- Left Upper Leaflet -->
-    <path
-        android:fillColor="#2E7D32"
-        android:pathData="M54,40 C41,34 32,40 32,40 C32,40 40,51 54,48 Z" />
-
-    <!-- Right Upper Leaflet -->
-    <path
-        android:fillColor="#66BB6A"
-        android:pathData="M54,40 C67,34 76,40 76,40 C76,40 68,51 54,48 Z" />
-
-    <!-- Left Lower Leaflet -->
-    <path
-        android:fillColor="#1B5E20"
-        android:pathData="M54,50 C43,46 37,52 37,52 C37,52 44,60 54,57 Z" />
-
-    <!-- Right Lower Leaflet -->
-    <path
-        android:fillColor="#43A047"
-        android:pathData="M54,50 C65,46 71,52 71,52 C71,52 64,60 54,57 Z" />
-
-    <!-- Leaf Stem -->
-    <path
-        android:strokeColor="#1B5E20"
-        android:strokeWidth="2.5"
-        android:strokeLineCap="round"
-        android:pathData="M54,68v9" />
-
-    <!-- Leaf Center Vein Highlight -->
-    <path
-        android:strokeColor="#A5D6A7"
-        android:strokeWidth="1.2"
-        android:strokeLineCap="round"
-        android:pathData="M54,30v36" />
-
+        android:fillColor="#F4F6F2"
+        android:pathData="M32,66h14v4h-14z" />
 </vector>
