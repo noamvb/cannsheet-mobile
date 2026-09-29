@@ -8,6 +8,7 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +25,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.data.ConsumptionPreferencesRepository
 import com.example.data.ProductTypeKey
@@ -33,6 +36,7 @@ import com.example.nfc.NfcQuickLogSettingsCoordinator
 import com.example.widget.WidgetSettingsCoordinator
 import java.math.BigDecimal
 import java.net.URI
+import com.example.data.SyncPreferences
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -43,10 +47,11 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
+import com.example.ui.theme.tabular
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(viewModel: CannsheetViewModel) {
+fun SettingsScreen(viewModel: CannsheetViewModel, nowMillisProvider: () -> Long = System::currentTimeMillis) {
     val gasUrl by viewModel.gasUrl.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
@@ -68,144 +73,264 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
         lastRunEpochMillis = backgroundSyncPreferences.lastMeaningfulSyncAtEpochMillis,
         lastResult = backgroundSyncPreferences.lastResult,
-        nowEpochMillis = System.currentTimeMillis(),
+        nowEpochMillis = nowMillisProvider(),
     )
 
+    SettingsContent(
+        gasUrl = gasUrl,
+        syncStatus = syncStatus,
+        pendingCount = pendingCount,
+        quantityPresets = quantityPresets,
+        quantityPresetOverrides = quantityPresetOverrides,
+        secondsPerUseOverrides = secondsPerUseOverrides,
+        productTypeOptions = productTypeOptions,
+        timerValue = timerValue,
+        backgroundSyncPreferences = backgroundSyncPreferences,
+        penQuickLogState = penQuickLogState,
+        loadedPenProductId = loadedPenProductId,
+        runtimePermissionResult = runtimePermissionResult,
+        backgroundSyncLastRunLabel = backgroundSyncLastRunLabel,
+        nowMillisProvider = nowMillisProvider,
+        onSetSubmissionTimer = viewModel::setSubmissionTimer,
+        onSaveQuantityPresets = viewModel::updateQuantityPresets,
+        onSaveQuantityPresetsForType = viewModel::updateQuantityPresetsForType,
+        onClearQuantityPresetsForType = viewModel::clearQuantityPresetsForType,
+        onSaveSecondsPerUseForType = viewModel::updateSecondsPerUseForType,
+        onClearSecondsPerUseForType = viewModel::clearSecondsPerUseForType,
+        onSetBackgroundSyncEnabled = viewModel::setBackgroundSyncEnabled,
+        notificationsAvailable = viewModel::canPresentQueueAlerts,
+        runtimePermissionGranted = {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+        },
+        onRuntimePermissionResultConsumed = { runtimePermissionResult = null },
+        requestRuntimePermission = { permissionLauncher.launchPostNotificationsPermission() },
+        onQueueAlertsChanged = viewModel::setQueueAlertsEnabled,
+        onSyncNow = viewModel::syncQueue,
+        onFetchProducts = viewModel::fetchProducts,
+    )
+}
+
+
+@Composable
+internal fun SettingsContent(
+    gasUrl: String,
+    syncStatus: String?,
+    pendingCount: Int,
+    quantityPresets: List<Double>,
+    quantityPresetOverrides: Map<ProductTypeKey, List<Double>>,
+    secondsPerUseOverrides: Map<ProductTypeKey, Double>,
+    productTypeOptions: List<String>,
+    timerValue: Int,
+    backgroundSyncPreferences: SyncPreferences,
+    penQuickLogState: PenQuickLogState,
+    loadedPenProductId: String?,
+    runtimePermissionResult: Boolean?,
+    backgroundSyncLastRunLabel: String,
+    nowMillisProvider: () -> Long,
+    onSetSubmissionTimer: (Int) -> Unit,
+    onSaveQuantityPresets: suspend (List<Double>) -> Result<Unit>,
+    onSaveQuantityPresetsForType: suspend (String, List<Double>) -> Result<Unit>,
+    onClearQuantityPresetsForType: (String) -> Unit,
+    onSaveSecondsPerUseForType: suspend (String, Double) -> Result<Unit>,
+    onClearSecondsPerUseForType: (String) -> Unit,
+    onSetBackgroundSyncEnabled: (Boolean) -> Unit,
+    notificationsAvailable: () -> Boolean,
+    runtimePermissionGranted: () -> Boolean,
+    onRuntimePermissionResultConsumed: () -> Unit,
+    requestRuntimePermission: () -> Unit,
+    onQueueAlertsChanged: (Boolean) -> Unit,
+    onSyncNow: () -> Unit,
+    onFetchProducts: () -> Unit,
+    scrollState: ScrollState = rememberScrollState(),
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .imePadding()
             .navigationBarsPadding()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        Text("Settings & Sync", style = MaterialTheme.typography.headlineMedium)
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Text("Environment: ${BuildConfig.APP_ENVIRONMENT.lowercase().replaceFirstChar(Char::uppercase)}")
-        Text("Package: ${BuildConfig.APPLICATION_ID}")
-        Text("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-        Text("Endpoint: ${endpointDiagnostic(gasUrl)}")
-
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Submission Timer", style = MaterialTheme.typography.titleLarge)
+        Text("Settings", style = MaterialTheme.typography.headlineMedium)
         Spacer(modifier = Modifier.height(8.dp))
+        SettingsGroupHeading("SYNC & QUEUE")
+        SettingsValueRow("Connection", syncStatus ?: "Ready")
+        SettingsValueRow(
+            label = "Pending actions",
+            value = pendingCount.toString(),
+            valueTag = "settings-pending-count",
+        )
+        SettingsSwitchRow(
+            label = "Background sync",
+            checked = backgroundSyncPreferences.enabled,
+            onCheckedChange = onSetBackgroundSyncEnabled,
+            testTag = BackgroundSyncSettingsTestTags.SWITCH,
+            contentDescription = "Background sync",
+        )
+        Text(
+            text = backgroundSyncLastRunLabel,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
+                .semantics { contentDescription = backgroundSyncLastRunLabel }
+                .padding(vertical = 10.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Button(
+            onClick = onSyncNow,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = pendingCount > 0,
+        ) {
+            Text("Sync Now")
+        }
 
-        Text("Cancel window: $timerValue seconds")
+        SettingsGroupHeading("LOGGING DEFAULTS")
+        SettingsValueRow("Cancel window", "$timerValue seconds")
         Slider(
             value = timerValue.toFloat(),
-            onValueChange = { viewModel.setSubmissionTimer(it.toInt()) },
+            onValueChange = { onSetSubmissionTimer(it.toInt()) },
             valueRange = 0f..5f,
-            steps = 4
+            steps = 4,
         )
-
-        Spacer(modifier = Modifier.height(32.dp))
         QuickLogQuantityEditor(
             quantityPresets = quantityPresets,
-            onSave = viewModel::updateQuantityPresets,
+            onSave = onSaveQuantityPresets,
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
+        SettingsGroupHeading("PRODUCT TYPES")
         ProductTypeQuantityEditor(
             productTypes = productTypeOptions,
             globalPresets = quantityPresets,
             overrides = quantityPresetOverrides,
-            onSave = viewModel::updateQuantityPresetsForType,
-            onReset = viewModel::clearQuantityPresetsForType,
+            onSave = onSaveQuantityPresetsForType,
+            onReset = onClearQuantityPresetsForType,
             secondsPerUseOverrides = secondsPerUseOverrides,
-            onSaveSecondsPerUse = viewModel::updateSecondsPerUseForType,
-            onClearSecondsPerUse = viewModel::clearSecondsPerUseForType,
+            onSaveSecondsPerUse = onSaveSecondsPerUseForType,
+            onClearSecondsPerUse = onClearSecondsPerUseForType,
         )
 
-        Spacer(modifier = Modifier.height(32.dp))
-        WidgetSettingsCoordinator()
-
-        Spacer(modifier = Modifier.height(32.dp))
+        SettingsGroupHeading("QUICK LOG")
         NfcQuickLogSettingsCoordinator(
             resolverDescription = nfcQuickLogResolverDescription(
                 state = penQuickLogState,
                 explicitLoadedPenProductId = loadedPenProductId,
             ),
         )
+        WidgetSettingsCoordinator()
 
-        Spacer(modifier = Modifier.height(32.dp))
-        Text("Offline Queue", style = MaterialTheme.typography.titleLarge)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text("Pending Actions: $pendingCount")
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text("Background sync")
-            Switch(
-                checked = backgroundSyncPreferences.enabled,
-                onCheckedChange = viewModel::setBackgroundSyncEnabled,
-                modifier = Modifier
-                    .testTag(BackgroundSyncSettingsTestTags.SWITCH)
-                    .semantics { contentDescription = "Background sync" },
-            )
-        }
-        Text(
-            text = backgroundSyncLastRunLabel,
-            modifier = Modifier
-                .testTag(BackgroundSyncSettingsTestTags.LAST_RUN)
-                .semantics { contentDescription = backgroundSyncLastRunLabel },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Spacer(modifier = Modifier.height(24.dp))
+        SettingsGroupHeading("NOTIFICATIONS")
         QueueAlertSettingsCoordinator(
             preferenceEnabled = backgroundSyncPreferences.queueAlertsEnabled,
             pendingActionCount = pendingCount,
             queueNonEmptySinceEpochMillis =
                 backgroundSyncPreferences.queueNonEmptySinceEpochMillis,
-            nowEpochMillis = System.currentTimeMillis(),
-            notificationsAvailable = viewModel::canPresentQueueAlerts,
+            nowEpochMillis = nowMillisProvider(),
+            notificationsAvailable = notificationsAvailable,
             runtimePermissionRequired =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
-            runtimePermissionGranted = {
-                Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                    ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.POST_NOTIFICATIONS,
-                    ) == PackageManager.PERMISSION_GRANTED
-            },
+            runtimePermissionGranted = runtimePermissionGranted,
             runtimePermissionResult = runtimePermissionResult,
-            onRuntimePermissionResultConsumed = { runtimePermissionResult = null },
+            onRuntimePermissionResultConsumed = onRuntimePermissionResultConsumed,
             requestRuntimePermission = {
-                permissionLauncher.launchPostNotificationsPermission()
+                requestRuntimePermission()
             },
-            onPreferenceChanged = viewModel::setQueueAlertsEnabled,
+            onPreferenceChanged = onQueueAlertsChanged,
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { viewModel.syncQueue() },
+        SettingsGroupHeading("DATA")
+        SettingsValueRow("Endpoint", endpointDiagnostic(gasUrl))
+        OutlinedButton(
+            onClick = { onFetchProducts() },
             modifier = Modifier.fillMaxWidth(),
-            enabled = pendingCount > 0
-        ) {
-            Text("Sync Now")
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-        Button(
-            onClick = { viewModel.fetchProducts() },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = true
         ) {
             Text("Force Fetch Products")
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
-        if (syncStatus != null) {
-            Text("Status: $syncStatus", color = MaterialTheme.colorScheme.primary)
-        }
+        SettingsGroupHeading("ABOUT")
+        SettingsValueRow(
+            "Environment",
+            BuildConfig.APP_ENVIRONMENT.lowercase().replaceFirstChar(Char::uppercase),
+        )
+        SettingsValueRow("Package", BuildConfig.APPLICATION_ID)
+        SettingsValueRow("Version", "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
     }
 }
 
+@Composable
+private fun SettingsGroupHeading(title: String) {
+    Spacer(modifier = Modifier.height(22.dp))
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Text(
+        text = title,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        letterSpacing = 1.sp,
+    )
+}
+
+@Composable
+private fun SettingsValueRow(
+    label: String,
+    value: String,
+    valueTag: String? = null,
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 48.dp)
+            .padding(horizontal = 2.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = value,
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .then(valueTag?.let(Modifier::testTag) ?: Modifier),
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+        )
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    testTag: String,
+    contentDescription: String,
+) {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
+            .padding(horizontal = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.testTag(testTag).semantics {
+                this.contentDescription = contentDescription
+            },
+        )
+    }
+}
 internal fun nfcQuickLogResolverDescription(
     state: PenQuickLogState,
     explicitLoadedPenProductId: String?,
@@ -575,7 +700,7 @@ internal fun ProductTypeQuantityEditor(
                 .testTag(ProductTypeQuantityEditorTestTags.SECONDS_PER_USE),
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Button(
+        FilledTonalButton(
             onClick = {
                 secondsPerUseInput.toDoubleOrNull()?.let { seconds ->
                     coroutineScope.launch {

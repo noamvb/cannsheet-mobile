@@ -45,7 +45,7 @@ import com.example.data.CannsheetGraph
 import com.example.data.Product
 import com.example.data.ProductTypeCodes
 import com.example.data.productStatus
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -82,7 +82,7 @@ class PenWidgetConfigureActivity : ComponentActivity() {
         }
 
         setContent {
-            MyApplicationTheme {
+            CannsheetTheme {
                 PenWidgetConfigureScreen(
                     products = selectablePens,
                     selectedProductId = selectedProductId,

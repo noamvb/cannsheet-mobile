@@ -27,6 +27,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalIconToggleButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -123,21 +124,29 @@ private fun PermissionRationale(
                 "Cannsheet needs the camera to read a product barcode."
             },
             style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.testTag(BarcodeScanTestTags.PERMISSION_RATIONALE),
         )
         Button(
             onClick = onGrant,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 24.dp)
                 .testTag(BarcodeScanTestTags.GRANT_PERMISSION),
-        ) { Text("Allow camera") }
+        ) {
+            Text("Allow camera", style = MaterialTheme.typography.labelLarge)
+        }
         TextButton(
             onClick = onCancel,
+            shape = MaterialTheme.shapes.small,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(top = 8.dp)
                 .testTag(BarcodeScanTestTags.CANCEL),
-        ) { Text("Enter it manually") }
+        ) {
+            Text("Enter it manually", style = MaterialTheme.typography.labelLarge)
+        }
     }
 }
 
@@ -225,22 +234,34 @@ private fun CameraPreview(
             },
         )
 
-        Column(
+        Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+                .padding(16.dp),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
         ) {
-            Text(
-                text = "Point the camera at the barcode on the product label.",
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.testTag(BarcodeScanTestTags.HINT),
-            )
-            TextButton(
-                onClick = onCancel,
-                modifier = Modifier.testTag(BarcodeScanTestTags.CANCEL),
-            ) { Text("Enter it manually") }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(
+                    text = "Point the camera at the barcode on the product label.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.testTag(BarcodeScanTestTags.HINT),
+                )
+                TextButton(
+                    onClick = onCancel,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.testTag(BarcodeScanTestTags.CANCEL),
+                ) {
+                    Text("Enter it manually", style = MaterialTheme.typography.labelLarge)
+                }
+            }
         }
 
         // Unbinding the camera on dispose turns the torch off with it.

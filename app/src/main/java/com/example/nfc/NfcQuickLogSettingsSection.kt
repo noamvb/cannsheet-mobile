@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,15 +32,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.data.CannsheetGraph
 import com.example.data.PenQuickLogDataSource
 import com.example.domain.PenQuickLogState
+import com.example.ui.theme.tabular
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 
 @Composable
 fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
@@ -101,7 +103,12 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
         modifier = Modifier.fillMaxWidth().testTag("nfc-quick-log-settings"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("NFC quick-log tags", style = MaterialTheme.typography.titleLarge)
+        Text(
+            "NFC quick-log tags",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
+        )
         Text(
             when {
                 adapter == null -> "This phone has no NFC hardware."
@@ -133,8 +140,14 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
             enabled = canWrite,
             modifier = Modifier.fillMaxWidth().testTag("nfc-quick-log-label"),
         )
-        Text("Write or rewrite quantity: ${uses.toInt()} uses")
-        Text("This tag will record ${uses.toInt()} uses for whichever Pen cart is current when tapped.")
+        Text(
+            "Write or rewrite quantity: ${uses.toInt()} uses",
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+        )
+        Text(
+            "This tag will record ${uses.toInt()} uses for whichever Pen cart is current when tapped.",
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+        )
         Slider(
             value = uses,
             onValueChange = { uses = it.toInt().coerceIn(1, 10).toFloat() },
@@ -143,7 +156,7 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
             enabled = canWrite,
             modifier = Modifier.testTag("nfc-quick-log-uses"),
         )
-        Button(
+        FilledTonalButton(
             onClick = {
                 context.startActivity(
                     NfcTagWriterActivityContract.newTag(
@@ -172,12 +185,18 @@ fun NfcQuickLogSettingsSection(resolverDescription: String? = null) {
         when (val current = registryState) {
             NfcQuickLogRegistryState.Corrupt -> {
                 Text("Registry is corrupt; no tags will be accepted.")
-                Button(onClick = { resetDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { resetDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text("Reset NFC tag registry")
                 }
             }
             is NfcQuickLogRegistryState.Ready -> {
-                Text("Registered tags (${current.tags.size}/50)")
+                Text(
+                    "Registered tags (${current.tags.size}/50)",
+                    style = MaterialTheme.typography.bodyMedium.tabular(),
+                )
                 current.tags.forEach { tag ->
                     RegisteredNfcQuickLogTagRow(
                         tag = tag,
@@ -265,7 +284,10 @@ private fun RegisteredNfcQuickLogTagRow(
     onRevoke: () -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text("${tag.label ?: "NFC tag"}: ${tag.uses} uses · …${tag.tagId.takeLast(8)}")
+        Text(
+            "${tag.label ?: "NFC tag"}: ${tag.uses} uses · …${tag.tagId.takeLast(8)}",
+            style = MaterialTheme.typography.bodyMedium.tabular(),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             TextButton(onClick = onVerify) { Text("Verify") }
             TextButton(onClick = onRename) { Text("Rename") }

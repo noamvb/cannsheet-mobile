@@ -20,7 +20,7 @@
         android:fontFamily="sans-serif"
         android:maxLines="1"
         android:text="@string/pen_widget_label"
-        android:textColor="@color/widget_on_background"
+        android:textColor="@color/widget_on_surface"
         android:textSize="12sp"
         android:textStyle="bold" />
 
@@ -45,7 +45,7 @@
             android:padding="4dp"
             android:stateListAnimator="@null"
             android:text="@string/pen_widget_generic_cart"
-            android:textColor="@color/widget_on_step"
+            android:textColor="@color/widget_on_surface"
             android:textSize="10sp"
             android:textStyle="bold" />
 
@@ -63,7 +63,7 @@
             android:padding="4dp"
             android:stateListAnimator="@null"
             android:text="@string/pen_widget_generic_cart"
-            android:textColor="@color/widget_on_step"
+            android:textColor="@color/widget_on_surface"
             android:textSize="10sp"
             android:textStyle="bold" />
 
@@ -81,7 +81,7 @@
             android:padding="4dp"
             android:stateListAnimator="@null"
             android:text="@string/pen_widget_generic_cart"
-            android:textColor="@color/widget_on_step"
+            android:textColor="@color/widget_on_surface"
             android:textSize="10sp"
             android:textStyle="bold" />
 
@@ -99,7 +99,7 @@
             android:padding="4dp"
             android:stateListAnimator="@null"
             android:text="@string/pen_widget_generic_cart"
-            android:textColor="@color/widget_on_step"
+            android:textColor="@color/widget_on_surface"
             android:textSize="10sp"
             android:textStyle="bold" />
     </LinearLayout>
@@ -116,7 +116,7 @@
         android:minWidth="0dp"
         android:padding="4dp"
         android:stateListAnimator="@null"
-        android:textColor="@color/widget_on_submit"
+        android:textColor="@color/widget_on_primary"
         android:textSize="10sp"
         android:textStyle="bold"
         android:visibility="gone" />
@@ -144,7 +144,7 @@
             android:padding="4dp"
             android:stateListAnimator="@null"
             android:text="@string/pen_widget_undo_symbol"
-            android:textColor="@color/widget_on_submit"
+            android:textColor="@color/widget_on_primary"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -152,9 +152,10 @@
             android:id="@+id/widget_multi_cart_undo_countdown"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-condensed"
             android:gravity="center"
             android:importantForAccessibility="no"
-            android:textColor="@color/widget_on_background_muted"
+            android:textColor="@color/widget_on_surface_variant"
             android:textSize="10sp"
             android:visibility="gone" />
     </LinearLayout>

@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -145,6 +146,7 @@ fun CannsheetApp(
  * this seam lets adaptive-layout tests exercise real width constraints without
  * constructing production repositories or starting network work.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AdaptiveNavigationLayout(
     pendingCount: Int,
@@ -197,14 +199,24 @@ private fun AppBottomNavigation(
     selectedRoute: String?,
     onNavigate: (String) -> Unit,
 ) {
-    NavigationBar(modifier = Modifier.testTag(AdaptiveNavigationTestTags.BOTTOM_BAR)) {
+    NavigationBar(
+        modifier = Modifier.testTag(AdaptiveNavigationTestTags.BOTTOM_BAR),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         items.forEach { screen ->
             NavigationBarItem(
                 modifier = Modifier.testTag(AdaptiveNavigationTestTags.destination(screen.route)),
                 icon = { AppNavigationIcon(screen, pendingCount) },
-                label = { Text(screen.title) },
+                label = { Text(screen.title, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }
@@ -227,14 +239,22 @@ private fun AppNavigationRail(
             .fillMaxHeight()
             .displayCutoutPadding()
             .testTag(AdaptiveNavigationTestTags.RAIL),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         items.forEach { screen ->
             NavigationRailItem(
                 modifier = Modifier.testTag(AdaptiveNavigationTestTags.destination(screen.route)),
                 icon = { AppNavigationIcon(screen, pendingCount) },
-                label = { Text(screen.title) },
+                label = { Text(screen.title, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }

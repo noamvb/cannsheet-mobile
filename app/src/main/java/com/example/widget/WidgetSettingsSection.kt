@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -32,11 +33,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.data.CannsheetGraph
+import com.example.ui.theme.tabular
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -197,7 +200,9 @@ internal fun WidgetSettingsSection(
     ) {
         Text(
             text = stringResource(R.string.settings_widgets_title),
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            letterSpacing = 1.sp,
         )
         Text(
             text = stringResource(R.string.settings_widget_step_default),
@@ -224,13 +229,19 @@ internal fun WidgetSettingsSection(
                     modifier = Modifier
                         .weight(1f)
                         .testTag(WidgetSettingsTestTags.defaultStepOption(option)),
-                    label = { Text("${option}s") },
+                    label = {
+                        Text(
+                            "${option}s",
+                            style = MaterialTheme.typography.labelLarge.tabular(),
+                        )
+                    },
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         Text(
             text = stringResource(R.string.settings_widget_instances),
             style = MaterialTheme.typography.titleMedium,
@@ -258,6 +269,7 @@ internal fun WidgetSettingsSection(
                                 .testTag(WidgetSettingsTestTags.instanceRow(instance.appWidgetId)),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                             Text(
                                 text = instance.label,
                                 style = MaterialTheme.typography.bodyMedium,
@@ -288,6 +300,7 @@ internal fun WidgetSettingsSection(
                                             Text(
                                                 option?.let { "${it}s" }
                                                     ?: stringResource(R.string.pen_widget_step_inherit),
+                                                style = MaterialTheme.typography.labelLarge.tabular(),
                                             )
                                         },
                                     )

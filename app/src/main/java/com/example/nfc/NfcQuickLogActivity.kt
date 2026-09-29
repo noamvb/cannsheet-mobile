@@ -31,7 +31,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.MainActivity
 import com.example.domain.EXTRA_OPEN_CART_PICKER
 import com.example.domain.EXTRA_START_ROUTE
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.CannsheetTheme
 import com.example.widget.COMMIT_DELAY_MILLIS
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -63,7 +63,7 @@ class NfcQuickLogActivity : ComponentActivity() {
         configureLockSafeWindow()
         updateLockState()
         setContent {
-            MyApplicationTheme {
+            CannsheetTheme {
                 NfcQuickLogResultContent(
                     state = resultState,
                     locked = locked,

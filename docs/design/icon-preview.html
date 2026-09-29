@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Cannsheet "Ledger Green" Launcher Icon Preview</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #F4F6F2;
+      color: #172522;
+      padding: 40px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      color: #145F58;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    p.subtitle {
+      font-size: 15px;
+      color: #53625E;
+    }
+    .section {
+      width: 100%;
+      max-width: 900px;
+      margin-bottom: 28px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #145F58;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+    .row {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .card {
+      background: #FFFFFF;
+      border: 1px solid #CFD8D3;
+      border-radius: 16px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 4px 12px rgba(20, 95, 88, 0.05);
+      width: 240px;
+    }
+    .card.dark-card {
+      background: #18221F;
+      border-color: #34443E;
+      color: #E5EFEB;
+    }
+    .card.dark-card .label {
+      color: #E5EFEB;
+    }
+    .card.dark-card .sublabel {
+      color: #B5C4BE;
+    }
+    .preview-frame {
+      width: 192px;
+      height: 192px;
+      position: relative;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    svg.icon {
+      width: 192px;
+      height: 192px;
+      display: block;
+    }
+    /* Masks */
+    .mask-circle {
+      border-radius: 50%;
+      overflow: hidden;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    }
+    .mask-squircle {
+      border-radius: 44px;
+      overflow: hidden;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    }
+    .mask-square {
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+    }
+    .label {
+      font-size: 14px;
+      font-weight: 600;
+      color: #172522;
+      margin-bottom: 4px;
+    }
+    .sublabel {
+      font-size: 12px;
+      color: #53625E;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Cannsheet Mobile · Ledger Green</h1>
+    <p class="subtitle">Adaptive Launcher Icon &amp; Themed Monochrome Preview (192px)</p>
+  </header>
+
+  <section class="section">
+    <div class="section-title">Adaptive Icon Masks</div>
+    <div class="row">
+      <!-- Circle Mask -->
+      <div class="card">
+        <div class="preview-frame mask-circle">
+          <svg class="icon" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+            <rect width="108" height="108" fill="#145F58" />
+            <path fill="#F4F6F2" d="M32,38h30v4h-30z M68,37h6v6h-6z M32,52h26v4h-26z M32,66h14v4h-14z" />
+          </svg>
+        </div>
+        <div class="label">Circle Mask</div>
+        <div class="sublabel">Standard Pixel / AOSP 66dp keyline</div>
+      </div>
+
+      <!-- Squircle Mask -->
+      <div class="card">
+        <div class="preview-frame mask-squircle">
+          <svg class="icon" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+            <rect width="108" height="108" fill="#145F58" />
+            <path fill="#F4F6F2" d="M32,38h30v4h-30z M68,37h6v6h-6z M32,52h26v4h-26z M32,66h14v4h-14z" />
+          </svg>
+        </div>
+        <div class="label">Squircle Mask</div>
+        <div class="sublabel">Samsung One UI / ColorOS</div>
+      </div>
+
+      <!-- Rounded Square Mask -->
+      <div class="card">
+        <div class="preview-frame mask-square">
+          <svg class="icon" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+            <rect width="108" height="108" fill="#145F58" />
+            <path fill="#F4F6F2" d="M32,38h30v4h-30z M68,37h6v6h-6z M32,52h26v4h-26z M32,66h14v4h-14z" />
+          </svg>
+        </div>
+        <div class="label">Square Mask</div>
+        <div class="sublabel">Nova / Custom launchers</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-title">Material You Themed Monochrome</div>
+    <div class="row">
+      <!-- Monochrome Light -->
+      <div class="card">
+        <div class="preview-frame mask-squircle" style="background: #E5EFEB; border: 1px solid #CFD8D3;">
+          <svg class="icon" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#145F58" d="M32,38h30v4h-30z M68,37h6v6h-6z M32,52h26v4h-26z M32,66h14v4h-14z" />
+          </svg>
+        </div>
+        <div class="label">Monochrome (Light)</div>
+        <div class="sublabel">Android 13+ Material You Light</div>
+      </div>
+
+      <!-- Monochrome Dark -->
+      <div class="card dark-card">
+        <div class="preview-frame mask-squircle" style="background: #234A43; border: 1px solid #34443E;">
+          <svg class="icon" viewBox="0 0 108 108" xmlns="http://www.w3.org/2000/svg">
+            <path fill="#83D0C2" d="M32,38h30v4h-30z M68,37h6v6h-6z M32,52h26v4h-26z M32,66h14v4h-14z" />
+          </svg>
+        </div>
+        <div class="label">Monochrome (Dark)</div>
+        <div class="sublabel">Android 13+ Material You Dark</div>
+      </div>
+    </div>
+  </section>
+</body>
+</html>

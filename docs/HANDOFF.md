@@ -1,3 +1,34 @@
+# Latest handoff
+
+## 2026-09-29: "Ledger Green" redesign, release 1.13.0 (66) in progress
+
+Direction A · Ledger Green (`docs/design/mockups/direction-a.html`, tokens in
+`docs/design/DESIGN.md`) was chosen on the owner's behalf overnight; B and C remain in
+`docs/design/mockups/`. Branch `redesign/ledger` starts from `origin/main` f8fb572.
+
+### Owner revision checklist (read first when the owner says "apply the revision checklist")
+The Claude doc https://claude.ai/code/artifact/244dc120-2811-4014-92a8-5b1e119e748e ("Overnight
+redesign: decisions made on your behalf") has a "Revision checklist" table near the top: one
+row per decision taken overnight, a "Your call" dropdown (Keep / Change / Discuss) and a free
+"Your alternative" column. Read the doc with the docs connector (not a web fetch), apply every
+row marked Change (a Poop change ships as 1.6.1+, never reusing a version; Cannsheet changes go
+on `redesign/ledger`), raise every Discuss row with the owner, leave Keep rows alone, then set
+each applied row to Keep and note the commit in its alternative cell.
+
+- Commits: mockups + PRODUCT.md, IBM Plex fonts, Roborazzi 1.75.0 baseline (14 images),
+  theme (`CannsheetTheme`, no dynamic colour), Log + shell, Purchase, Insights, Settings,
+  Assistant, launcher icon + widgets + notification tint.
+- Verified locally: 735 unit tests, `verifyRoborazziDebug --rerun` 14/14, lintDebug,
+  compileDebugAndroidTestKotlin, assembleSandbox (installed on the owner's phone).
+- Also verified: `connectedDebugAndroidTest` 179/179 on a fresh API 36 AVD `redesign36`
+  (the older `cannsheet36` AVD holds a release-signed install, so debug tests cannot
+  install there); emulator review in light, dark and font scale 1.3. The shell-level
+  TopAppBar was removed (each screen owns its header).
+- The owner approved the live release on 2026-09-29 (checklist row 11 reversed in chat).
+  Version bumped to 1.13.0 (66); release provenance gets recorded here after publication.
+- Clock seams in ConsumptionScreen/SettingsScreen take `nowMillisProvider: () -> Long`
+  (java.time.Instant needs API 26; minSdk is 24).
+
 # Current handoff
 
 Last updated: 2026-09-27
