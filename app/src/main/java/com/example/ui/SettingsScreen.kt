@@ -33,6 +33,8 @@ import com.example.nfc.NfcQuickLogSettingsCoordinator
 import com.example.widget.WidgetSettingsCoordinator
 import java.math.BigDecimal
 import java.net.URI
+import java.time.Instant
+import com.example.data.SyncPreferences
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +48,7 @@ import com.example.R
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(viewModel: CannsheetViewModel) {
+fun SettingsScreen(viewModel: CannsheetViewModel, nowProvider: () -> Instant = Instant::now) {
     val gasUrl by viewModel.gasUrl.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()
     val pendingCount by viewModel.pendingActionCount.collectAsState()
@@ -68,9 +70,79 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
     val backgroundSyncLastRunLabel = backgroundSyncLastRunText(
         lastRunEpochMillis = backgroundSyncPreferences.lastMeaningfulSyncAtEpochMillis,
         lastResult = backgroundSyncPreferences.lastResult,
-        nowEpochMillis = System.currentTimeMillis(),
+        nowEpochMillis = nowProvider().toEpochMilli(),
     )
 
+    SettingsContent(
+        gasUrl = gasUrl,
+        syncStatus = syncStatus,
+        pendingCount = pendingCount,
+        quantityPresets = quantityPresets,
+        quantityPresetOverrides = quantityPresetOverrides,
+        secondsPerUseOverrides = secondsPerUseOverrides,
+        productTypeOptions = productTypeOptions,
+        timerValue = timerValue,
+        backgroundSyncPreferences = backgroundSyncPreferences,
+        penQuickLogState = penQuickLogState,
+        loadedPenProductId = loadedPenProductId,
+        runtimePermissionResult = runtimePermissionResult,
+        backgroundSyncLastRunLabel = backgroundSyncLastRunLabel,
+        nowProvider = nowProvider,
+        onSetSubmissionTimer = viewModel::setSubmissionTimer,
+        onSaveQuantityPresets = viewModel::updateQuantityPresets,
+        onSaveQuantityPresetsForType = viewModel::updateQuantityPresetsForType,
+        onClearQuantityPresetsForType = viewModel::clearQuantityPresetsForType,
+        onSaveSecondsPerUseForType = viewModel::updateSecondsPerUseForType,
+        onClearSecondsPerUseForType = viewModel::clearSecondsPerUseForType,
+        onSetBackgroundSyncEnabled = viewModel::setBackgroundSyncEnabled,
+        notificationsAvailable = viewModel::canPresentQueueAlerts,
+        runtimePermissionGranted = {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS,
+                ) == PackageManager.PERMISSION_GRANTED
+        },
+        onRuntimePermissionResultConsumed = { runtimePermissionResult = null },
+        requestRuntimePermission = { permissionLauncher.launchPostNotificationsPermission() },
+        onQueueAlertsChanged = viewModel::setQueueAlertsEnabled,
+        onSyncNow = viewModel::syncQueue,
+        onFetchProducts = viewModel::fetchProducts,
+    )
+}
+
+
+@Composable
+internal fun SettingsContent(
+    gasUrl: String,
+    syncStatus: String?,
+    pendingCount: Int,
+    quantityPresets: List<Double>,
+    quantityPresetOverrides: Map<ProductTypeKey, List<Double>>,
+    secondsPerUseOverrides: Map<ProductTypeKey, Double>,
+    productTypeOptions: List<String>,
+    timerValue: Int,
+    backgroundSyncPreferences: SyncPreferences,
+    penQuickLogState: PenQuickLogState,
+    loadedPenProductId: String?,
+    runtimePermissionResult: Boolean?,
+    backgroundSyncLastRunLabel: String,
+    nowProvider: () -> Instant,
+    onSetSubmissionTimer: (Int) -> Unit,
+    onSaveQuantityPresets: suspend (List<Double>) -> Result<Unit>,
+    onSaveQuantityPresetsForType: suspend (String, List<Double>) -> Result<Unit>,
+    onClearQuantityPresetsForType: (String) -> Unit,
+    onSaveSecondsPerUseForType: suspend (String, Double) -> Result<Unit>,
+    onClearSecondsPerUseForType: (String) -> Unit,
+    onSetBackgroundSyncEnabled: (Boolean) -> Unit,
+    notificationsAvailable: () -> Boolean,
+    runtimePermissionGranted: () -> Boolean,
+    onRuntimePermissionResultConsumed: () -> Unit,
+    requestRuntimePermission: () -> Unit,
+    onQueueAlertsChanged: (Boolean) -> Unit,
+    onSyncNow: () -> Unit,
+    onFetchProducts: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -94,7 +166,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         Text("Cancel window: $timerValue seconds")
         Slider(
             value = timerValue.toFloat(),
-            onValueChange = { viewModel.setSubmissionTimer(it.toInt()) },
+            onValueChange = { onSetSubmissionTimer(it.toInt()) },
             valueRange = 0f..5f,
             steps = 4
         )
@@ -102,7 +174,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         Spacer(modifier = Modifier.height(32.dp))
         QuickLogQuantityEditor(
             quantityPresets = quantityPresets,
-            onSave = viewModel::updateQuantityPresets,
+            onSave = onSaveQuantityPresets,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -110,11 +182,11 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             productTypes = productTypeOptions,
             globalPresets = quantityPresets,
             overrides = quantityPresetOverrides,
-            onSave = viewModel::updateQuantityPresetsForType,
-            onReset = viewModel::clearQuantityPresetsForType,
+            onSave = onSaveQuantityPresetsForType,
+            onReset = onClearQuantityPresetsForType,
             secondsPerUseOverrides = secondsPerUseOverrides,
-            onSaveSecondsPerUse = viewModel::updateSecondsPerUseForType,
-            onClearSecondsPerUse = viewModel::clearSecondsPerUseForType,
+            onSaveSecondsPerUse = onSaveSecondsPerUseForType,
+            onClearSecondsPerUse = onClearSecondsPerUseForType,
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -142,7 +214,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             Text("Background sync")
             Switch(
                 checked = backgroundSyncPreferences.enabled,
-                onCheckedChange = viewModel::setBackgroundSyncEnabled,
+                onCheckedChange = onSetBackgroundSyncEnabled,
                 modifier = Modifier
                     .testTag(BackgroundSyncSettingsTestTags.SWITCH)
                     .semantics { contentDescription = "Background sync" },
@@ -162,28 +234,22 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
             pendingActionCount = pendingCount,
             queueNonEmptySinceEpochMillis =
                 backgroundSyncPreferences.queueNonEmptySinceEpochMillis,
-            nowEpochMillis = System.currentTimeMillis(),
-            notificationsAvailable = viewModel::canPresentQueueAlerts,
+            nowEpochMillis = nowProvider().toEpochMilli(),
+            notificationsAvailable = notificationsAvailable,
             runtimePermissionRequired =
                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU,
-            runtimePermissionGranted = {
-                Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
-                    ContextCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.POST_NOTIFICATIONS,
-                    ) == PackageManager.PERMISSION_GRANTED
-            },
+            runtimePermissionGranted = runtimePermissionGranted,
             runtimePermissionResult = runtimePermissionResult,
-            onRuntimePermissionResultConsumed = { runtimePermissionResult = null },
+            onRuntimePermissionResultConsumed = onRuntimePermissionResultConsumed,
             requestRuntimePermission = {
-                permissionLauncher.launchPostNotificationsPermission()
+                requestRuntimePermission()
             },
-            onPreferenceChanged = viewModel::setQueueAlertsEnabled,
+            onPreferenceChanged = onQueueAlertsChanged,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
         Button(
-            onClick = { viewModel.syncQueue() },
+            onClick = { onSyncNow() },
             modifier = Modifier.fillMaxWidth(),
             enabled = pendingCount > 0
         ) {
@@ -192,7 +258,7 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
 
         Spacer(modifier = Modifier.height(16.dp))
         Button(
-            onClick = { viewModel.fetchProducts() },
+            onClick = { onFetchProducts() },
             modifier = Modifier.fillMaxWidth(),
             enabled = true
         ) {
@@ -205,7 +271,6 @@ fun SettingsScreen(viewModel: CannsheetViewModel) {
         }
     }
 }
-
 internal fun nfcQuickLogResolverDescription(
     state: PenQuickLogState,
     explicitLoadedPenProductId: String?,

@@ -1,12 +1,19 @@
+import java.util.Properties
+import com.android.build.api.variant.HasUnitTestBuilder
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.kotlin.compose)
   alias(libs.plugins.kotlin.serialization)
   alias(libs.plugins.google.devtools.ksp)
+  alias(libs.plugins.roborazzi)
 }
 
-import java.util.Properties
-import com.android.build.api.variant.HasUnitTestBuilder
+android.testOptions.unitTests.isIncludeAndroidResources = true
+
+roborazzi {
+  outputDir.set(file("src/test/screenshots"))
+}
 
 val productionGasUrl = "https://script.google.com/macros/s/AKfycbys-9r8PnkcTwUwbWL4hITr73n3nF240WQ1Vz6PW_V2XBwzusnMU3Br8tLaCgTiFz7hmQ/exec"
 val sandboxPropertiesFile = rootProject.file("sandbox.properties")
@@ -157,6 +164,14 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.retrofit)
   testImplementation("junit:junit:4.13.2")
+  testImplementation(libs.robolectric)
+  testImplementation(libs.roborazzi)
+  testImplementation(libs.roborazzi.compose)
+  testImplementation(libs.roborazzi.junit.rule)
+  testImplementation("androidx.compose.ui:ui-test-junit4")
+  testImplementation("androidx.test.ext:junit:1.2.1")
+  testImplementation("androidx.test:core-ktx:1.6.1")
+  testImplementation("androidx.compose.ui:ui-test-manifest")
   androidTestImplementation(platform(libs.androidx.compose.bom))
   androidTestImplementation("androidx.compose.ui:ui-test-junit4")
   androidTestImplementation("androidx.test.ext:junit:1.2.1")
