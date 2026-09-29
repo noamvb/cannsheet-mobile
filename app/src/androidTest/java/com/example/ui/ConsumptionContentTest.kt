@@ -56,7 +56,7 @@ class ConsumptionContentTest {
         }
 
         composeRule.onNode(hasText("Blue Dream") and hasClickAction()).performClick()
-        composeRule.onNode(hasText("Log Consumption") and hasClickAction()).performClick()
+        composeRule.onNode(hasText("Log consumption") and hasClickAction()).performClick()
 
         composeRule.runOnIdle {
             assertEquals("p1", loggedProductId)

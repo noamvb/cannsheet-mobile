@@ -56,6 +56,7 @@ internal object AdaptiveNavigationTestTags {
     const val RAIL = "adaptive-navigation-rail"
     const val CONTENT = "adaptive-navigation-content"
     const val COUNTDOWN = "adaptive-navigation-countdown"
+    const val TOP_BAR = "adaptive-navigation-top-bar"
 
     fun destination(route: String) = "adaptive-navigation-destination-$route"
 }
@@ -145,6 +146,7 @@ fun CannsheetApp(
  * this seam lets adaptive-layout tests exercise real width constraints without
  * constructing production repositories or starting network work.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AdaptiveNavigationLayout(
     pendingCount: Int,
@@ -155,7 +157,26 @@ internal fun AdaptiveNavigationLayout(
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val windowWidth = windowWidthFor(maxWidth)
+        val currentTitle = items.firstOrNull { it.route == selectedRoute }?.title
+            ?: if (selectedRoute == BARCODE_SCAN_ROUTE) "Scan barcode" else null
         Scaffold(
+            topBar = {
+                if (currentTitle != null) {
+                    TopAppBar(
+                        title = {
+                            Text(
+                                text = currentTitle,
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        ),
+                        modifier = Modifier.testTag(AdaptiveNavigationTestTags.TOP_BAR),
+                    )
+                }
+            },
             bottomBar = {
                 if (windowWidth == WindowWidth.COMPACT) {
                     AppBottomNavigation(
@@ -197,7 +218,10 @@ private fun AppBottomNavigation(
     selectedRoute: String?,
     onNavigate: (String) -> Unit,
 ) {
-    NavigationBar(modifier = Modifier.testTag(AdaptiveNavigationTestTags.BOTTOM_BAR)) {
+    NavigationBar(
+        modifier = Modifier.testTag(AdaptiveNavigationTestTags.BOTTOM_BAR),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+    ) {
         items.forEach { screen ->
             NavigationBarItem(
                 modifier = Modifier.testTag(AdaptiveNavigationTestTags.destination(screen.route)),
@@ -205,6 +229,13 @@ private fun AppBottomNavigation(
                 label = { Text(screen.title) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
+                colors = NavigationBarItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }
@@ -227,6 +258,7 @@ private fun AppNavigationRail(
             .fillMaxHeight()
             .displayCutoutPadding()
             .testTag(AdaptiveNavigationTestTags.RAIL),
+        containerColor = MaterialTheme.colorScheme.surfaceContainer,
     ) {
         items.forEach { screen ->
             NavigationRailItem(
@@ -235,6 +267,13 @@ private fun AppNavigationRail(
                 label = { Text(screen.title) },
                 selected = selectedRoute == screen.route,
                 onClick = { onNavigate(screen.route) },
+                colors = NavigationRailItemDefaults.colors(
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ),
             )
         }
     }
