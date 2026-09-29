@@ -1,6 +1,6 @@
 # Latest handoff
 
-## 2026-09-29: v1.13.1 (code 67) - restore behaviour the redesign dropped (pending publication)
+## 2026-09-29: v1.13.1 (code 67) - restore behaviour the redesign dropped, published
 
 An agy parity audit compared v1.12.7 with v1.13.0 and found four behaviours the Ledger Green
 redesign had dropped. All four are restored, each with a test that fails without the fix:
@@ -11,7 +11,17 @@ redesign had dropped. All four are restored, each with a test that fails without
   The chart container no longer merges descendants.
 - The purchase tax preview shows the rate again ("Estimated total with 13% tax · $x").
 
-Release provenance gets recorded here after publication.
+Release provenance:
+- PR #207 was squash-merged as `41d476c`.
+- Main run `36637227799` passed all six jobs on `41d476c`. The first attempt of Emulator API 36
+  failed two `PurchaseContentTest` suggestion taps; they passed on re-run and locally (179/179).
+- Annotated tag `v1.13.1` points at exactly `41d476c`, which was the tip of `origin/main` when
+  tagged. Release run `36638686445` succeeded; published 2026-09-29 22:25 UTC.
+- APK SHA-256: `2ba0891c2f9292845ebfb93887446344172b20392c4151d91a25d2966a324e51`.
+- Re-downloaded and checked: `shasum -c` OK; package `com.noamv.cannsheet.mobile`,
+  versionCode 67, versionName 1.13.1.
+- The signing certificate `a9787249...665e` is unchanged, so the update installs in place.
+- Delivered to the owner by Telegram (the phone was off adb); Obtainium also offers it.
 
 ## 2026-09-29: Cannsheet Mobile v1.13.0 (code 66) - "Ledger Green" redesign, published
 
