@@ -13,8 +13,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.font.FontVariation
-import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -98,23 +96,12 @@ internal val LedgerDarkColors: ColorScheme = darkColorScheme(
     scrim = Color(0xFF000000),
 )
 
-@OptIn(ExperimentalTextApi::class)
+// Static weights, not the variable font: a variable TTF in res/font cannot be
+// loaded on API 24-25 (minSdk is 24), and Compose then throws "Could not load font".
 internal val PlexSans: FontFamily = FontFamily(
-    Font(
-        R.font.ibm_plex_sans_variable,
-        FontWeight(400),
-        variationSettings = FontVariation.Settings(FontVariation.weight(400)),
-    ),
-    Font(
-        R.font.ibm_plex_sans_variable,
-        FontWeight(500),
-        variationSettings = FontVariation.Settings(FontVariation.weight(500)),
-    ),
-    Font(
-        R.font.ibm_plex_sans_variable,
-        FontWeight(600),
-        variationSettings = FontVariation.Settings(FontVariation.weight(600)),
-    ),
+    Font(R.font.ibm_plex_sans_regular, FontWeight(400)),
+    Font(R.font.ibm_plex_sans_medium, FontWeight(500)),
+    Font(R.font.ibm_plex_sans_semibold, FontWeight(600)),
 )
 
 internal val PlexMono: FontFamily = FontFamily(

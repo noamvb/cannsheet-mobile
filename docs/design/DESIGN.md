@@ -62,7 +62,7 @@ Computed with the WCAG relative-luminance formula. The mockup's lowest text pair
 
 ## Type
 
-IBM Plex Sans variable (bundled, weights 400–700) carries all Material 3 text styles. IBM Plex Mono regular and medium are for data figures (13–32sp) and use tabular numerals (`fontFeatureSettings = "tnum"` via `TextStyle.tabular()`). The mockup specifies the named scale entries below; missing intermediate M3 roles are filled from the M3 size progression and use the nearest specified Sans weight.
+IBM Plex Sans static Regular, Medium and SemiBold (bundled, weights 400–600; static because a variable TTF does not load on API 24–25) carries all Material 3 text styles. IBM Plex Mono regular and medium are for data figures (13–32sp) and use tabular numerals (`fontFeatureSettings = "tnum"` via `TextStyle.tabular()`). The mockup specifies the named scale entries below; missing intermediate M3 roles are filled from the M3 size progression and use the nearest specified Sans weight.
 
 | M3 role | Face | Weight | Size / line height (sp) |
 |---|---|---:|---:|
