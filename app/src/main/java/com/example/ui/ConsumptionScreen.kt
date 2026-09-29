@@ -961,18 +961,16 @@ private fun LedgerProductRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag(ConsumptionLedgerTestTags.remainingQuantity(product.id)),
                 )
-                lastQuantity?.let { quantity ->
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        text = "Last: ${formatQuantity(quantity)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            }
+            // Its own line: at 320dp the metadata row above has no room for a fourth item.
+            lastQuantity?.let { quantity ->
+                Text(
+                    text = "Last: ${formatQuantity(quantity)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (isSelected && runway != null) {
                 Text(
