@@ -7,6 +7,13 @@
       "description": "Fast-forward push of local redesign/ledger to origin/redesign/ledger",
       "remote": "origin",
       "branch": "redesign/ledger"
+    },
+    {
+      "id": "push-docs-v1-13-0-provenance",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local docs/v1.13.0-provenance to origin/docs/v1.13.0-provenance",
+      "remote": "origin",
+      "branch": "docs/v1.13.0-provenance"
     }
   ]
 }

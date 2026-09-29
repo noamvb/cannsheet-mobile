@@ -1,10 +1,39 @@
 # Latest handoff
 
-## 2026-09-29: "Ledger Green" redesign, release 1.13.0 (66) in progress
+## 2026-09-29: Cannsheet Mobile v1.13.0 (code 66) - "Ledger Green" redesign, published
+
+**Status: published 2026-09-29 19:33 UTC and independently verified. The owner
+updates through Obtainium.**
 
 Direction A · Ledger Green (`docs/design/mockups/direction-a.html`, tokens in
 `docs/design/DESIGN.md`) was chosen on the owner's behalf overnight; B and C remain in
-`docs/design/mockups/`. Branch `redesign/ledger` starts from `origin/main` f8fb572.
+`docs/design/mockups/`. The owner approved the live release on 2026-09-29.
+
+Release provenance:
+- PR #205 was squash-merged as `034390e`; it also carries the phone-side Wear OS pen
+  bridge (#204, already on main).
+- Main run `36618007876` on `034390e` passed all six jobs, Emulator API 24 and API 36
+  included.
+- Annotated tag `v1.13.0` points at exactly `034390e`, which was the tip of
+  `origin/main` when tagged. Release run `36619125016` succeeded.
+- Published assets in `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.13.0.apk`
+  and `Cannsheet-Mobile-1.13.0.apk.sha256`.
+- APK SHA-256:
+  `f97d4e549ed70421aa121aafb68f09c9d99e801039e2d517fe329295cc0ce46c`.
+- Re-downloaded and checked: `shasum -c` OK; package `com.noamv.cannsheet.mobile`,
+  versionCode 66, versionName 1.13.0, minSdk 24, targetSdk 36; APK Signature Scheme v2.
+- The signing certificate SHA-256 `a9787249...665e` matches v1.12.7, so the update
+  installs in place.
+
+Found by the PR's API 24 job and fixed before release:
+- A variable TTF in `res/font` cannot load on API 24-25. Plex Sans now ships as static
+  Regular, Medium and SemiBold.
+- CI's emulator is 320x640. There, the Insights range control looped layout inside a
+  narrow expanded pane; below 320dp it is now a scrolling chip row.
+- Automated review findings, also fixed:
+  - Log rows no longer call the package weight "remaining".
+  - The Insights headline says "logs".
+  - Wide charts scroll again.
 
 ### Owner revision checklist (read first when the owner says "apply the revision checklist")
 The Claude doc https://claude.ai/code/artifact/244dc120-2811-4014-92a8-5b1e119e748e ("Overnight
@@ -24,8 +53,6 @@ each applied row to Keep and note the commit in its alternative cell.
   (the older `cannsheet36` AVD holds a release-signed install, so debug tests cannot
   install there); emulator review in light, dark and font scale 1.3. The shell-level
   TopAppBar was removed (each screen owns its header).
-- The owner approved the live release on 2026-09-29 (checklist row 11 reversed in chat).
-  Version bumped to 1.13.0 (66); release provenance gets recorded here after publication.
 - Clock seams in ConsumptionScreen/SettingsScreen take `nowMillisProvider: () -> Long`
   (java.time.Instant needs API 26; minSdk is 24).
 
@@ -35,10 +62,10 @@ Last updated: 2026-09-27
 
 Repository: public `noamvb/cannsheet-mobile`
 
-## In progress - Wear OS pen tile (ADR-057)
+## In progress - Wear OS pen tile (ADR-057): watch module next
 
-**Status: PR #204 (phone-side bridge) open, unreleased. The watch module and the
-release-pipeline change are not started.**
+**Status: PR #204 (phone-side bridge) merged as `f8fb572` and shipped in v1.13.0.
+The watch module (PR B) and the release-pipeline change (PR C) are not started.**
 
 - Plan: PR A #204 adds `WearPenListenerService`, which runs the Quick Settings tile
   toggle on `PEN_TILE_WIDGET_ID` for Data Layer messages `/cannsheet/pen/tap` and

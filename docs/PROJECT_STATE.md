@@ -1,8 +1,13 @@
 # Project state
 
-Last updated: 2026-09-29 (v1.13.0 pending publication)
+Last updated: 2026-09-29 (v1.13.0)
 
-## Release 1.13.0 (code 66) - "Ledger Green" redesign, pending publication
+## Release 1.13.0 (code 66) - "Ledger Green" redesign, published 2026-09-29
+
+Tag `v1.13.0` points at `034390e`; main run `36618007876`, release run `36619125016`;
+APK SHA-256 `f97d4e549ed70421aa121aafb68f09c9d99e801039e2d517fe329295cc0ce46c`, signing
+certificate unchanged.
+
 
 - Every screen (Log, Purchase, Insights, Assistant, Settings), the launcher icon, widgets
   and notification tint follow direction A "Ledger Green" (`docs/design/DESIGN.md`,
@@ -14,7 +19,7 @@ Last updated: 2026-09-29 (v1.13.0 pending publication)
 - UI-only: no Room, queue, sync, wire, endpoint or application-ID change.
 - Also ships the unreleased phone-side Wear OS pen bridge below (#204).
 
-## Unreleased - phone-side Wear OS pen bridge
+## Phone-side Wear OS pen bridge - shipped in 1.13.0 (#204 `f8fb572`)
 
 - Added phone Data Layer handling for watch tap/refresh messages and state publication for the shared Quick Settings pen tile.
 - Extracted the tile toggle and model computation for reuse; watch taps use the same deferred, undoable action.
