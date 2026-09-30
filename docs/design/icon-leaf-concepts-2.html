@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Leaf icon concepts 2</title>
+<style>
+  body{margin:0;padding:32px 24px;background:#F3F5F1;font-family:-apple-system,Helvetica,sans-serif;color:#1B2A27;box-sizing:border-box}
+  h1{margin:0 0 4px;font-size:24px;color:#145F58;text-align:center}
+  p.sub{margin:0 0 24px;text-align:center;color:#5A6B67;font-size:14px}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .card{background:#fff;border:1px solid #DDE3DF;border-radius:16px;padding:16px 12px;text-align:center}
+  .card h2{margin:10px 0 2px;font-size:16px}
+  .card p{margin:0;font-size:12px;color:#5A6B67;min-height:32px}
+  .row{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:10px}
+  svg{display:block}
+  .big{width:150px;height:150px;border-radius:50%;overflow:hidden;margin:0 auto;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+  .sq{width:56px;height:56px;border-radius:16px;overflow:hidden}
+  .ci{width:40px;height:40px;border-radius:50%;overflow:hidden}
+  .mono{width:56px;height:56px;border-radius:16px;overflow:hidden}
+  .dark{background:#1B2422;border-radius:12px;padding:6px}
+</style></head><body style="max-width:1080px;margin:0 auto">
+<h1>Cannsheet · leaf icon concepts · round 2</h1>
+<p class="sub">Every shape is the Poop Schedule pebble (domed top, flatter bottom). Ledger Green. Big circle, then squircle, small circle, themed mono light/dark.</p>
+<div class="grid" id="grid"></div>
+<script>
+const BG='#145F58', CREAM='#FBF4EA', TINT='#BFE0D2';
+// Pebble: the Poop Schedule stone. Domed top (up), flatter bottom (down), slightly lopsided.
+const pebble=(cx,cy,rx,up,down)=>`M${cx-rx},${cy} C${cx-rx},${cy-up*.55} ${cx-rx*.55},${cy-up} ${cx},${cy-up} C${cx+rx*.6},${cy-up} ${cx+rx},${cy-up*.55} ${cx+rx},${cy} C${cx+rx},${cy+down*.8} ${cx+rx*.6},${cy+down} ${cx},${cy+down} C${cx-rx*.55},${cy+down} ${cx-rx},${cy+down*.8} ${cx-rx},${cy} Z`;
+// Oval leaflet: a pebble laid along angle th (0 = straight up) from hub (54,hy), centre at distance d.
+const oval=(th,d,len,w,fill,hy=70)=>{const r=th*Math.PI/180,cx=54+d*Math.sin(r),cy=hy-d*Math.cos(r);
+  return `<path fill="${fill}" transform="rotate(${th-90} ${cx.toFixed(2)} ${cy.toFixed(2)})" d="${pebble(+cx.toFixed(2),+cy.toFixed(2),len,w*1.1,w*.9)}"/>`;};
+const concepts=[
+ {name:'E · Stacked leaf',desc:'Poop’s stacked stones, arranged into a leaf silhouette.',
+  fg:(c,t)=>`<path fill="${t}" d="${pebble(54,26,6,5,3.5)}"/>
+   <path fill="${c}" d="${pebble(54,38,13.5,6.5,4.5)}"/>
+   <path fill="${c}" d="${pebble(54,52,21,7.5,5.5)}"/>
+   <path fill="${c}" d="${pebble(54,66,15,6.5,4.5)}"/>
+   <path fill="${c}" d="${pebble(54,77,7,4.5,3)}"/>`},
+ {name:'F · Pebble trio',desc:'Three pebbles as leaflets; top one tinted like Poop’s.',
+  fg:(c,t)=>`${oval(-62,18,14,8,c,74)}${oval(62,18,14,8,c,74)}${oval(0,23,19,9.5,t,74)}
+   <rect x="52.2" y="77" width="3.6" height="9" rx="1.8" fill="${c}"/>`},
+ {name:'G · Pebble fan (5)',desc:'Five separate pebbles radiating: reads as cannabis, built like Poop.',
+  fg:(c,t)=>`${oval(-86,18,10,5,t,74)}${oval(86,18,10,5,t,74)}${oval(-43,23,14.5,6.4,c,74)}${oval(43,23,14.5,6.4,c,74)}${oval(0,28,19,7.4,c,74)}
+   <rect x="52.3" y="78" width="3.4" height="9" rx="1.7" fill="${t}"/>`},
+ {name:'H · Pebble fan (7)',desc:'Seven separate pebbles; the most leaf-like, slightly busier.',
+  fg:(c,t)=>`${oval(-110,15,7.5,4,t,74)}${oval(110,15,7.5,4,t,74)}${oval(-73,19,11,4.8,t,74)}${oval(73,19,11,4.8,t,74)}${oval(-36,23,15,5.8,c,74)}${oval(36,23,15,5.8,c,74)}${oval(0,28,19,6.6,c,74)}
+   <rect x="52.3" y="78" width="3.4" height="9" rx="1.7" fill="${t}"/>`},
+];
+const svg=(fg,bg,c,t,mono)=>`<svg viewBox="0 0 108 108" width="100%" height="100%"><rect width="108" height="108" fill="${bg}"/>${fg(c,mono?c:t).replace(/stroke="#145F58"/g,`stroke="${bg}"`)}</svg>`;
+const g=document.getElementById('grid');
+for(const k of concepts){
+  const s=(bg=BG,c=CREAM,t=TINT,m=false)=>svg(k.fg,bg,c,t,m);
+  g.insertAdjacentHTML('beforeend',`<div class="card">
+   <div class="big">${s()}</div><h2>${k.name}</h2><p>${k.desc}</p>
+   <div class="row"><div class="sq">${s()}</div><div class="ci">${s()}</div>
+   <div class="mono">${s('#E3EEE9','#145F58','#145F58',true)}</div>
+   <div class="dark"><div class="mono" style="width:44px;height:44px;border-radius:12px">${s('#244D46','#9ED8C4','#9ED8C4',true)}</div></div></div></div>`);
+}
+</script></body></html>
