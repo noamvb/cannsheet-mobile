@@ -28,6 +28,13 @@
       "description": "Fast-forward push of local docs/v1.13.1-provenance to origin/docs/v1.13.1-provenance",
       "remote": "origin",
       "branch": "docs/v1.13.1-provenance"
+    },
+    {
+      "id": "push-icon-cannabis-fan-leaf",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local icon/cannabis-fan-leaf to origin/icon/cannabis-fan-leaf",
+      "remote": "origin",
+      "branch": "icon/cannabis-fan-leaf"
     }
   ]
 }
