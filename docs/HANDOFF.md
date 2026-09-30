@@ -1,6 +1,6 @@
 # Latest handoff
 
-## 2026-09-30: cannabis fan-leaf launcher icon (unreleased)
+## 2026-09-30: v1.13.2 (code 68) - cannabis fan-leaf launcher icon
 
 - Branch `icon/cannabis-fan-leaf`: new launcher foreground and monochrome vectors from
   `docs/design/icon-fan/agy/v1.svg` (ADR-058), refreshed `docs/design/icon-preview.*`, and the
@@ -9,7 +9,8 @@
   `redesign36` AVD and checked in the Pixel Launcher app drawer
   (`docs/images/launcher-icon-fan-leaf.png`). Themed-icon mode was checked only in the rendered
   preview, not on a device.
-- Not released: the icon reaches the phone with the next version.
+- PR #209 was squash-merged as `5fa9195`; version bumped to 1.13.2 (68) for release.
+  Tag, main run, release run and APK SHA-256 are recorded after publication.
 
 ## 2026-09-29: v1.13.1 (code 67) - restore behaviour the redesign dropped, published
 

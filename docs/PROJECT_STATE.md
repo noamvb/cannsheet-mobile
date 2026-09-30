@@ -1,8 +1,11 @@
 # Project state
 
-Last updated: 2026-09-30 (v1.13.1 + unreleased launcher icon)
+Last updated: 2026-09-30 (v1.13.2)
 
-## Unreleased - cannabis fan-leaf launcher icon
+## Release 1.13.2 (code 68) - cannabis fan-leaf launcher icon
+
+PR #209 squash-merged as `5fa9195`; publication provenance is recorded in
+`docs/HANDOFF.md` after the release run.
 
 - The launcher icon is a seven-leaflet cannabis fan leaf in the Poop Schedule style (flat
   cream and pale-green shapes, separated, on Ledger Green `#145F58`), replacing the
