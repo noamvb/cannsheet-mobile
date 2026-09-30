@@ -35,6 +35,13 @@
       "description": "Fast-forward push of local icon/cannabis-fan-leaf to origin/icon/cannabis-fan-leaf",
       "remote": "origin",
       "branch": "icon/cannabis-fan-leaf"
+    },
+    {
+      "id": "push-release-1-13-2",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local release/1.13.2 to origin/release/1.13.2",
+      "remote": "origin",
+      "branch": "release/1.13.2"
     }
   ]
 }
