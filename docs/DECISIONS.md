@@ -2518,3 +2518,21 @@ permanently dead chain.
   out of range the watch cannot log; nothing is queued on the watch. The phone gains a
   `play-services-wearable` dependency. The watch APK must share the application ID and signing
   certificate for the Data Layer to connect.
+
+## ADR-058: The launcher icon is a cannabis fan leaf in the Poop Schedule style
+
+- Status: Accepted
+- Date: 2026-09-30
+- Context: The owner did not like the Ledger Green three-rules mark and wanted a leaf that matches
+  the Poop Schedule icon (flat, soft, separate shapes in two light tones on a solid field). A first
+  "pebble fan" built from Poop's exact domed-oval shape matched the style but did not read clearly as
+  cannabis. The same brief went to codex (GPT-6.1-sol), agy (Gemini 3.8 Flash) and Claude Sonnet,
+  three variants each (`docs/design/icon-fan-comparison.png`).
+- Decision: agy v1: seven slender, smooth, pointed leaflets with a steep length gradient and a wide
+  spread, cream upper leaflets and pale-green lower leaflets and stem, all shapes separated and
+  inside the 66dp safe zone. The monochrome drawable is the same paths in `#000000` on a
+  transparent canvas (ADR-002).
+- Consequences: Recognisable as cannabis at launcher size and as a themed silhouette. Serrated
+  variants were rejected as too detailed at 48px. The SVG in `docs/design/icon-fan/agy/v1.svg` is the
+  source of truth; regenerate the vector XML from it rather than editing paths by hand.
+

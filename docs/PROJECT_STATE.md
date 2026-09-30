@@ -1,6 +1,16 @@
 # Project state
 
-Last updated: 2026-09-29 (v1.13.1)
+Last updated: 2026-09-30 (v1.13.1 + unreleased launcher icon)
+
+## Unreleased - cannabis fan-leaf launcher icon
+
+- The launcher icon is a seven-leaflet cannabis fan leaf in the Poop Schedule style (flat
+  cream and pale-green shapes, separated, on Ledger Green `#145F58`), replacing the
+  three-rules ledger mark. Source: `docs/design/icon-fan/agy/v1.svg`; preview:
+  `docs/design/icon-preview.png`; exploration: `docs/design/icon-leaf-concepts*.png`,
+  `docs/design/icon-fan-comparison.png` (ADR-058).
+- Resource-only: `ic_launcher_foreground.xml` and `ic_launcher_monochrome.xml`. Background,
+  shortcut icons, widgets and the notification small icon are unchanged.
 
 ## Release 1.13.1 (code 67) - redesign parity fixes, published 2026-09-29
 
