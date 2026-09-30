@@ -42,6 +42,13 @@
       "description": "Fast-forward push of local release/1.13.2 to origin/release/1.13.2",
       "remote": "origin",
       "branch": "release/1.13.2"
+    },
+    {
+      "id": "push-docs-v1-13-2-provenance",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local docs/v1.13.2-provenance to origin/docs/v1.13.2-provenance",
+      "remote": "origin",
+      "branch": "docs/v1.13.2-provenance"
     }
   ]
 }

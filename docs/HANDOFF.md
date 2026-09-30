@@ -9,8 +9,23 @@
   `redesign36` AVD and checked in the Pixel Launcher app drawer
   (`docs/images/launcher-icon-fan-leaf.png`). Themed-icon mode was checked only in the rendered
   preview, not on a device.
-- PR #209 was squash-merged as `5fa9195`; version bumped to 1.13.2 (68) for release.
-  Tag, main run, release run and APK SHA-256 are recorded after publication.
+Release provenance:
+- PR #209 was squash-merged as `5fa9195`. Release PR #210 (version 1.13.2 / 68) was
+  squash-merged as `cd5bdc8`.
+- Main run `36722361095` passed all six jobs on `cd5bdc8` (Classify, Backend, Android
+  static, Emulator API 24, Emulator API 36, Cannsheet Android PR validation).
+- Annotated tag `v1.13.2` points at exactly `cd5bdc8`, which was the tip of `origin/main`
+  when tagged. Release run `36723160803` failed its first attempt in "Confirm tested main
+  commit": the runs listing had not yet returned the 7-minute-old main run. Nothing was built
+  or published. The re-run succeeded, and it was published 2026-09-30 13:51 UTC.
+- Published assets in `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.13.2.apk` and
+  `Cannsheet-Mobile-1.13.2.apk.sha256`. APK SHA-256
+  `aa1499edf420238748c13f0b51d2908008b744ab7b7420c0fa4346625969267d` (checksum re-verified
+  after download).
+- `aapt`: package `com.noamv.cannsheet.mobile`, versionCode 68, versionName 1.13.2,
+  minSdk 24, targetSdk 36. `apksigner`: v2 scheme; signing certificate SHA-256
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, identical to 1.13.1,
+  so the phone updates in place through Obtainium.
 
 ## 2026-09-29: v1.13.1 (code 67) - restore behaviour the redesign dropped, published
 

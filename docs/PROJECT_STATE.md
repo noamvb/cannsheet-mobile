@@ -4,8 +4,9 @@ Last updated: 2026-09-30 (v1.13.2)
 
 ## Release 1.13.2 (code 68) - cannabis fan-leaf launcher icon
 
-PR #209 squash-merged as `5fa9195`; publication provenance is recorded in
-`docs/HANDOFF.md` after the release run.
+Tag `v1.13.2` points at `cd5bdc8`; main run `36722361095`, release run `36723160803`;
+APK SHA-256 `aa1499edf420238748c13f0b51d2908008b744ab7b7420c0fa4346625969267d`, signing
+certificate unchanged. Published 2026-09-30.
 
 - The launcher icon is a seven-leaflet cannabis fan leaf in the Poop Schedule style (flat
   cream and pale-green shapes, separated, on Ledger Green `#145F58`), replacing the
