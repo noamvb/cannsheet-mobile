@@ -1,8 +1,8 @@
 # Latest handoff
 
-## 2026-10-20: NFC quick-log results as a notification (unreleased)
+## 2026-10-20: v1.13.3 (code 69) - NFC quick-log results as a notification
 
-- Branch `nfc-result-notification` (PR #212): the NFC handler Activity is invisible and finishes
+- PR #212 (branch `nfc-result-notification`): the NFC handler Activity is invisible and finishes
   at once; results post as notification 1002 on channel `cannsheet-nfc-quick-log` with Undo /
   Submit now during the undo window and a recovery action for error states (ADR-059). The popup
   remains the fallback when notifications are denied or the channel is off.
@@ -12,6 +12,8 @@
   vanishing). API 36 emulator: Activity finished over the launcher and the notification posted.
 - Not yet checked on the phone: a real tag tap, Undo from the notification, and whether a playing
   video still enters picture-in-picture.
+- PR #212 was squash-merged as `ad9a481`; version bumped to 1.13.3 (69) for release.
+  Tag, main run, release run and APK SHA-256 are recorded after publication.
 
 ## 2026-09-30: v1.13.2 (code 68) - cannabis fan-leaf launcher icon
 

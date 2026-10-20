@@ -1,6 +1,18 @@
 # Project state
 
-Last updated: 2026-09-30 (v1.13.2)
+Last updated: 2026-10-20 (v1.13.3)
+
+## Release 1.13.3 (code 69) - NFC quick-log results as a notification
+
+PR #212 squash-merged as `ad9a481`; publication provenance is recorded in
+`docs/HANDOFF.md` after the release run.
+
+- An NFC quick-log tap no longer opens a card over the current app: the handler Activity is
+  invisible and finishes at once, and the result posts as a silent heads-up notification with
+  Undo / Submit now during the undo window, or a recovery action for error states (ADR-059).
+  The card remains the fallback when notifications are denied or the channel is off.
+- Not yet checked on the phone: a real tag tap, Undo from the notification, and whether a
+  playing video still enters picture-in-picture.
 
 ## Release 1.13.2 (code 68) - cannabis fan-leaf launcher icon
 
@@ -687,9 +699,9 @@ The legibility regression and its fix are captured on the API 36 emulator in
 no-NFC-hardware states, which exercise the theme and layout but prove nothing
 about RF behavior.
 
-On branch `nfc-result-notification` (not yet released), the result is delivered as an Android
+Since 1.13.3 (#212 `ad9a481`), the result is delivered as an Android
 notification instead of the on-screen card whenever Cannsheet may post notifications (ADR-059);
-the card remains the fallback. Verified by 14 new Robolectric tests, the full local gate and an
+the card remains the fallback. Verified by 17 new Robolectric tests, the full local gate and an
 API 36 emulator render of the no-NFC-hardware state (`docs/images/nfc-result-notification.png`).
 Not yet checked on the phone: a real tag tap, Undo from the notification, and whether a playing
 video still shrinks.
