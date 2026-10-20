@@ -55,8 +55,25 @@ class NfcQuickLogActionHandlerTest {
         assertTrue(ops.submissions.isEmpty())
     }
 
+    private fun pendingPayload(uses: Double) = PenWidgetCommitPayload(
+        version = 3, commitId = "c1", eventId = "event", submittedAtEpochMillis = 0L,
+        commitAtEpochMillis = 5_000L, productId = "product", productUuid = null,
+        inputKind = DeferredPenInputKind.DIRECT_USES, seconds = null,
+        secondsPerUse = null, restoreDraftSeconds = null, uses = uses,
+        date = "2026-10-20", time = "12:00",
+    )
+
+    @Test
+    fun submitRacingTheCommitTimerPresentsSaved() = runBlocking {
+        // submitNow finds no claim because the timer already committed; nothing is pending.
+        handler.handle(action(ACTION_NFC_SUBMIT), false)
+        assertEquals(listOf("c1"), ops.submissions)
+        assertEquals(listOf("Saving 3 uses…", "3 uses saved for Test Cart A"), platform.posts.map { it.second.text() })
+    }
+
     @Test
     fun failedSubmitPresentsSavingThenRetryWithSamePayload() = runBlocking {
+        ops.payload = pendingPayload(3.0)
         handler.handle(action(ACTION_NFC_SUBMIT), false)
         assertEquals(listOf("c1"), ops.submissions)
         assertEquals(listOf("Saving 3 uses…", "The tap could not be saved. Keep it and retry."), platform.posts.map { it.second.text() })
@@ -74,13 +91,7 @@ class NfcQuickLogActionHandlerTest {
         assertEquals(listOf("c1"), ops.submissions)
         ops.submissions.clear()
         platform.posts.clear()
-        ops.payload = PenWidgetCommitPayload(
-            version = 3, commitId = "c1", eventId = "event", submittedAtEpochMillis = 0L,
-            commitAtEpochMillis = 5_000L, productId = "product", productUuid = null,
-            inputKind = DeferredPenInputKind.DIRECT_USES, seconds = null,
-            secondsPerUse = null, restoreDraftSeconds = null, uses = 2.5,
-            date = "2026-10-20", time = "12:00",
-        )
+        ops.payload = pendingPayload(2.5)
         handler.handle(Intent(context, NfcQuickLogActionReceiver::class.java).setAction(ACTION_NFC_RETRY), false)
         assertTrue(ops.submissions.isEmpty())
         assertEquals("NFC quick-log could not be completed.", platform.posts.single().second.text())

@@ -69,7 +69,10 @@ class NfcQuickLogActivity : ComponentActivity() {
         notificationMode = notifier.canPresent()
         if (notificationMode) {
             window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
-            if (savedInstanceState != null) {
+            // Finish only once this surface has provably handed its result to a notification.
+            // A recreation mid-scan falls through to the restore path, which recovers a payload
+            // already in the outbox (with Undo) or reports the interrupted tap.
+            if (savedInstanceState?.getBoolean(KEY_NOTIFICATION_PRESENTED) == true) {
                 finish()
                 return
             }
@@ -147,6 +150,7 @@ class NfcQuickLogActivity : ComponentActivity() {
         // failure or a completed save would otherwise leave the recreated Activity on its default
         // Parsing state with no pending payload to recover and no way forward.
         outState.putString(KEY_STATE_ID, stateId(resultState))
+        outState.putBoolean(KEY_NOTIFICATION_PRESENTED, notificationPresented)
         val state = resultState
         val uses = when (state) {
             is NfcQuickLogResultState.AwaitingUndo -> state.uses
@@ -266,7 +270,7 @@ class NfcQuickLogActivity : ComponentActivity() {
                     submittedAtEpochMillis = pending.submittedAtEpochMillis,
                 )
                 retryAwaiting = resultState as NfcQuickLogResultState.AwaitingUndo
-                watchCommit(resultState as NfcQuickLogResultState.AwaitingUndo)
+                if (!notificationMode) watchCommit(resultState as NfcQuickLogResultState.AwaitingUndo)
             } else if (
                 savedCommitId != null &&
                 savedUses in NfcQuickLogContract.MIN_USES..NfcQuickLogContract.MAX_USES
@@ -285,6 +289,7 @@ class NfcQuickLogActivity : ComponentActivity() {
                     cartName = savedCartName,
                 )
             }
+            if (notificationMode) showResult(resultState)
         }
     }
 
@@ -537,6 +542,7 @@ class NfcQuickLogActivity : ComponentActivity() {
 
     companion object {
         private const val KEY_STATE_ID = "nfc_state_id"
+        private const val KEY_NOTIFICATION_PRESENTED = "nfc_notification_presented"
         private const val KEY_COMMIT_ID = "nfc_commit_id"
         private const val KEY_USES = "nfc_uses"
         private const val KEY_CART_NAME = "nfc_cart_name"

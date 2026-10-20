@@ -80,7 +80,9 @@ internal class NfcQuickLogActionHandler(
             notifier.presentActionResult(next, locked, data)
         } else {
             notifier.present(NfcQuickLogResultState.Saving(uses, cartName), locked)
-            val next = if (ops.submitNow(id)) {
+            // The undo-window timer may commit the payload concurrently; submitNow then finds no
+            // claim and returns false even though the Room write succeeded.
+            val next = if (ops.submitNow(id) || ops.pending()?.commitId != id) {
                 NfcQuickLogResultState.Saved(uses, cartName)
             } else {
                 NfcQuickLogResultState.StorageFailure
