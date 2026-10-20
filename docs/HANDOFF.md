@@ -12,8 +12,22 @@
   vanishing). API 36 emulator: Activity finished over the launcher and the notification posted.
 - Not yet checked on the phone: a real tag tap, Undo from the notification, and whether a playing
   video still enters picture-in-picture.
-- PR #212 was squash-merged as `ad9a481`; version bumped to 1.13.3 (69) for release.
-  Tag, main run, release run and APK SHA-256 are recorded after publication.
+Release provenance:
+- PR #212 was squash-merged as `ad9a481`. Release PR #213 (version 1.13.3 / 69) was
+  squash-merged as `1f60728`.
+- Main run `39382862896` passed all six jobs on `1f60728` (Classify, Backend, Android
+  static, Emulator API 24, Emulator API 36, Cannsheet Android PR validation).
+- Annotated tag `v1.13.3` points at exactly `1f60728`, which was the tip of `origin/main`
+  when tagged. Release run `39383649510` passed all three jobs and published 2026-10-20
+  07:07 UTC.
+- Published assets in `noamvb/cannsheet-mobile-releases`: `Cannsheet-Mobile-1.13.3.apk` and
+  `Cannsheet-Mobile-1.13.3.apk.sha256`. APK SHA-256
+  `c7d122aba8bbffea41e62c50b8c1eda5763f81c08adfd6fe8ba5d8ea0ddf5e5b` (checksum re-verified
+  after download).
+- `aapt`: package `com.noamv.cannsheet.mobile`, versionCode 69, versionName 1.13.3,
+  minSdk 24, targetSdk 36. `apksigner`: v2 scheme; signing certificate SHA-256
+  `a9787249b106d98a421ed839789361a45753e367e243820d10d2f3a09708665e`, identical to 1.13.2,
+  so the phone updates in place through Obtainium.
 
 ## 2026-09-30: v1.13.2 (code 68) - cannabis fan-leaf launcher icon
 

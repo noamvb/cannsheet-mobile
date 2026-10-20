@@ -4,8 +4,9 @@ Last updated: 2026-10-20 (v1.13.3)
 
 ## Release 1.13.3 (code 69) - NFC quick-log results as a notification
 
-PR #212 squash-merged as `ad9a481`; publication provenance is recorded in
-`docs/HANDOFF.md` after the release run.
+Tag `v1.13.3` points at `1f60728`; main run `39382862896`, release run `39383649510`;
+APK SHA-256 `c7d122aba8bbffea41e62c50b8c1eda5763f81c08adfd6fe8ba5d8ea0ddf5e5b`, signing
+certificate unchanged. Published 2026-10-20.
 
 - An NFC quick-log tap no longer opens a card over the current app: the handler Activity is
   invisible and finishes at once, and the result posts as a silent heads-up notification with
