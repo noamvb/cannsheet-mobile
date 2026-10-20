@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -50,6 +51,9 @@ import kotlinx.coroutines.launch
  */
 class NfcQuickLogActivity : ComponentActivity() {
     private val presentationGate = NfcPresentationGate.processLocal()
+    private val notifier by lazy { NfcQuickLogNotifier(this) }
+    private var notificationMode = false
+    private var notificationPresented = false
     private val coordinator by lazy { NfcQuickLogCoordinator.forContext(this) }
     private var resultState by mutableStateOf<NfcQuickLogResultState>(NfcQuickLogResultState.Parsing)
     private var locked by mutableStateOf(false)
@@ -62,6 +66,26 @@ class NfcQuickLogActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         configureLockSafeWindow()
         updateLockState()
+        notificationMode = notifier.canPresent()
+        if (notificationMode) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
+            if (savedInstanceState != null) {
+                finish()
+                return
+            }
+        } else {
+            showPopup()
+        }
+
+        if (savedInstanceState == null) {
+            consumeIntent(intent)
+        } else {
+            restorePendingOperation(savedInstanceState)
+        }
+    }
+
+    private fun showPopup() {
+        window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
         setContent {
             CannsheetTheme {
                 NfcQuickLogResultContent(
@@ -78,11 +102,20 @@ class NfcQuickLogActivity : ComponentActivity() {
                 )
             }
         }
+    }
 
-        if (savedInstanceState == null) {
-            consumeIntent(intent)
+    private fun showResult(state: NfcQuickLogResultState) {
+        resultState = state
+        if (!notificationMode || notificationPresented ||
+            state is NfcQuickLogResultState.Parsing || state is NfcQuickLogResultState.Staging
+        ) return
+        updateLockState()
+        if (state is NfcQuickLogResultState.DuplicatePresentation || notifier.present(state, locked)) {
+            notificationPresented = true
+            finish()
         } else {
-            restorePendingOperation(savedInstanceState)
+            notificationMode = false
+            showPopup()
         }
     }
 
@@ -151,12 +184,12 @@ class NfcQuickLogActivity : ComponentActivity() {
         val adapter = NfcAdapter.getDefaultAdapter(this)
         if (adapter == null) {
             clearNfcIntent(incoming)
-            resultState = NfcQuickLogResultState.NfcUnavailable
+            showResult(NfcQuickLogResultState.NfcUnavailable)
             return
         }
         if (!adapter.isEnabled) {
             clearNfcIntent(incoming)
-            resultState = NfcQuickLogResultState.NfcUnavailable
+            showResult(NfcQuickLogResultState.NfcUnavailable)
             return
         }
         if (Build.VERSION.SDK_INT >= 36 &&
@@ -164,7 +197,7 @@ class NfcQuickLogActivity : ComponentActivity() {
             !adapter.isTagIntentAllowed()
         ) {
             clearNfcIntent(incoming)
-            resultState = NfcQuickLogResultState.NfcLaunchDisabled
+            showResult(NfcQuickLogResultState.NfcLaunchDisabled)
             return
         }
 
@@ -172,7 +205,7 @@ class NfcQuickLogActivity : ComponentActivity() {
         val tag = extractTag(incoming)
         clearNfcIntent(incoming)
         if (parsed == null) {
-            resultState = NfcQuickLogResultState.InvalidTag
+            showResult(NfcQuickLogResultState.InvalidTag)
             return
         }
         if (!presentationGate.begin(parsed.tagId)) {
@@ -183,12 +216,12 @@ class NfcQuickLogActivity : ComponentActivity() {
             // still has the tag active and this instance's own resultState never advanced past
             // Parsing; only leave the state untouched when it already holds a meaningful result.
             if (resultState is NfcQuickLogResultState.Parsing) {
-                resultState = NfcQuickLogResultState.DuplicatePresentation
+                showResult(NfcQuickLogResultState.DuplicatePresentation)
             }
             return
         }
         activeTagId = parsed.tagId
-        resultState = NfcQuickLogResultState.Staging
+        showResult(NfcQuickLogResultState.Staging)
         presentationFallbackExpiry?.cancel()
         presentationFallbackExpiry = null
         if (!establishRemovalCallback(adapter, tag, parsed.tagId)) {
@@ -205,10 +238,10 @@ class NfcQuickLogActivity : ComponentActivity() {
         watcher = lifecycleScope.launch {
             val next = runCatching { coordinator.accept(parsed) }
                 .getOrElse { NfcQuickLogResultState.UnexpectedFailure(it.message) }
-            resultState = next
+            showResult(next)
             if (next is NfcQuickLogResultState.AwaitingUndo) {
                 retryAwaiting = next
-                watchCommit(next)
+                if (!notificationMode) watchCommit(next)
             } else if (next !is NfcQuickLogResultState.PreviousTapBusy) {
                 retryAwaiting = null
             }
@@ -547,33 +580,7 @@ private fun NfcQuickLogResultContent(
                 .testTag("nfc-quick-log-result"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            val message = when (state) {
-                NfcQuickLogResultState.Parsing -> "Reading NFC tag…"
-                NfcQuickLogResultState.DuplicatePresentation -> "Tag is still being held near the phone."
-                NfcQuickLogResultState.Staging -> "Preparing quick log…"
-                is NfcQuickLogResultState.AwaitingUndo -> if (locked) {
-                    "${state.uses} uses queued"
-                } else {
-                    "${state.uses} uses queued for ${state.cartName ?: "the current Pen cart"}"
-                }
-                is NfcQuickLogResultState.Saving -> "Saving ${state.uses} uses…"
-                is NfcQuickLogResultState.Saved -> if (locked) {
-                    "${state.uses} uses saved"
-                } else {
-                    "${state.uses} uses saved for ${state.cartName ?: "the current Pen cart"}"
-                }
-                is NfcQuickLogResultState.Undone -> "${state.uses} uses not logged"
-                NfcQuickLogResultState.UnregisteredTag -> "This NFC tag is not registered."
-                NfcQuickLogResultState.RegistryMismatch -> "This tag configuration does not match its registration."
-                NfcQuickLogResultState.RegistryCorrupt -> "NFC tag registrations need recovery in Settings."
-                NfcQuickLogResultState.NoCart -> "No Pen cart is currently loaded."
-                NfcQuickLogResultState.PreviousTapBusy -> "Previous tap is still saving—try again."
-                NfcQuickLogResultState.StorageFailure -> "The tap could not be saved. Keep it and retry."
-                NfcQuickLogResultState.InvalidTag -> "Unsupported Cannsheet NFC tag."
-                NfcQuickLogResultState.NfcLaunchDisabled -> "Launch via NFC is disabled for Cannsheet."
-                NfcQuickLogResultState.NfcUnavailable -> "NFC is unavailable or turned off."
-                is NfcQuickLogResultState.UnexpectedFailure -> "NFC quick-log could not be completed."
-            }
+            val message = nfcQuickLogMessage(state, locked)
             Text(message, style = MaterialTheme.typography.titleLarge)
             when (state) {
                 is NfcQuickLogResultState.AwaitingUndo -> {

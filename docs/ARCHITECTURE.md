@@ -106,7 +106,8 @@ sanitizes the incoming intent immediately and fails closed on every contract or
 registry mismatch. On a valid intentional presentation it resolves the current
 Pen cart using the existing explicit-then-most-recent rule, ignores the
 seconds-per-use rate, and atomically writes a direct-uses pending payload before
-showing the small result surface. The fixed five-second Undo decision happens in
+showing the result: a notification with Undo/Submit now actions (the Activity draws
+nothing and finishes), or the small result card when notifications are unavailable. The fixed five-second Undo decision happens in
 DataStore before any Room write. A commit claims the exact payload, calls the
 existing `ConsumptionLogger`, and removes the payload only after Room durability;
 sync remains the existing `SyncEngine`/`SyncScheduler` path. A Room failure releases

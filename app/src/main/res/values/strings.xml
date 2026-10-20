@@ -146,4 +146,7 @@
     <string name="settings_widget_size_base">Medium</string>
     <string name="settings_widget_size_large">Large</string>
     <string name="settings_widget_instance_label" translatable="false">%1$s · %2$s · %3$d × %4$d</string>
+    <string name="nfc_quick_log_channel_name">NFC quick log</string>
+    <string name="nfc_quick_log_channel_description">Results of tapping a Cannsheet NFC tag</string>
+    <string name="nfc_quick_log_notification_title">Cannsheet NFC</string>
 </resources>

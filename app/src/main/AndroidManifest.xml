@@ -93,6 +93,9 @@
             </intent-filter>
         </activity>
         <receiver
+            android:name=".nfc.NfcQuickLogActionReceiver"
+            android:exported="false" />
+        <receiver
             android:name=".widget.PenConsumptionWidgetProvider"
             android:exported="false"
             android:label="@string/pen_widget_label">
