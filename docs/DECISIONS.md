@@ -2536,3 +2536,25 @@ permanently dead chain.
   variants were rejected as too detailed at 48px. The SVG in `docs/design/icon-fan/agy/v1.svg` is the
   source of truth; regenerate the vector XML from it rather than editing paths by hand.
 
+## ADR-059: NFC quick-log results are a notification, with the popup as fallback
+
+- Status: Accepted
+- Date: 2026-10-20
+- Context: The translucent result card covered whatever the owner was using and stayed until the
+  result was terminal; over a video app the video shrank to its floating player. Android only
+  dispatches NDEF tags to an Activity, so the Activity itself cannot be removed.
+- Decision: When `NfcQuickLogNotifier.canPresent()` is true, `NfcQuickLogActivity` draws nothing,
+  marks its window not-touchable, runs the unchanged validation and `NfcQuickLogCoordinator.accept`,
+  posts the result as notification `1002` on channel `cannsheet-nfc-quick-log` (high importance, no
+  sound, no vibration) and finishes. Undo, Submit now and Retry are explicit, immutable broadcasts to
+  the non-exported `NfcQuickLogActionReceiver`, which calls the same coordinator methods.
+  `PenWidgetSurfaceRouter`'s NFC branch replaces a queued notification with "saved" once the
+  payload leaves the outbox. Notifications are `VISIBILITY_PRIVATE`; the public version and any tap
+  made while locked never carry the cart name. When notifications are off, the old popup runs
+  unchanged.
+- Consequences: The durable outbox, the five-second Undo window and the commit timer/WorkManager
+  path are unchanged. The Activity still exists for a fraction of a second, so some video apps may
+  still enter picture-in-picture; that needs an on-device check. A commit that fails after the
+  Activity has gone shows no failure notification: the queued notification expires after 60 seconds
+  and the payload stays pending for the existing flush and the next tap.
+

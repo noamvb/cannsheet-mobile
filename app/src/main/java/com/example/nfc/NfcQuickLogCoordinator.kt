@@ -38,7 +38,7 @@ class NfcQuickLogCoordinator(
     private val now: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val submissionDateTime: (Long) -> SubmissionDateTime = ::currentSubmissionDateTime,
-) {
+) : NfcQuickLogOperations {
     private val appContext = context.applicationContext
 
     suspend fun accept(tag: NfcQuickLogTagData): NfcQuickLogResultState {
@@ -110,7 +110,7 @@ class NfcQuickLogCoordinator(
         )
     }
 
-    suspend fun undo(commitId: String): Boolean {
+    override suspend fun undo(commitId: String): Boolean {
         val undone = stateRepository.undo(PEN_NFC_SURFACE_ID, commitId, nowMillis = now())
         if (undone) {
             PenWidgetRuntime.cancelCommitTimer(PEN_NFC_SURFACE_ID)
@@ -119,7 +119,7 @@ class NfcQuickLogCoordinator(
         return undone
     }
 
-    suspend fun submitNow(commitId: String): Boolean = runCatching {
+    override suspend fun submitNow(commitId: String): Boolean = runCatching {
         commitCoordinator.commit(
             context = appContext,
             appWidgetId = PEN_NFC_SURFACE_ID,
@@ -129,7 +129,7 @@ class NfcQuickLogCoordinator(
         )
     }.getOrDefault(false)
 
-    suspend fun pending(): PenWidgetCommitPayload? =
+    override suspend fun pending(): PenWidgetCommitPayload? =
         stateRepository.read(PEN_NFC_SURFACE_ID).pendingCommit
 
     private fun schedule(payload: PenWidgetCommitPayload) {

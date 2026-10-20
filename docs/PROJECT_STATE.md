@@ -687,6 +687,13 @@ The legibility regression and its fix are captured on the API 36 emulator in
 no-NFC-hardware states, which exercise the theme and layout but prove nothing
 about RF behavior.
 
+On branch `nfc-result-notification` (not yet released), the result is delivered as an Android
+notification instead of the on-screen card whenever Cannsheet may post notifications (ADR-059);
+the card remains the fallback. Verified by 14 new Robolectric tests, the full local gate and an
+API 36 emulator render of the no-NFC-hardware state (`docs/images/nfc-result-notification.png`).
+Not yet checked on the phone: a real tag tap, Undo from the notification, and whether a playing
+video still shrinks.
+
 ## Repository state
 
 - Canonical branch: `main`

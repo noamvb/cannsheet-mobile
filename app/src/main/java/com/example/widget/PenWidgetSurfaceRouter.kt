@@ -6,6 +6,7 @@ import android.content.Context
 import com.example.widget.multi.MultiCartUpdater
 import com.example.widget.multi.MultiCartWidgetProvider
 import com.example.nfc.PEN_NFC_SURFACE_ID
+import com.example.nfc.NfcQuickLogNotifier
 import com.example.wear.WearPenStatePublisher
 
 /**
@@ -20,8 +21,13 @@ object PenWidgetSurfaceRouter {
         if (appWidgetId < 0) return
         val appContext = context.applicationContext
         if (appWidgetId == PEN_NFC_SURFACE_ID) {
-            // NFC has a dedicated result Activity, not an AppWidget surface. The durable
-            // DataStore transition is already complete; startup/WorkManager still flushes it.
+            // NFC has no AppWidget to redraw. Update its notification after the durable
+            // outbox transition; startup/WorkManager still flushes pending payloads.
+            runCatching {
+                NfcQuickLogNotifier(appContext).onNfcSurfaceRefresh(
+                    PenWidgetStateRepository(appContext).read(PEN_NFC_SURFACE_ID).pendingCommit?.commitId,
+                )
+            }
             return
         }
         if (appWidgetId == PEN_TILE_WIDGET_ID) {
