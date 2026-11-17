@@ -591,7 +591,7 @@ Stable IDs and acknowledgement semantics must be preserved.
 
 ## Backend and external integrations
 
-- `backend_additions.gs` is the Apps Script web-app implementation.
+- `backend_additions.gs` is the generated Apps Script bundle; edit `backend/src/NN-*.gs`, then run `node backend/build.js` (`node backend/build.js --check` and CI fail on drift). Run `node backend/build.js --check` before pasting the bundle into Apps Script.
 - `appsscript.json` enables the Advanced Sheets service, uses the V8 runtime,
   executes as the deploying user, and declares anonymous web-app access.
 - No user authentication flow is present in the checked-in Android source. The
@@ -693,6 +693,6 @@ tests/                        Backend fake runtime and regression scripts
 .github/workflows/            Pull-request and release automation
 performance_evidence/         Checked-in backend performance evidence
 docs/                         Shared project context and latest handoff
-backend_additions.gs          Google Apps Script backend
+backend_additions.gs          Generated backend bundle (sources: backend/src/NN-*.gs)
 appsscript.json               Apps Script manifest
 ```

@@ -95,7 +95,7 @@ jobs:
               fi
 
               IS_BACKEND=false
-              if [[ "$file" == "backend_additions.gs" ]] || [[ "$file" == "sandbox_provisioning.gs" ]] || [[ "$file" == tests/* ]]; then
+              if [[ "$file" == "backend_additions.gs" ]] || [[ "$file" == backend/* ]] || [[ "$file" == "sandbox_provisioning.gs" ]] || [[ "$file" == tests/* ]]; then
                 IS_BACKEND=true
               fi
 
@@ -156,7 +156,10 @@ jobs:
         shell: bash
         run: |
           set -e
+          node backend/build.js --check
+          node tests/backend_bundle_test.js
           node tests/backend_contract_test.js
+          node tests/backend_client_state_test.js
           node tests/backend_analytics_test.js
           node tests/backend_corrections_test.js
           node tests/backend_recovery_test.js
