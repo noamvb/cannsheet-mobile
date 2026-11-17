@@ -1,15 +1,9 @@
 package com.example.ui
 
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import android.text.format.DateFormat
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,32 +18,19 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -60,7 +41,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -78,9 +58,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.Product
@@ -88,19 +66,14 @@ import com.example.data.ProductStatus
 import com.example.data.productStatus
 import com.example.domain.PenQuickLogState
 import com.example.domain.ProductRunway
-import com.example.domain.formatQuantityInInputUnit
 import com.example.ui.theme.PlexMono
 import com.example.ui.theme.tabular
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import java.math.BigDecimal
 import java.math.RoundingMode
-import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
-import java.util.Locale
-import java.util.TimeZone
-import kotlin.math.abs
 
 private enum class ProductPickerMode {
     LOG_TARGET,
@@ -113,124 +86,8 @@ internal object ConsumptionLedgerTestTags {
     fun remainingQuantity(productId: String) = "consumption-ledger-remaining-$productId"
 }
 
-internal object PenQuickLogTestTags {
-    const val CARD = "pen-quick-log-card"
-    const val CHOOSE_CART = "pen-quick-log-choose-cart"
-    const val SWAP_CART = "pen-quick-log-swap-cart"
-    const val RUNWAY = "pen-quick-log-runway"
-
-    fun quickLogChip(position: Int) = "pen-quick-log-chip-$position"
-}
-
 internal object ConsumptionRunwayTestTags {
     const val SELECTED_PRODUCT_RUNWAY = "consumption-selected-product-runway"
-}
-
-@Composable
-internal fun PenQuickLogCard(
-    state: PenQuickLogState,
-    onQuickLogPen: (Double) -> Unit,
-    onChooseCart: () -> Unit,
-    runwayByProductId: Map<String, ProductRunway> = emptyMap(),
-) {
-    when (state) {
-        PenQuickLogState.Unavailable -> Unit
-        PenQuickLogState.NoCartLoaded -> {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(PenQuickLogTestTags.CARD),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("Which cart is in the battery?", style = MaterialTheme.typography.titleMedium)
-                    Button(
-                        onClick = onChooseCart,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(PenQuickLogTestTags.CHOOSE_CART),
-                    ) {
-                        Text("Choose pen cart")
-                    }
-                }
-            }
-        }
-
-        is PenQuickLogState.Loaded -> {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(PenQuickLogTestTags.CARD),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.Top,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(state.product.name, style = MaterialTheme.typography.titleMedium)
-                            Text(
-                                state.syncedUses?.let {
-                                    "${state.product.productStatus.label} · synced ${formatUsageAmount(it)} uses"
-                                } ?: "${state.product.productStatus.label} · synced unavailable",
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            if (state.pendingUses > 0.0) {
-                                Text(
-                                    "Pending: +${formatUsageAmount(state.pendingUses)} uses",
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            runwayByProductId[state.product.id]?.let { runway ->
-                                Text(
-                                    runwaySummaryText(runway),
-                                    modifier = Modifier.testTag(PenQuickLogTestTags.RUNWAY),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                        }
-                        TextButton(
-                            onClick = onChooseCart,
-                            modifier = Modifier.testTag(PenQuickLogTestTags.SWAP_CART),
-                        ) {
-                            Text("Swap cart")
-                        }
-                    }
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(state.presetUses) { preset ->
-                            val position = state.presetUses.indexOf(preset) + 1
-                            FilterChip(
-                                selected = false,
-                                onClick = { onQuickLogPen(preset) },
-                                label = {
-                                    Text(formatQuantityInInputUnit(preset, state.secondsPerUse))
-                                },
-                                modifier = Modifier.testTag(
-                                    PenQuickLogTestTags.quickLogChip(position),
-                                ),
-                            )
-                        }
-                    }
-                    Text(
-                        "${formatQuantityInInputUnit(1.0, state.secondsPerUse)} = 1 use",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -900,415 +757,6 @@ fun ConsumptionContent(
         }
     }
 }
-
-@Composable
-private fun LedgerProductRow(
-    product: Product,
-    isSelected: Boolean,
-    pendingUses: Double,
-    runway: ProductRunway?,
-    lastQuantity: Double?,
-    onClick: () -> Unit,
-) {
-    val confirmedTotal = product.totalUses?.takeIf { it.isFinite() && it >= 0.0 }
-    val confirmedText = confirmedTotal?.let { formatUsageAmount(it) } ?: "—"
-    val localText = if (pendingUses.isFinite() && pendingUses > 0.0) "+${formatUsageAmount(pendingUses)}" else "+0"
-    val confirmedSpoken = confirmedTotal?.let { "Synced total: ${formatUsageAmount(it)} uses" } ?: "Synced: unavailable"
-    val localSpoken = if (pendingUses.isFinite() && pendingUses > 0.0) "Pending: +${formatUsageAmount(pendingUses)} uses" else null
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .background(
-                if (isSelected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    androidx.compose.ui.graphics.Color.Transparent
-                },
-            )
-            .clickable(onClick = onClick)
-            .semantics { selected = isSelected }
-            .padding(horizontal = 6.dp, vertical = 10.dp)
-            .testTag(ConsumptionLedgerTestTags.productRow(product.id)),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = product.name,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = "${product.productStatus.label} · ${ProductTypes.label(product.type)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "·",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = "${formatQuantity(product.grams)} g",
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = PlexMono).tabular(),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag(ConsumptionLedgerTestTags.remainingQuantity(product.id)),
-                )
-            }
-            // Its own line: at 320dp the metadata row above has no room for a fourth item.
-            lastQuantity?.let { quantity ->
-                Text(
-                    text = "Last: ${formatQuantity(quantity)}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (isSelected && runway != null) {
-                Text(
-                    text = runwaySummaryText(runway),
-                    modifier = Modifier.testTag(ConsumptionRunwayTestTags.SELECTED_PRODUCT_RUNWAY),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-
-        // Confirmed count
-        Text(
-            text = confirmedText,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PlexMono).tabular(),
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,
-            modifier = Modifier
-                .width(76.dp)
-                .clearAndSetSemantics { text = AnnotatedString(confirmedSpoken) },
-        )
-
-        // Local count
-        Text(
-            text = localText,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PlexMono).tabular(),
-            color = if (pendingUses > 0.0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End,
-            modifier = Modifier
-                .width(48.dp)
-                .clearAndSetSemantics { if (localSpoken != null) text = AnnotatedString(localSpoken) },
-        )
-    }
-}
-
-@Composable
-private fun QuantitySection(
-    presets: List<Double>,
-    secondsPerUse: Double?,
-    quantityText: String,
-    onQuantityChange: (String) -> Unit,
-) {
-    val effectivePresets = remember(presets) {
-        if (presets.isNotEmpty()) presets else listOf(1.0, 2.0, 3.0)
-    }
-    val currentQuantity = quantityText.toDoubleOrNull()
-    var isCustomMode by rememberSaveable { mutableStateOf(false) }
-
-    val matchingPreset = effectivePresets.firstOrNull { preset ->
-        currentQuantity != null && abs(preset - currentQuantity) < 0.0001
-    }
-    val isCustomSelected = isCustomMode || (matchingPreset == null && quantityText.isNotBlank())
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "QUANTITY",
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = PlexMono).tabular(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = if (secondsPerUse != null) "SECONDS" else "USES",
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = PlexMono).tabular(),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.Bold,
-            )
-        }
-
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(effectivePresets) { preset ->
-                val isSelected = !isCustomSelected && matchingPreset == preset
-                val label = if (secondsPerUse != null) {
-                    formatQuantityInInputUnit(preset, secondsPerUse)
-                } else {
-                    formatQuantity(preset)
-                }
-                FilterChip(
-                    selected = isSelected,
-                    onClick = {
-                        isCustomMode = false
-                        onQuantityChange(formatQuantity(preset))
-                    },
-                    label = {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelMedium.copy(fontFamily = PlexMono).tabular(),
-                        )
-                    },
-                    shape = CircleShape,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                )
-            }
-            item {
-                FilterChip(
-                    selected = isCustomSelected,
-                    onClick = {
-                        isCustomMode = true
-                    },
-                    label = {
-                        Text("Custom", style = MaterialTheme.typography.labelMedium)
-                    },
-                    shape = CircleShape,
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
-                )
-            }
-        }
-
-        AnimatedVisibility(visible = isCustomSelected) {
-            OutlinedTextField(
-                value = quantityText,
-                onValueChange = {
-                    isCustomMode = true
-                    onQuantityChange(it)
-                },
-                label = {
-                    Text(if (secondsPerUse == null) "Custom quantity" else "Custom quantity (uses)")
-                },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
-                isError = quantityText.isNotBlank() &&
-                    (currentQuantity == null || !currentQuantity.isFinite() || currentQuantity <= 0.0),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DateTimeSection(
-    adjustDateTime: Boolean,
-    customDateMillis: Long,
-    customHour: Int,
-    customMinute: Int,
-    nowMillisProvider: () -> Long,
-    onToggleAdjustment: () -> Unit,
-    onUseNow: () -> Unit,
-    onChooseDate: () -> Unit,
-    onChooseTime: () -> Unit,
-) {
-    val nowCalendar = remember(nowMillisProvider, adjustDateTime) {
-        Calendar.getInstance().apply { timeInMillis = nowMillisProvider() }
-    }
-    val displayTime = if (adjustDateTime) {
-        "${pickerDateToWire(customDateMillis)} · ${formatTimeAmPm(customHour, customMinute)}"
-    } else {
-        "Now · ${formatTimeAmPm(nowCalendar.get(Calendar.HOUR_OF_DAY), nowCalendar.get(Calendar.MINUTE))}"
-    }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
-            .heightIn(min = 48.dp)
-            .clickable(onClick = onToggleAdjustment)
-            .padding(vertical = 4.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = "Date & time",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    text = displayTime,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = PlexMono).tabular(),
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = if (adjustDateTime) "Done" else "Adjust",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        }
-        AnimatedVisibility(visible = adjustDateTime) {
-            Column(
-                modifier = Modifier.padding(top = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    OutlinedButton(onClick = onChooseDate, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.DateRange, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Date")
-                    }
-                    OutlinedButton(onClick = onChooseTime, modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.AccessTime, contentDescription = null)
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Time")
-                    }
-                }
-                TextButton(onClick = onUseNow, modifier = Modifier.align(Alignment.End)) {
-                    Text("Use current date & time")
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ProductPickerSheet(
-    products: List<Product>,
-    categories: List<String>,
-    selectedCategory: String?,
-    searchQuery: String,
-    includeUnopened: Boolean,
-    onSearchQueryChange: (String) -> Unit,
-    onCategoryChange: (String?) -> Unit,
-    onIncludeUnopenedChange: (Boolean) -> Unit,
-    onProductSelected: (Product) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val isDark = isSystemInDarkTheme()
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Choose a product", style = MaterialTheme.typography.headlineSmall)
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = onSearchQueryChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search name, ID, or type") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search")
-                        }
-                    }
-                },
-                singleLine = true,
-            )
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item {
-                    FilterChip(
-                        selected = selectedCategory == null,
-                        onClick = { onCategoryChange(null) },
-                        label = { Text("All types") },
-                    )
-                }
-                items(categories) { category ->
-                    val color = ProductTypes.categoryColor(category, isDark)
-                    FilterChip(
-                        selected = selectedCategory == category,
-                        onClick = {
-                            onCategoryChange(if (selectedCategory == category) null else category)
-                        },
-                        label = { Text(category) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = color.copy(alpha = 0.22f),
-                        ),
-                    )
-                }
-            }
-            FilterChip(
-                selected = includeUnopened,
-                onClick = { onIncludeUnopenedChange(!includeUnopened) },
-                label = { Text("Include unopened products") },
-            )
-            HorizontalDivider()
-            if (products.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(160.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text("No matching products")
-                }
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 480.dp),
-                ) {
-                    items(products, key = Product::id) { product ->
-                        ListItem(
-                            headlineContent = { Text(product.name) },
-                            supportingContent = {
-                                Text("${product.productStatus.label} · ${product.type} · ${product.id}")
-                            },
-                            modifier = Modifier.clickable { onProductSelected(product) },
-                        )
-                        HorizontalDivider()
-                    }
-                }
-            }
-            Spacer(modifier = Modifier.height(16.dp))
-        }
-    }
-}
-
-private fun formatHeaderDate(nowEpochMillis: Long): String =
-    SimpleDateFormat("EEEE · d MMM", Locale.US).apply {
-        timeZone = TimeZone.getDefault()
-    }.format(Date(nowEpochMillis)).uppercase()
-
-private fun formatTimeAmPm(hour: Int, minute: Int): String {
-    val h = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
-    val amPm = if (hour < 12) "AM" else "PM"
-    return String.format(Locale.US, "%d:%02d %s", h, minute, amPm)
-}
-
-private fun formatQuantity(quantity: Double): String =
-    BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()
 
 internal fun formatUsageAmount(quantity: Double): String {
     require(quantity.isFinite() && quantity >= 0.0) {
