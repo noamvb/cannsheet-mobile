@@ -30,20 +30,30 @@ function testCommittedBundleEqualsSources() {
   assert.ok(buildBundle(srcDir).equals(fs.readFileSync(path.join(root, 'backend_additions.gs'))));
 }
 
-function testExactlyFourteenNamedSources() {
+const BANNER = '// -----------------------------------------------------------------------------';
+
+function testExactlyTwentyThreeNamedSources() {
   const files = fs.readdirSync(srcDir);
-  assert.equal(files.filter(file => file.endsWith('.gs')).length, 14);
+  assert.equal(files.filter(file => file.endsWith('.gs')).length, 23);
   files.forEach(file => assert.match(file, filenamePattern));
 }
 
-function testSectionsBeginAtBanners() {
+// The 13 original banner sections each open a file; split-off continuation files
+// begin at a top-level declaration so no file starts mid-function.
+function testSectionsBeginAtBannersOrDeclarations() {
   const files = fs.readdirSync(srcDir).sort();
-  assert.equal(files.length, 14);
+  assert.equal(files.length, 23);
+  let banners = 0;
   files.filter(file => file !== '00-header.gs').forEach(file => {
     const lines = fs.readFileSync(path.join(srcDir, file), 'utf8').split('\n');
-    assert.equal(lines[0], '// -----------------------------------------------------------------------------', file);
-    assert.match(lines[1], /^\/\/ \S.*$/, file);
+    if (lines[0] === BANNER) {
+      banners += 1;
+      assert.match(lines[1], /^\/\/ \S.*$/, file);
+    } else {
+      assert.match(lines[0], /^(function |\/\*\*|\/\/ )/, file);
+    }
   });
+  assert.equal(banners, 13);
 }
 
 function testCheckDetectsTamperedBundle() {
@@ -74,8 +84,8 @@ function testStrayFilenameRefusesBuild() {
 
 const tests = [
   testCommittedBundleEqualsSources,
-  testExactlyFourteenNamedSources,
-  testSectionsBeginAtBanners,
+  testExactlyTwentyThreeNamedSources,
+  testSectionsBeginAtBannersOrDeclarations,
   testCheckDetectsTamperedBundle,
   testStrayFilenameRefusesBuild,
 ];
