@@ -205,12 +205,16 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Verify LocalLLM contract synchronization
+      - name: Verify vendored LocalLLM client is unmodified
         shell: bash
+        run: bash scripts/localllm_v1_client.sh verify
+
+      - name: Warn when vendored LocalLLM client is behind LocalLLM main
+        shell: bash
+        continue-on-error: true
         run: |
-          if [ -f scripts/localllm_v1_client.sh ]; then
-            bash scripts/localllm_v1_client.sh check-local || true
-          fi
+          git clone --quiet --depth 1 https://github.com/noamvb/local-llm.git "$RUNNER_TEMP/local-llm"
+          bash scripts/localllm_v1_client.sh behind "$RUNNER_TEMP/local-llm"
 
       - name: Run Android unit tests, compile instrumentation tests, lint, and build debug APK
         run: ./gradlew --no-daemon testDebugUnitTest compileDebugAndroidTestKotlin lintDebug assembleDebug
