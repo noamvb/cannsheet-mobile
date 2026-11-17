@@ -164,6 +164,7 @@ dependencies {
   implementation(libs.okhttp)
   implementation(libs.retrofit)
   testImplementation("junit:junit:4.13.2")
+  testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)

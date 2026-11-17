@@ -27,7 +27,6 @@ import com.example.data.productStatus
 import com.example.domain.PenQuickLogState
 import com.example.domain.buildPenQuickLogState
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -275,11 +274,8 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     private val _purchaseFormState = MutableStateFlow(PurchaseFormState.initial())
     val purchaseFormState: StateFlow<PurchaseFormState> = _purchaseFormState
 
-    private val _pendingCountdown = MutableStateFlow(0)
-    val pendingCountdown: StateFlow<Int> = _pendingCountdown
-
-    private var countdownJob: Job? = null
-    private val pendingSubmission = PendingSubmission()
+    private val submissionCountdown = SubmissionCountdown(viewModelScope) { submissionTimer.value }
+    val pendingCountdown: StateFlow<Int> = submissionCountdown.remaining
     private val syncMutex = graph.syncMutex
 
     init {
@@ -584,37 +580,16 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun queueSubmission(action: () -> Unit) {
-        countdownJob?.cancel()
-        countdownJob = null
-        _pendingCountdown.value = 0
-        pendingSubmission.replaceWith(action)?.invoke()
-        startCountdown()
-    }
-
-    private fun startCountdown() {
-        countdownJob = viewModelScope.launch {
-            for (second in submissionTimer.value downTo 1) {
-                _pendingCountdown.value = second
-                delay(1_000)
-            }
-            _pendingCountdown.value = 0
-            pendingSubmission.take()?.invoke()
-        }
+        submissionCountdown.queue(action)
     }
 
     fun cancelPendingAction() {
-        countdownJob?.cancel()
-        countdownJob = null
-        _pendingCountdown.value = 0
-        pendingSubmission.take()
+        submissionCountdown.cancel()
         _syncStatus.value = "Action cancelled"
     }
 
     fun forceSubmitNow() {
-        countdownJob?.cancel()
-        countdownJob = null
-        _pendingCountdown.value = 0
-        pendingSubmission.take()?.invoke()
+        submissionCountdown.submitNow()
     }
 
     fun addPurchase(
