@@ -42,7 +42,6 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.withLock
-import java.math.BigDecimal
 import java.util.UUID
 
 internal fun shouldInvalidateRunwayForQueueTransition(
@@ -209,8 +208,12 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, PenQuickLogState.Unavailable)
 
-    private val _consumptionFormState = MutableStateFlow(ConsumptionFormState())
-    val consumptionFormState: StateFlow<ConsumptionFormState> = _consumptionFormState
+    private val consumptionForm = ConsumptionFormHolder(
+        rememberedQuantity = { id -> productInteractions.value.firstOrNull { it.productId == id }?.lastQuantity },
+        productType = { id -> allProducts.value.firstOrNull { it.id == id }?.type },
+        defaultQuantity = ::defaultQuantity,
+    )
+    val consumptionFormState: StateFlow<ConsumptionFormState> = consumptionForm.state
 
     val productTypeOptions: StateFlow<List<String>> = allProducts
         .map { products -> ProductTypes.options(products.map(Product::type)) }
@@ -444,27 +447,15 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun selectConsumptionProduct(productId: String) {
-        val rememberedQuantity = productInteractions.value
-            .firstOrNull { it.productId == productId }
-            ?.lastQuantity
-            ?.takeIf { it.isFinite() && it > 0.0 }
-        val suggestedQuantity = rememberedQuantity ?: defaultQuantity(
-            allProducts.value.firstOrNull { it.id == productId }?.type,
-        )
-        _consumptionFormState.value = ConsumptionFormState(
-            selectedProductId = productId,
-            quantityText = formatQuantity(suggestedQuantity),
-        )
+        consumptionForm.select(productId)
     }
 
     fun updateConsumptionQuantity(value: String) {
-        _consumptionFormState.update { it.copy(quantityText = value) }
+        consumptionForm.updateQuantity(value)
     }
 
     fun clearConsumptionSelection() {
-        _consumptionFormState.value = ConsumptionFormState(
-            quantityText = formatQuantity(defaultQuantity()),
-        )
+        consumptionForm.clear()
     }
 
     fun quickLogPen(uses: Double) {
@@ -707,9 +698,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 uses = uses,
                 isFinished = isFinished,
             )
-            if (isFinished && _consumptionFormState.value.selectedProductId == productId) {
-                clearConsumptionSelection()
-            }
+            if (isFinished) consumptionForm.clearIfSelected(productId)
             _syncStatus.value = "Consumption saved offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
@@ -750,10 +739,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
                 consumption = consumption,
                 loggedAtEpochMillis = System.currentTimeMillis(),
             )
-            _consumptionFormState.value = ConsumptionFormState(
-                selectedProductId = tempId,
-                quantityText = formatQuantity(uses),
-            )
+            consumptionForm.selectBorrowed(tempId, uses)
             _syncStatus.value = "Borrowed consumption saved offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
@@ -782,9 +768,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             if (finishedType == ProductTypes.PEN && loadedPenProductId.value == productId) {
                 consumptionPreferences.clearLoadedPenProductId()
             }
-            if (_consumptionFormState.value.selectedProductId == productId) {
-                clearConsumptionSelection()
-            }
+            consumptionForm.clearIfSelected(productId)
             _syncStatus.value = "Product marked finished offline"
             syncQueue()
             SyncScheduler.enqueueImmediate(getApplication())
@@ -965,11 +949,7 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun applyPurchaseRemaps(outcome: SyncOutcome.Applied) {
         val idMappings = outcome.plan.purchaseRemaps.associate { it.tempId to it.legacyProductId }
-        val selectedId = _consumptionFormState.value.selectedProductId
-        val remappedId = selectedId?.let(idMappings::get)
-        if (remappedId != null) {
-            _consumptionFormState.update { it.copy(selectedProductId = remappedId) }
-        }
+        consumptionForm.applyRemaps(idMappings)
     }
 
     private fun applyCorrectionFeedback(outcome: SyncOutcome.Applied) {
@@ -1042,9 +1022,6 @@ class CannsheetViewModel(application: Application) : AndroidViewModel(applicatio
             ?: presets.firstOrNull()
             ?: 1.0
     }
-
-    private fun formatQuantity(quantity: Double): String =
-        BigDecimal.valueOf(quantity).stripTrailingZeros().toPlainString()
 
     private companion object {
         const val RECENT_PRODUCT_LIMIT = 6

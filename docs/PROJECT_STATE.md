@@ -5,6 +5,7 @@ Last updated: 2026-11-17 (UI file split; no release)
 ## UI file split (unreleased, no app change)
 
 The submission countdown moved into `SubmissionCountdown` with unit tests.
+The Log form state moved into `ConsumptionFormHolder` with unit tests.
 
 Pure move of top-level UI declarations into sibling files in `com.example.ui`:
 `ConsumptionSections.kt`, `ConsumptionFormatting.kt`, `PenQuickLogCard.kt`,
