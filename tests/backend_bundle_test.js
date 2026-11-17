@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawnSync } = require('node:child_process');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 const srcDir = path.join(root, 'backend/src');
@@ -38,14 +39,16 @@ function testExactlyTwentyThreeNamedSources() {
   files.forEach(file => assert.match(file, filenamePattern));
 }
 
-// The 13 original banner sections each open a file; split-off continuation files
-// begin at a top-level declaration so no file starts mid-function.
+// The 13 original banner sections each open a file. Every file must compile on its
+// own, which fails if any split lands inside a function or block.
 function testSectionsBeginAtBannersOrDeclarations() {
   const files = fs.readdirSync(srcDir).sort();
   assert.equal(files.length, 23);
   let banners = 0;
   files.filter(file => file !== '00-header.gs').forEach(file => {
-    const lines = fs.readFileSync(path.join(srcDir, file), 'utf8').split('\n');
+    const text = fs.readFileSync(path.join(srcDir, file), 'utf8');
+    assert.doesNotThrow(() => new vm.Script(text, { filename: file }), file);
+    const lines = text.split('\n');
     if (lines[0] === BANNER) {
       banners += 1;
       assert.match(lines[1], /^\/\/ \S.*$/, file);
