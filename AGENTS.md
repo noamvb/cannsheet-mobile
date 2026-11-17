@@ -24,7 +24,8 @@ disagree, verify the behavior and update the shared-context documents.
 - Kotlin, Jetpack Compose/Material 3, Navigation Compose, coroutines/StateFlow,
   Room/KSP, and DataStore Preferences.
 - Retrofit, OkHttp, and Moshi communicate with the configured Google Apps
-  Script endpoint; `backend_additions.gs` is the checked-in server source.
+  Script endpoint; source lives in `backend/src/NN-*.gs`; edit those files, then run `node backend/build.js` to generate `backend_additions.gs`, still the file to paste into Apps Script.
+  `node backend/build.js --check` and CI fail on bundle drift.
 - `app/src/main/java/com/example/ui`: screens, navigation, UI state, and view
   models.
 - `app/src/main/java/com/example/data`: Room, repositories, network contracts,

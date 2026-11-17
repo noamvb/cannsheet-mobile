@@ -97,7 +97,7 @@ regression tests at the boundary you changed.
 **Tests must call the code under test.** A test that asserts against the fake
 runtime, or that re-implements the logic in its own body and asserts on that,
 proves nothing and is worse than no test because it reads as coverage. Before
-adding a backend test, confirm it reaches `backend_additions.gs` — through
+adding a backend test, confirm it reaches `backend_additions.gs` (generated from `backend/src/NN-*.gs` with `node backend/build.js`; `node backend/build.js --check` and CI fail on drift) — through
 `doGet`/`doPost` via the `get`/`insights`/`history`/`post` helpers in
 `tests/backend_analytics_test.js`, or by calling the function directly on
 `runtime.context`. If the fake runtime cannot express the behavior you need to
@@ -284,7 +284,7 @@ offline queue rows. Local device work needs a temporary build type with an
 - Do not commit keystores, credentials, tokens, `sandbox.properties`,
   `local.properties`, or any personal machine path into repository files.
 - Do not touch the production spreadsheet or Apps Script deployment. The
-  checked-in `backend_additions.gs` is source; deploying it is a separate
+  checked-in `backend_additions.gs` is the generated bundle; edit `backend/src/NN-*.gs`, run `node backend/build.js`, and run `node backend/build.js --check` before pasting into Apps Script. Deploying it is a separate
   owner-performed step, so a backend change is not live merely because it
   merged.
 - Do not overwrite or delete a published release.

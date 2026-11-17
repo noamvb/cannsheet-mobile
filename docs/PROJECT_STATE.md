@@ -1,6 +1,11 @@
 # Project state
 
-Last updated: 2026-10-20 (v1.13.3)
+Last updated: 2026-11-17 (backend source split; no release)
+
+## Backend source split (unreleased, no app change)
+
+`backend_additions.gs` is now generated from `backend/src/NN-*.gs` by `node backend/build.js`;
+the bundle's bytes are unchanged, so the deployed Apps Script needs no redeploy. See ADR-060.
 
 ## Release 1.13.3 (code 69) - NFC quick-log results as a notification
 

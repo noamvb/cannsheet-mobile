@@ -2558,3 +2558,20 @@ permanently dead chain.
   Activity has gone shows no failure notification: the queued notification expires after 60 seconds
   and the payload stays pending for the existing flush and the next tap.
 
+
+## ADR-060: The Apps Script backend is edited as section files and bundled
+
+- Status: Accepted
+- Date: 2026-11-17
+- Context: `backend_additions.gs` had grown to 9,714 lines in one file, so every backend change
+  meant loading or searching the whole file. The node tests, CI and the manual Apps Script deploy
+  all read `backend_additions.gs` at that path.
+- Decision: The source lives in `backend/src/NN-*.gs`, one file per existing banner section.
+  `node backend/build.js` concatenates them in filename order with nothing added between files and
+  writes `backend_additions.gs`, which stays committed at the same path and is still the file pasted
+  into Apps Script. `node backend/build.js --check` and `tests/backend_bundle_test.js` fail when the
+  bundle and the sources differ; CI runs both.
+- Consequences: The split was a pure move: the bundle's bytes did not change. Edits go to
+  `backend/src/`, followed by a rebuild; editing `backend_additions.gs` by hand fails CI. The two
+  largest sections (`03-analytics-api.gs`, `11-recoverable-apply.gs`) are still whole and can be
+  split further the same way.
