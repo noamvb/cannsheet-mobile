@@ -2572,6 +2572,9 @@ permanently dead chain.
   into Apps Script. `node backend/build.js --check` and `tests/backend_bundle_test.js` fail when the
   bundle and the sources differ; CI runs both.
 - Consequences: The split was a pure move: the bundle's bytes did not change. Edits go to
-  `backend/src/`, followed by a rebuild; editing `backend_additions.gs` by hand fails CI. The two
-  largest sections (`03-analytics-api.gs`, `11-recoverable-apply.gs`) are still whole and can be
-  split further the same way.
+  `backend/src/`, followed by a rebuild; editing `backend_additions.gs` by hand fails CI. A second
+  pure move split the two largest sections at function boundaries: analytics into
+  `03`-`07` (request/cache, snapshot, normalize, insights, history) and recoverable apply into
+  `15`-`20` (rollout, control, apply core, sheet helpers, staging, validation), renumbering the
+  rest; no source file is over 1,000 lines. New files keep the `NN-name.gs` pattern; filename order
+  is bundle order.
