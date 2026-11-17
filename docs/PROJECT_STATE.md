@@ -1,6 +1,14 @@
 # Project state
 
-Last updated: 2026-11-17 (backend source split; no release)
+Last updated: 2026-11-17 (UI file split; no release)
+
+## UI file split (unreleased, no app change)
+
+Pure move of top-level UI declarations into sibling files in `com.example.ui`:
+`ConsumptionSections.kt`, `ConsumptionFormatting.kt`, `PenQuickLogCard.kt`,
+`HistoryScreenContent.kt`, `InsightsComponents.kt`, `QuantityEditors.kt`,
+`QueueAlertSettings.kt`, `ViewModelMappers.kt`, and `UiModels.kt`.
+No app behavior changed; the `CannsheetViewModel` class body stays intact.
 
 ## Backend source split (unreleased, no app change)
 
