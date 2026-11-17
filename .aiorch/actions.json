@@ -49,6 +49,13 @@
       "description": "Fast-forward push of local docs/v1.13.2-provenance to origin/docs/v1.13.2-provenance",
       "remote": "origin",
       "branch": "docs/v1.13.2-provenance"
+    },
+    {
+      "id": "push-chore-localllm-client-sync",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local chore/localllm-client-sync to origin/chore/localllm-client-sync",
+      "remote": "origin",
+      "branch": "chore/localllm-client-sync"
     }
   ]
 }
