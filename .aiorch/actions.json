@@ -56,6 +56,13 @@
       "description": "Fast-forward push of local chore/localllm-client-sync to origin/chore/localllm-client-sync",
       "remote": "origin",
       "branch": "chore/localllm-client-sync"
+    },
+    {
+      "id": "push-chore-bump-versions",
+      "adapter": "git_push",
+      "description": "Fast-forward push of local chore/bump-versions to origin/chore/bump-versions",
+      "remote": "origin",
+      "branch": "chore/bump-versions"
     }
   ]
 }
